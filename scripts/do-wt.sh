@@ -19,11 +19,14 @@
 #   do-wt.sh verify                       prova de contenção (roda a cada onda)
 #   do-wt.sh stage-delta                  estagia SÓ o que é nosso (COMMIT-FINAL)
 #   do-wt.sh clean-ignored-delta          remove SÓ ignorados pós-FASE 0 (COMMIT-FINAL)
-#   do-wt.sh wave-files <nome-da-1a-filha> arquivos tocados pela onda
+#   do-wt.sh wave-files <nome-da-1a-filha> arquivos tocados pela onda (aceita a 1ª
+#                                        filha MERGED da onda; se a passada não foi
+#                                        mergeada, resolve pela filha MERGED de menor
+#                                        pre_merge_sha do mesmo prefixo ondaN-)
 #   do-wt.sh status                       tabela do owned.tsv
 #   do-wt.sh mark <nome> <STATUS>         ACTIVE|MERGED|REMOVED|BLOCKED|ORPHANED
 #
-# kind: feature | test | fix | prep
+# kind: feature | test | validation | fix | prep
 # =============================================================================
 
 set -uo pipefail
@@ -435,7 +438,34 @@ cmd_clean_ignored_delta() { # COMMIT-FINAL: limpa SÓ os ignorados que esta
 cmd_wave_files() { # <nome-da-primeira-filha-da-onda> — escopo da testing subwave
   local first="${1:?nome da primeira filha da onda}" pre
   pre=$(row_get "$first" 7)
-  [ -n "$pre" ] || { err "RECUSADO: $first não tem pre_merge_sha (ainda não foi mergeada?)"; return 1; }
+  # Robustez (F2-09): se a filha passada NÃO foi mergeada (BLOCKED/ORPHANED, ou
+  # ainda ACTIVE), ela não tem pre_merge_sha e o escopo da testing/validation
+  # subwave seria incomputável justamente nos cenários já degradados. O owned.tsv
+  # não tem coluna de onda, mas os nomes batizados na FASE 2/PLAN seguem a
+  # convenção ondaN-* (ex.: onda1-cache, test-onda1-cache, val-onda1-gate): o
+  # prefixo identifica a onda. Resolve então automaticamente para a filha MERGED
+  # do MESMO prefixo com o MENOR pre_merge_sha — a mais antiga integrada, o
+  # início da onda. Filha já mergeada (com pre_merge_sha) continua indo direto.
+  # O filtro do prefixo usa substring ($3 ~ p) e NÃO ancora no início: o hífen
+  # desambigua (onda10-x não contém "onda1-") e assim test-ondaN-*/val-ondaN-*
+  # também casam (verificado em lab: ^-ancorado deixava escopo incomputável
+  # quando a única filha MERGED da onda era de subwave).
+  if [ -z "$pre" ]; then
+    local prefix
+    prefix=$(printf '%s\n' "$first" | sed -n 's/.*\(onda[0-9][0-9]*-\).*/\1/p')
+    if [ -n "$prefix" ]; then
+      pre=$(awk -F'\t' -v p="$prefix" \
+            'NR>1 && $9=="MERGED" && $3 ~ p && $7!="" {print $7}' "$OWNED" \
+            | sort | head -n 1)
+    fi
+    [ -n "$pre" ] || {
+      err "RECUSADO: $first não tem pre_merge_sha (ainda não foi mergeada?) e não há filha"
+      err "  MERGED do mesmo prefixo de onda (${prefix:-nenhum — nome fora do padrão ondaN-*}) no owned.tsv."
+      err "  O escopo da testing/validation subwave exige ao menos uma filha integrada desta onda."
+      return 1
+    }
+    err "AVISO: $first não foi mergeada — escopo resolvido pela filha MERGED de menor pre_merge_sha do prefixo $prefix"
+  fi
   # Determinístico e imune ao COMMIT PREP — ao contrário de HEAD~N, que conta
   # commits às cegas e engole o prep da própria onda.
   gwt diff --name-only "$pre..HEAD"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Testes de aceitação do MODO CONTIDO — A1..A20 + A22/A25/A26 (57 asserções)
+# Testes de aceitação do MODO CONTIDO — A1..A20 + A22/A25/A26 + A32 (59 asserções)
 set -uo pipefail
 SKILL=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 CTX="$SKILL/scripts/do-context.sh"
@@ -300,6 +300,57 @@ else
 fi
 rm -f "$DO_STATE/ignored-baseline.nul"
 "$WT" clean-ignored-delta >/dev/null 2>&1; chk "A26c recusa sem baseline de ignorados" "$?" "1"
+
+echo "=== A32: wave-files resolve a filha MERGED quando a 1ª filha da onda está BLOCKED ==="
+# Fixture (F2-09): onda ANTERIOR mergeada (onda31-prev) cujo arquivo NÃO pode entrar
+# no diff da onda atual; 1ª filha da onda (onda32-a) criada e marcada BLOCKED SEM
+# merge (não tem pre_merge_sha); 2ª filha (onda32-b) com um arquivo, mergeada.
+env32=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env32"
+"$WT" new feature onda31-prev >/dev/null
+echo 'PREV32' > "$CHILD_ROOT/onda31-prev/prev32.txt"
+git -C "$CHILD_ROOT/onda31-prev" add -A && git -C "$CHILD_ROOT/onda31-prev" commit -qm wip
+"$WT" merge onda31-prev "onda31-prev: adiciona prev32" >/dev/null
+"$WT" new feature onda32-a >/dev/null
+echo 'X32' > "$CHILD_ROOT/onda32-a/x32.txt"
+git -C "$CHILD_ROOT/onda32-a" add -A && git -C "$CHILD_ROOT/onda32-a" commit -qm wip
+"$WT" mark onda32-a BLOCKED >/dev/null
+"$WT" new feature onda32-b >/dev/null
+echo 'Y32' > "$CHILD_ROOT/onda32-b/y32.txt"
+git -C "$CHILD_ROOT/onda32-b" add -A && git -C "$CHILD_ROOT/onda32-b" commit -qm wip
+"$WT" merge onda32-b "onda32-b: adiciona y32" >/dev/null
+# (a) nome da 1ª filha BLOCKED -> resolução automática pela MERGED do prefixo onda32-
+out32a=$("$WT" wave-files onda32-a 2>&1); rc32a=$?
+# (b) nome da filha MERGED -> caminho direto preservado (zero surpresa)
+out32b=$("$WT" wave-files onda32-b 2>&1); rc32b=$?
+if [ "$rc32a" = 0 ] && [ "$rc32b" = 0 ] \
+   && case "$out32a" in *y32.txt*) true ;; *) false ;; esac \
+   && case "$out32a" in *prev32.txt*|*x32.txt*) false ;; *) true ;; esac \
+   && case "$out32b" in *y32.txt*) true ;; *) false ;; esac \
+   && case "$out32b" in *prev32.txt*|*x32.txt*) false ;; *) true ;; esac; then
+  ok "A32 wave-files com 1ª filha BLOCKED resolve pela MERGED (diff só com y32.txt) e o caminho direto segue OK"
+else
+  bad "A32 (a: rc=$rc32a out=[$out32a]; b: rc=$rc32b out=[$out32b])"
+fi
+# (c) ramo test-: filha MERGED com prefixo test-ondaN-* também resolve (F2-09)
+"$WT" new test test-onda32-x >/dev/null
+echo 'Z32' > "$CHILD_ROOT/test-onda32-x/z32.txt"
+git -C "$CHILD_ROOT/test-onda32-x" add -A && git -C "$CHILD_ROOT/test-onda32-x" commit -qm wip
+"$WT" merge test-onda32-x "test-onda32-x: adiciona z32" >/dev/null
+"$WT" new test test-onda32-y >/dev/null
+"$WT" mark test-onda32-y BLOCKED >/dev/null
+out32c=$("$WT" wave-files test-onda32-y 2>&1); rc32c=$?
+if [ "$rc32c" = 0 ] \
+   && case "$out32c" in *z32.txt*) true ;; *) false ;; esac \
+   && case "$out32c" in *prev32.txt*) false ;; *) true ;; esac; then
+  ok "A32-c filha MERGED com prefixo test-ondaN- resolve (diff contém z32.txt, sem prev32)"
+else
+  bad "A32-c (rc=$rc32c out=[$out32c])"
+fi
+"$WT" remove onda32-a >/dev/null 2>&1; "$WT" drop-branch onda32-a >/dev/null 2>&1
+"$WT" remove onda32-b >/dev/null 2>&1; "$WT" drop-branch onda32-b >/dev/null 2>&1
+"$WT" remove test-onda32-x >/dev/null 2>&1; "$WT" drop-branch test-onda32-x >/dev/null 2>&1
+"$WT" remove test-onda32-y >/dev/null 2>&1; "$WT" drop-branch test-onda32-y >/dev/null 2>&1
+"$WT" remove onda31-prev >/dev/null 2>&1; "$WT" drop-branch onda31-prev >/dev/null 2>&1
 
 echo; printf 'RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1

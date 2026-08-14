@@ -11,7 +11,7 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 | Script | Proposito | FASE |
 |---|---|---|
 | `do-context.sh` | Resolve MODE (normal/contido), BASE_DIR, BASE_BRANCH, CHILD_ROOT, BRANCH_NS e grava arquivo de estado que TODO script posterior deve sourcear. Detecta se o cwd esta dentro de uma git worktree vinculada e delimita a RAIZ-DE-MUNDO. | FASE 0 |
-| `do-wt.sh` | Gerencia todo o ciclo de vida das worktrees-filhas: cria (new), faz squash-merge (merge), desfaz merge (undo), remove (remove), arquiva e apaga branch (drop-branch), encerra onda (sweep), verifica contencoes (verify), consulta status (status), altera estado de filha (mark), estagia delta da onda (stage-delta), e lista arquivos tocados (wave-files). | FASE 3-4 |
+| `do-wt.sh` | Gerencia todo o ciclo de vida das worktrees-filhas: cria (new, kinds feature/test/validation/fix/prep), faz squash-merge (merge), desfaz merge (undo), remove (remove), arquiva e apaga branch (drop-branch), encerra onda (sweep), verifica contencoes (verify), consulta status (status), altera estado de filha (mark), estagia delta da onda (stage-delta), e lista arquivos tocados pela onda (wave-files — aceita a 1a filha MERGED da onda; se a filha passada nao foi mergeada, resolve automaticamente pela filha MERGED de menor pre_merge_sha do mesmo prefixo ondaN-). | FASE 3-4 |
 
 ## Busca (search)
 
@@ -26,7 +26,7 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 
 | Script | Proposito |
 |---|---|
-| `test-contencao.sh` | Testes de aceitacao do MODO CONTIDO (A1..A20 + A22/A25/A26, 57 assercoes — expande para A34 nas fases seguintes do plano v3.3.0). Cria fixtures (repo principal + worktree irma + worktree de terceiro) e verifica invariantes: deteccao de MODE, fronteira BASE_DIR, isolamento de worktrees, protecao contra operacoes em branches de terceiros. Portavel: resolve o path da skill dinamicamente e limpa o lab em /tmp via trap. |
+| `test-contencao.sh` | Testes de aceitacao do MODO CONTIDO (A1..A20 + A22/A25/A26 + A32, 59 assercoes — expande para A34 nas fases seguintes do plano v3.3.0). Cria fixtures (repo principal + worktree irma + worktree de terceiro) e verifica invariantes: deteccao de MODE, fronteira BASE_DIR, isolamento de worktrees, protecao contra operacoes em branches de terceiros. Portavel: resolve o path da skill dinamicamente e limpa o lab em /tmp via trap. |
 
 ---
 
