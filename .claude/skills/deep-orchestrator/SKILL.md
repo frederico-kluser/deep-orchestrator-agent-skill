@@ -831,7 +831,7 @@ Siga estas instruções EXATAMENTE.
    `{{SKILL_HOME}}/scripts/search.sh` (path absoluto, já resolvido pelo
    orquestrador) — a interface UNIFICADA de busca do deep-orchestrator.
    Parâmetros: --task, --goal, --insights, --deliverable, --brief-file,
-   --count, --json, --dev-mode, --max-evolutions N.
+   --count, --json, --max-evolutions N, --dev-mode (afeta só o Tier 2/Brave).
    O script implementa fallback automático em 3 tiers:
    <strong>Tier 1:</strong> surf-skill (multi-provider AI-powered) →
    <strong>Tier 2:</strong> Brave Search API direta →

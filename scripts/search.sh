@@ -78,7 +78,7 @@ OPÇÕES
   --offset N                Deslocamento de paginação (default 0, máx 9)
   --result-filter <lista>   web,news,videos,images
   --max-evolutions N        Evoluções de query (default $DEFAULT_MAX_EVOLUTIONS, máx 5)
-  --dev-mode                Adiciona contexto de desenvolvimento às queries
+  --dev-mode                Adiciona contexto de dev às queries (afeta só o Tier 2/Brave)
   --timeout N               Timeout por chamada em segundos (default $DEFAULT_TIMEOUT)
   --json                    Saída em JSON puro (avisos vão para stderr)
   -h, --help                Mostra esta ajuda
@@ -321,10 +321,12 @@ try_surf_skill() {
   args+=( --max-queries "$maxq" )
 
   (( JSON_OUT )) && args+=( --json )
-  (( DEV_MODE )) && args+=( --dev-mode )
+  # NOTA: --dev-mode afeta apenas o Tier 2 (brave-search.sh:524-525);
+  # o binário surf-search-normal NÃO possui essa flag — não a passamos aqui.
 
-  # Timeout
-  args+=( --timeout "$TIMEOUT" )
+  # Timeout: surf-search-normal consome --budget-ms em MILISSEGUNDOS
+  # (fonte: src/lib/dispatch.mjs do surf); TIMEOUT do search.sh é em segundos.
+  args+=( --budget-ms "$(( TIMEOUT * 1000 ))" )
 
   # Executa surf-skill — output flui diretamente (sem captura)
   local surf_rc
