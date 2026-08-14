@@ -5,7 +5,9 @@ description: >-
   ondas ILIMITADAS por design (teto de 10 ondas por execução, com convergência
   forçada documentada; recálculo dinâmico do plano após cada onda), cria e NOMEIA
   worktrees isoladas (uma por sub-agente), aplica revisão
-  adversarial, integra via squash-merge um a um com gate entre merges, remove
+  adversarial, integra via squash-merge um a um (merges em sequência; o gate
+  roda FORA da seção crítica, em worktree de snapshot efêmera int-ondaN-* — a
+  limpeza de cada filha aguarda o gate verde do snapshot), remove
   worktree + branch + commits intermediários ao fim de cada onda, e commita tudo
   ao final sem perguntar nada ao usuário. Inclui SUBWAVES assíncronas em
   paralelo após cada onda: TESTING (test-ondaN-*) e VALIDATION (val-ondaN-*) —
@@ -28,7 +30,7 @@ when_to_use: >-
   Quando o usuário quer uma tarefa resolvida do início ao fim sem interrupções,
   especialmente tarefas complexas que se beneficiam de decomposição em ondas
   paralelas. NUNCA invoque para tarefas triviais de um passo só.
-argument-hint: "<descrição da tarefa>"
+argument-hint: "[max-parallel=N] <descrição da tarefa>"   # prefixo opcional max-parallel=N: cap de features por onda (default 20; 3-5 é o ponto ótimo recomendado — F3-02)
 disable-model-invocation: false
 user-invocable: true
 disallowed-tools:
@@ -121,7 +123,9 @@ metadata:
         que VOCÊ criou via <cmd>do-wt.sh new</cmd>, NUNCA via isolation
         automática do harness — nome auto-gerado é proibido. Worktrees escrevem
         em branches isolados — zero conflito de merge por construção. Mas:
-        merge limpo ≠ integração funcional. O gate após cada merge é obrigatório.
+        merge limpo ≠ integração funcional. O gate após cada merge é obrigatório
+        — rodado no snapshot de integração int-ondaN-* (passo 7 da
+        EXECUTE-ONDA, F3-01).
         Única exceção ao isolamento: o COMMIT PREP (fase 3, passo 1) acontece
         direto no $BASE_BRANCH dentro de $BASE_DIR — que, em MODO CONTIDO, é o
         branch DA WORKTREE em que você foi invocado, JAMAIS main/master. As
@@ -132,7 +136,12 @@ metadata:
       <body>Integração é SEMPRE git merge --squash seguido de UM commit limpo no
         $BASE_BRANCH (o branch da RAIZ-DE-MUNDO resolvida na FASE 0; dentro de
         uma worktree vinculada é o branch DELA, jamais main/master), um
-        sub-agente por vez, com gate entre merges. Use
+        sub-agente por vez — o um-a-um CONTINUA (atribuição de culpa por
+        commit), mas o gate SAIU da seção crítica: roda em paralelo nos
+        snapshots de integração int-ondaN-* (passo 7 da EXECUTE-ONDA), e a
+        limpeza de cada filha aguarda o verde do SEU snapshot (decisão D1:
+        builds duplicados entre snapshot, validação e gate final são
+        esperados). Use
         <cmd>do-wt.sh merge &lt;nome&gt; "&lt;mensagem&gt;"</cmd>, que já faz
         a asserção de branch, salva restos não commitados da filha e registra
         os SHAs pré e pós-merge. Um
@@ -150,9 +159,14 @@ metadata:
         O namespace <code>wt/</code> está ABOLIDO: refs são compartilhados por
         todo o repositório e dois orquestradores concorrentes gerariam nomes
         idênticos — a limpeza de um apagaria o branch do outro.
-        Após o gate VERDE do squash-merge, IMEDIATAMENTE:
-        <cmd>do-wt.sh remove &lt;nome&gt;</cmd> e
-        <cmd>do-wt.sh drop-branch &lt;nome&gt;</cmd> — que recusam qualquer alvo
+        Após o gate VERDE do squash-merge — o do snapshot int-ondaN-&lt;nome&gt;
+        (passo 7 da EXECUTE-ONDA), que pode chegar DEPOIS dos merges seguintes
+        — IMEDIATAMENTE:
+        <cmd>"$DO_WT" mark &lt;nome&gt; MERGED</cmd>;
+        <cmd>do-wt.sh remove &lt;nome&gt;</cmd>;
+        <cmd>do-wt.sh drop-branch &lt;nome&gt;</cmd>;
+        <cmd>do-wt.sh remove int-ondaN-&lt;nome&gt;</cmd> e
+        <cmd>do-wt.sh drop-branch int-ondaN-&lt;nome&gt;</cmd> — que recusam qualquer alvo
         que não esteja no owned.tsv DESTA execução, sob $CHILD_ROOT e com o
         lock desta execução, e arquivam o branch em refs/do-archive/ antes de
         apagá-lo. Os commits intermediários do sub-agente saem da história —
@@ -276,13 +290,21 @@ metadata:
         go clean -modcache) — prejudica outros projetos da máquina.
         Se a tarefa É adicionar dependência, o lockfile alterado DEVE ser
         commitado no branch da filha — isso é correto, não é contaminação.
-        <strong>O GATE também precisa de dependências.</strong> O gate roda em
-        $BASE_DIR, e uma worktree recém-criada não herda node_modules/.venv/
+        <strong>O GATE também precisa de dependências.</strong> O gate de
+        integração roda NA WORKTREE DE SNAPSHOT int-ondaN-* (passo 7 da
+        EXECUTE-ONDA, F3-01) — NUNCA em $BASE_DIR, que segue livre para os
+        merges — e uma worktree recém-criada não herda node_modules/.venv/
         target (são untracked; <cmd>git worktree add</cmd> não os copia). Se o
         gate falhar por ambiente ("Cannot find module", "ModuleNotFoundError"),
-        instale em $BASE_DIR pelas MESMAS regras (modo congelado, HUSKY=0,
-        escopo local) — $BASE_DIR está DENTRO da fronteira e esses diretórios
-        são gitignored, então o <cmd>stage-delta</cmd> não os commita. NÃO
+        instale NA PRÓPRIA WORKTREE DE SNAPSHOT pelas MESMAS regras (modo
+        congelado, HUSKY=0, escopo local) — a worktree de integração instala
+        deps congeladas como qualquer filha. O gate FINAL do COMMIT-FINAL
+        (fase 4, passo 3) roda em $BASE_DIR e instala lá pelas mesmas regras —
+        $BASE_DIR está DENTRO da fronteira e esses diretórios são gitignored,
+        então o <cmd>stage-delta</cmd> não os commita. Custo documentado
+        (decisão D1): builds DUPLICADOS são esperados — snapshot de integração,
+        validação (val-ondaN-gate) e gate final rodam a mesma suíte em
+        worktrees distintas. NÃO
         confunda gate vermelho por ambiente com gate vermelho por código: um
         sub-agente de FIX tentaria consertar código são.
         Antes de remover uma worktree, pare daemons (<code>gradle --stop</code>)
@@ -306,6 +328,14 @@ metadata:
         principal" resolve para main/master e todo o trabalho aterrissa no
         projeto principal — exatamente o que não pode acontecer.</rationale>
       <steps>
+        <step order="0"><strong>PARSEIE O PREFIXO max-parallel=N (F3-02):</strong>
+          se $ARGUMENTS começa com <code>max-parallel=N</code>, exporte
+          <code>DO_MAX_PARALLEL=N</code> ANTES da FASE 0 e use o resto como
+          tarefa. Ausente → default 20 (o CAP protetor; 3-5 é o ponto ótimo
+          recomendado pela Anthropic — o cap NÃO é o alvo). A validação de
+          inteiro positivo acontece no próprio do-context.sh (exit 2 com
+          mensagem clara) — nunca tente "recuperar" uma FASE 0 que abortou
+          por isso</step>
         <step order="1"><strong>LOCALIZE A CASA DA SKILL E RODE A FASE 0</strong>
           — em UM único comando Bash. Os scripts vivem em $SKILL_HOME/scripts/,
           que fica FORA do projeto-alvo, e $SKILL_HOME só passa a existir DEPOIS
@@ -411,6 +441,16 @@ metadata:
           script está AUSENTE, isso NÃO é R7 — registre no TASK_PLAN.md e
           prossiga; sub-agentes continuam usando search.sh, cujo fallback
           Tier 3 (DDG keyless) é automático</step>
+        <step order="9"><strong>REGISTRE O GATE UMA ÚNICA VEZ (F3-03):</strong>
+          detecte os comandos do gate do projeto-alvo (package.json scripts /
+          Makefile / pyproject.toml / Cargo.toml / go.mod...) e registre o trio
+          EXATO no TASK_PLAN.md: <code>GATE_BUILD</code>, <code>GATE_TEST</code>,
+          <code>GATE_LINT</code>. Ausente algum deles, registre "sem
+          &lt;etapa&gt;" explicitamente — NUNCA invente comandos na hora.
+          TODA invocação de gate daqui em diante (passo 3.5, passo 7,
+          COMMIT-FINAL passo 3, validação) é SEMPRE este trio registrado, com
+          cwd conforme o contexto: snapshot de integração (int-ondaN-*),
+          worktree de validação (val-ondaN-gate) ou $BASE_DIR no gate final</step>
       </steps>
       <output>Compreensão completa do escopo, subsistemas afetados, e o que NÃO pode quebrar</output>
     </phase>
@@ -425,11 +465,33 @@ metadata:
           ondas &lt; K. Sub-tarefas da mesma onda são
           INDEPENDENTES entre si e rodam em PARALELO. O número de ondas NÃO é
           fixo: o plano é um PONTO DE PARTIDA — o REVISOR DE PLANO o recalcula
-          após cada onda (fase 3, passo 5), podendo adicionar ou remover ondas</step>
+          após cada onda (fase 3, passo 5), podendo adicionar ou remover ondas.
+          <substeps>
+            <substep><strong>ORÇAMENTO DE PARALELISMO (DO_MAX_PARALLEL,
+              F3-02):</strong> features por onda ≤ $DO_MAX_PARALLEL (default 20;
+              prefixo max-parallel=N na invocação — FASE 0 passo 0); in-flight
+              TOTAL — features da onda + subwaves da onda anterior + revisores
+              + REVISOR DE PLANO — ≤ 2×DO_MAX_PARALLEL; ondas maiores viram
+              BATCHES sequenciais dentro da mesma onda, cada batch com a sua
+              barreira (passo 4) e compartilhando o mesmo passo 7.
+              <note>3-5 é o ponto ótimo recomendado pela Anthropic; o default
+              20 é o CAP protetor, não o alvo.</note></substep>
+            <substep><strong>ESCALA DE FAN-OUT (F3-09):</strong> ≤2 sub-tarefas
+              independentes e pequenas → execute SEM fan-out extra (um único
+              sub-agente as absorve, ou ficam na onda existente); crie
+              sub-agente apenas quando o isolamento se justificar; registre a
+              justificativa de fan-out no TASK_PLAN.md</substep>
+          </substeps></step>
         <step order="4">Para cada onda, declare o MAPA DE PROPRIEDADE DE ARQUIVO:
           quais arquivos cada sub-agente vai modificar. Se dois sub-agentes
           precisarem tocar o MESMO arquivo, sequencie-os (não podem estar na
-          mesma onda)</step>
+          mesma onda). <strong>Manifesto de dependências e lockfile
+          (package.json + lock, pyproject.toml + uv.lock, Cargo.toml +
+          Cargo.lock...) são recurso SINGLETON explícito (F3-04):</strong> no
+          máximo 1 agente por onda pode adicionar dependências; os demais
+          registram a necessidade no handoff ("deps pendentes:
+          &lt;pacote@versão&gt;") e a adição acontece via COMMIT PREP da onda
+          seguinte</step>
         <step order="5"><strong>BATISMO:</strong> para CADA sub-tarefa, defina AGORA
           o nome da worktree seguindo R6 (ex.: onda1-cache-service). O nome
           descreve O QUE a sub-tarefa entrega, não quem a executa. Derive dele
@@ -438,13 +500,22 @@ metadata:
           canônico em owned.tsv acontece no momento da criação, por
           <cmd>do-wt.sh new</cmd></step>
         <step order="6">Se a onda tem recursos SINGLETON (arquivo de solução, config
-          raiz, porta TCP, banco compartilhado), faça um COMMIT PREP antes de
+          raiz, porta TCP, banco compartilhado, manifesto de dependências +
+          lockfile — F3-04), faça um COMMIT PREP antes de
           criar as worktrees: stubs vazios, contratos congelados, faixas de ID
-          disjuntas</step>
+          disjuntas. Deps pendentes registradas nos handoffs da onda anterior
+          ("deps pendentes: &lt;pacote@versão&gt;") são adicionadas AQUI — no
+          COMMIT PREP da onda seguinte — nunca por mais de um agente</step>
         <step order="7">Para CADA sub-tarefa, escreva o prompt de delegação usando
           o TEMPLATE DE PROMPT abaixo (preenchendo WORKTREE_PATH e BRANCH_NAME).
           {{HANDOFF}} fica PENDENTE — só existe após a onda anterior terminar e
-          será colado inline no momento do disparo (fase 3)</step>
+          será colado inline no momento do disparo (fase 3).
+          <strong>PERGUNTAS FALSIFICÁVEIS — PRODUTOR DE
+          {{FALSIFIABLE_QUESTIONS}}:</strong> o orquestrador formula 3-5
+          perguntas falsificáveis por sub-tarefa a partir do contrato (passo
+          4-5 do PLAN). As MESMAS perguntas alimentam a revisão adversarial
+          (passo 6 da EXECUTE-ONDA) E os testes (passo 10/testing subwave) —
+          registre-as no plano para colar nos dois templates</step>
         <step order="8">Publique o plano em <path>$PLAN_FILE</path>
           (use Bash: echo/cat). Inclua a tabela
           sub-tarefa → worktree → branch → arquivos, e o bloco de contexto da
@@ -479,6 +550,12 @@ metadata:
         convergência forçada. Continua até que um sub-agente REVISOR DE PLANO
         declare CONVERGÊNCIA (não há mais sub-tarefas pendentes) ou uma válvula
         de escape force a convergência</repeat>
+      <note><strong>EVOLUÇÃO FUTURA (não implementar agora):</strong>
+        dispatch-on-ready — disparar sub-tarefas da onda N+1 cujas dependências
+        já mergearam sem esperar a barreira global da onda N. Pré-requisitos:
+        F2-01, F3-01 e F3-02 estáveis em produção (exige handoff por
+        sub-tarefa, fronteiras limpas de REPLAN e checagem do mapa de
+        propriedade contra o conjunto ativo).</note>
       <steps>
         <step order="0"><strong>SISTEMA DE BUSCA (R7) — antes de criar qualquer
           worktree desta onda:</strong>
@@ -491,11 +568,22 @@ metadata:
           prossegue sem busca, com registro no TASK_PLAN.md.
           Script ausente NÃO é R7 — registre no TASK_PLAN.md e prossiga;
           sub-agentes continuam usando search.sh, cujo fallback Tier 3 (DDG
-          keyless) é automático</step>
+          keyless) é automático.
+          <note>MICRO-OTIMIZAÇÃO (F3-10): o check PODERIA rodar concorrente
+          com o processamento de subwaves (passo 3.5) ou durante a espera do
+          passo 4 — OPCIONAL. Por escolha de projeto, ele permanece SERIAL:
+          o check é barato (~1s), seu resultado alimenta o {{SEARCH_TIER}}
+          colado nos prompts do disparo (passo 3), e rodá-lo antes de criar
+          worktrees evita disparar worktrees sem saber se há busca.</note></step>
         <step order="1"><strong>COMMIT PREP (se necessário):</strong> se esta onda tem
           recursos compartilhados (singletons), faça um commit preparatório com
           stubs/contratos ANTES de criar as worktrees. Escreva os stubs via Bash
-          dentro de $BASE_DIR e commite em $BASE_BRANCH:
+          dentro de $BASE_DIR e commite em $BASE_BRANCH.
+          <strong>DEPS PENDENTES (F3-04):</strong> se os handoffs da onda
+          anterior registraram "deps pendentes: &lt;pacote@versão&gt;", o COMMIT
+          PREP consolida TODAS num único commit de prep (adição única de
+          manifesto + lockfile, uma vez por onda) — a onda seguinte já nasce
+          com as deps presentes:
           <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; gassert &amp;&amp; gwt add -- &lt;paths-dos-stubs&gt; &amp;&amp; gwt commit -m "PREP-onda-N: &lt;descrição&gt;"</cmd>.
           Estagie por path explícito — NUNCA <cmd>git add -A</cmd>, que engoliria
           a sujeira preexistente do usuário</step>
@@ -511,7 +599,10 @@ metadata:
           desta execução, assevera o isolamento e registra em owned.tsv.
           Confirme com <cmd>"$DO_WT" status</cmd> antes de disparar</step>
         <step order="3"><strong>DISPARAR:</strong> Para CADA sub-tarefa desta onda,
-          chame <tool>Agent</tool> com:
+          chame <tool>Agent</tool> com — dispatches ESCALONADOS com alguns
+          segundos de intervalo entre eles (mitiga rate limit 429; o
+          escalonamento não muda a barreira — o passo 4 continua aguardando
+          TODOS):
           <field name="prompt">O prompt de delegação (TEMPLATE DE PROMPT), com
             TODOS os placeholders preenchidos com os valores literais resolvidos
             na FASE 0: {{WORKTREE_PATH}}, {{BRANCH_NAME}}, {{BASE_DIR}},
@@ -535,6 +626,13 @@ metadata:
           (com 1 sub-agente, foreground é equivalente à barreira — a espera é
           imediata; revisores e REVISOR DE PLANO seguem a regra de background
           independentemente)
+          <strong>TIERING DE MODELOS POR PAPEL (F3-09 — agnóstico de harness):</strong>
+          se o harness permite escolher modelo por sub-agente, use: agentes de
+          TESTE e revisores ADVERSARIAIS em modelo MÉDIO (a refutação é
+          barata; o custo baixo é do agente, não da qualidade da missão);
+          REVISOR DE PLANO e síntese final em modelo FORTE; features no modelo
+          padrão. Se o harness não permite, use o padrão — o tiering é uma
+          otimização de custo, não um requisito.
           NÃO use isolation: "worktree" — a worktree JÁ EXISTE e tem o SEU nome;
           o sub-agente trabalha dentro dela via WORKTREE_PATH</step>
         <step order="3.5"><strong>PROCESSAR SUBWAVES PENDENTES (TESTES +
@@ -557,16 +655,24 @@ metadata:
               NÃO-BLOQUEANTES periódicas nas subwaves; o processamento completo
               acontece nos substeps abaixo (conforme F2-02/F2-04).</substep>
             <substep><strong>REVISÃO DE TESTES:</strong> Para cada agente de teste,
-              dispare um revisor adversarial FRESCO que recebe APENAS o diff do
-              agente de teste + o handoff da onda original. O revisor avalia:
+              dispare um revisor adversarial FRESCO que recebe o diff do
+              agente de teste + o handoff da onda original (+ o path do
+              repositório, {{BASE_DIR}}, SOMENTE LEITURA, para verificar
+              contexto fora do diff — mesmo protocolo do passo 6). O revisor avalia:
               Os testes cobrem os comportamentos descritos? Os testes PASSAM de
               fato (evidência real)? Há falsos positivos (testes que passam sem
               exercitar o código)? Há gaps (edge cases não testados)?</substep>
             <substep><strong>SQUASH-MERGE + GATE + LIMPEZA (testes):</strong>
-              Mesmo fluxo do passo 7: para cada agente de teste da onda N-1,
+              Mesmo fluxo do passo 7 (F3-01/F3-03): para cada agente de teste da
+              onda N-1,
               <cmd>do-wt.sh merge test-onda(N-1)-&lt;foco&gt; "test-onda(N-1)-&lt;foco&gt;: adiciona testes para &lt;desc&gt;"</cmd>,
-              gate (build + testes + linter), e SÓ com gate verde a limpeza
-              (<cmd>do-wt.sh remove</cmd> + <cmd>do-wt.sh drop-branch</cmd>).</substep>
+              cria o snapshot <cmd>"$DO_WT" new integration int-ondaN-&lt;foco&gt;</cmd>,
+              marca <cmd>"$DO_WT" mark test-onda(N-1)-&lt;foco&gt; gate-pending</cmd>,
+              e roda o gate — SEMPRE o trio registrado no TASK_PLAN.md
+              (GATE_BUILD/GATE_TEST/GATE_LINT; FASE 1 passo 9) — na worktree de
+              snapshot, em background. SÓ com gate verde a limpeza
+              (<cmd>mark &lt;foco&gt; MERGED</cmd> + <cmd>do-wt.sh remove</cmd> +
+              <cmd>do-wt.sh drop-branch</cmd> da filha E do snapshot).</substep>
             <substep><strong>VALIDAÇÃO: VEREDITO + LIMPEZA SEM MERGE:</strong>
               Avalie o veredito do validador (por etapa:
               build/lint/typecheck/testes) e os achados do revisor adversarial
@@ -657,23 +763,34 @@ metadata:
           COMMIT-FINAL."</step>
         <step order="6"><strong>REVISÃO ADVERSARIAL:</strong> Para cada sub-agente
           concluído, dispare um sub-agente FRESCO (contexto zero, sem histórico)
-          que recebe APENAS o diff
+          que recebe o diff
           (<cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; gwt diff "$BASE_BRANCH"..."$BRANCH_NS/&lt;nome&gt;"</cmd> — a base
-          do diff é SEMPRE o branch da raiz-de-mundo, nunca main/master)
-          + o prompt original. Sua missão é REFUTAR:
+          do diff é SEMPRE o branch da raiz-de-mundo, nunca main/master),
+          o prompt original, as perguntas falsificáveis
+          ({{FALSIFIABLE_QUESTIONS}}) e o path do repositório ({{BASE_DIR}} —
+          SOMENTE LEITURA, para verificar contexto fora do diff). Sua missão é REFUTAR:
           "o smoke passaria com uma página em branco?", "existe caminho em que
           o requisito não é satisfeito?", "algum golden master quebrou?".
           Se o revisor encontrar problemas, corrija com um sub-agente de fix
-          NA MESMA worktree antes de prosseguir. Dispare TODOS os revisores
+          NA MESMA worktree antes de prosseguir. ANTES de criar qualquer
+          sub-agente de fix, confirme cada achado com evidência
+          arquivo:linha reproduzível; descarte findings sem evidência — zero
+          fixes por findings não verificados. Dispare TODOS os revisores
           com run_in_background=true e aguarde a barreira de revisão; fixes
           em worktrees distintas também rodam em paralelo — os mapas de
           arquivos são disjuntos por construção.
           Esta revisão é INDIVIDUAL e pré-merge; a revisão do diff INTEGRADO
           acontece na validation subwave (passo 10) e procura falhas de
           INTEGRAÇÃO entre sub-agentes.</step>
-        <step order="7"><strong>SQUASH-MERGE UM A UM + GATE + LIMPEZA:</strong>
+        <step order="7"><strong>SQUASH-MERGE UM A UM + GATE EM SNAPSHOT +
+          LIMPEZA (F3-01):</strong>
           Para cada sub-agente (na ordem declarada no plano, infra/gateway
-          primeiro, quem muda o gate por último):
+          primeiro, quem muda o gate por último). O GATE SAIU DA SEÇÃO CRÍTICA
+          (decisão D1): o squash-merge é atômico (segundos); o gate (build +
+          testes + linter = minutos) roda em PARALELO, numa worktree efêmera de
+          integração (int-ondaN-*), NUNCA em $BASE_DIR — builds duplicados
+          entre snapshot, validação (val-ondaN-gate) e gate final são
+          ESPERADOS (decisão D1):
           <substeps>
             <substep><strong>MERGE (um comando, todas as guardas):</strong>
               <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$DO_WT" merge &lt;nome&gt; "&lt;nome&gt;: &lt;o que a sub-tarefa entrega&gt;"</cmd>
@@ -685,28 +802,70 @@ metadata:
               commita; registra o SHA pós-merge e marca status=MERGED.
               É PROIBIDO fazer o merge à mão com <cmd>git -C</cmd> apontando
               para fora de $BASE_DIR</substep>
-            <substep>RODE O GATE: build + testes + linter, com cwd em $BASE_DIR.
-              Se VERMELHO: NÃO prossiga e NÃO limpe. Analise, corrija (via
-              sub-agente de fix, ver degradation), e re-valide. Só prossiga
-              quando VERDE</substep>
-            <substep><strong>LIMPEZA (só com gate VERDE):</strong>
-              <cmd>"$DO_WT" remove &lt;nome&gt;</cmd> e
-              <cmd>"$DO_WT" drop-branch &lt;nome&gt;</cmd>.
-              Ambos recusam qualquer alvo que não esteja no owned.tsv desta
-              execução, sob $CHILD_ROOT e com o lock desta execução; o branch é
-              arquivado em refs/do-archive/$RUN_ID/ antes de ser apagado. Isso
-              descarta os commits intermediários do sub-agente — a história
-              mantém apenas o squash commit</substep>
-            <substep>Se há MAIS de um merge nesta onda, gate + limpeza rodam
-              APÓS CADA UM. NUNCA squash-mergeie o próximo sem o gate do
-              anterior ter passado</substep>
+            <substep><strong>SNAPSHOT (IMEDIATO, sem esperar nada):</strong>
+              crie a worktree efêmera de integração no SHA pós-merge — o HEAD
+              de $BASE_DIR ACABOU de virar o pós-merge, então ela nasce no
+              estado exato deste squash:
+              <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$DO_WT" new integration int-ondaN-&lt;nome&gt;</cmd>
+              — mesma CHILD_ROOT, mesmo BRANCH_NS, kind=integration no
+              owned.tsv (a coluna kind é livre; o cmd_new aceita qualquer
+              kind). Marque a linha DA FILHA como gate-pending:
+              <cmd>"$DO_WT" mark &lt;nome&gt; gate-pending</cmd> — o fim de
+              onda não fecha com gate-pending (ver passo 8/sweep)</substep>
+            <substep><strong>GATE NO SNAPSHOT (background, sem agente):</strong>
+              rode o gate — SEMPRE o trio registrado no TASK_PLAN.md
+              (GATE_BUILD/GATE_TEST/GATE_LINT; FASE 1 passo 9, F3-03) — com cwd
+              na worktree int-ondaN-&lt;nome&gt;, em BACKGROUND (Bash com
+              run_in_background=true — o gate são comandos de build, não um
+              agente; se o harness não tiver background para Bash, use o
+              mecanismo de espera disponível e processe os resultados no
+              momento da limpeza). A worktree de integração instala deps
+              congeladas como qualquer filha (R9, HUSKY=0) — instalações LOCAIS
+              à worktree, zero colisão com os merges seguintes em $BASE_DIR
+              (index lock, COMMIT PREP, artefatos de build)</substep>
+            <substep><strong>SEGUIR SEM ESPERAR:</strong> se há MAIS de um merge
+              nesta onda, merges seguem em sequência; a limpeza de cada filha e
+              o fim da onda aguardam o respectivo gate de snapshot. NUNCA limpe
+              a filha (remove/drop-branch) antes do verde do SEU snapshot — até
+              lá, o branch é o backup para investigação e re-merge</substep>
+            <substep><strong>LIMPEZA (a ÚNICA operação que aguarda o gate):</strong>
+              quando o gate do snapshot reportar VERDE, volte a filha para
+              MERGED e limpe TUDO:
+              <cmd>"$DO_WT" mark &lt;nome&gt; MERGED</cmd>;
+              <cmd>"$DO_WT" remove &lt;nome&gt;</cmd>;
+              <cmd>"$DO_WT" drop-branch &lt;nome&gt;</cmd>;
+              <cmd>"$DO_WT" remove int-ondaN-&lt;nome&gt;</cmd>;
+              <cmd>"$DO_WT" drop-branch int-ondaN-&lt;nome&gt;</cmd>.
+              Todos recusam qualquer alvo que não esteja no owned.tsv desta
+              execução, sob $CHILD_ROOT e com o lock desta execução; os
+              branches são arquivados em refs/do-archive/$RUN_ID/ antes de
+              serem apagados. Isso descarta os commits intermediários do
+              sub-agente — a história mantém apenas os squash commits.
+              Se VERMELHO: NÃO limpe NADA e NÃO desfaça nada à toa — analise e
+              corrija (via sub-agente de fix, ver degradation/gate-red)</substep>
+            <substep><strong>FALHA TARDIA (gate do merge N vermelho DEPOIS de
+              merges seguintes):</strong> desfaça SÓ o squash do N com
+              <cmd>"$DO_WT" undo &lt;nome&gt;</cmd> — o caminho revert funciona
+              com HEAD avançado (o SHA pós-merge registrado desfaz exatamente
+              aquele squash; os demais ficam INTACTOS no log) e o commit
+              desfeito fica arquivado em
+              refs/do-archive/$RUN_ID/undo-&lt;nome&gt;. Gates posteriores que
+              JÁ passaram são re-rodados SÓ se o revert tocar os arquivos
+              deles — cheque a sobreposição de paths
+              (<cmd>gwt show --name-only --format= &lt;SHA-do-revert&gt;</cmd>
+              contra os arquivos de cada squash posterior); na dúvida,
+              re-rode. Depois do fix, re-mergeie a filha corrigida e re-crie o
+              snapshot dela (fluxo normal)</substep>
           </substeps>
         </step>
         <step order="8"><strong>FIM DE ONDA — ALLOWLIST, NUNCA VARREDURA:</strong>
           <cmd>. '&lt;ENV_FILE&gt;'; "$DO_WT" sweep; "$DO_WT" verify</cmd>
           (separados por <code>;</code>, NUNCA por <code>&amp;&amp;</code>: o
-          <code>sweep</code> sai != 0 sempre que há sub-tarefa ACTIVE — ACTIVE =
-          merge pendente ou testing/validation subwave legitimamente em voo — e
+          <code>sweep</code> sai != 0 quando há status=gate-pending — o gate do
+          snapshot do passo 7 ainda não reportou verde e o fim de onda NÃO fecha
+          com gate pendente; sub-tarefas ACTIVE (merge pendente ou
+          testing/validation subwave legitimamente em voo) são apenas LISTADAS,
+          sem falhar o rc — e
           a prova de contenção importa MAIS quando a limpeza não fechou)
           <substeps>
             <substep><code>sweep</code> fecha o que JÁ FOI INTEGRADO: remove as filhas
@@ -714,7 +873,13 @@ metadata:
               Sub-tarefas ACTIVE NÃO são tocadas — ou o merge ainda não
               aconteceu, ou é uma testing ou validation subwave rodando em
               background; as duas guardam trabalho. Elas são apenas listadas,
-              para você decidir.</substep>
+              para você decidir. Linhas com status=gate-pending (F3-01) também
+              NÃO são tocadas: o sweep imprime o aviso de gate-pending e sai
+              != 0 — espere o verde de cada snapshot (aguarde a notificação do
+              Bash em background e confira o exit code do gate), marque a filha
+              de volta para MERGED e rode o sweep de novo. Linhas com status
+              REVERTED também são listadas para você decidir (re-merge ou
+              conclusão do undo).</substep>
             <substep><code>verify</code> é a prova de contenção: HEAD ainda em
               $BASE_BRANCH, config local do repositório inalterado, e — se
               existir $MAIN_ROOT — HEAD e status do checkout principal idênticos
@@ -805,7 +970,12 @@ metadata:
                   Confirme com <cmd>"$DO_WT" status</cmd>.</substep>
                 <substep><strong>DISPARAR AGENTES DE TESTE EM BACKGROUND:</strong>
                   Para cada worktree de teste, dispare um sub-agente usando o
-                  TEMPLATE DE AGENTE DE TESTE (abaixo). Use
+                  TEMPLATE DE AGENTE DE TESTE (abaixo). Preencha
+                  {{ORIGINAL_TASK_DESCRIPTION}} e {{ACCEPTANCE_CRITERIA}} com
+                  a descrição original e os critérios de aceitação da
+                  sub-tarefa registrados no plano (fonte primária dos testes —
+                  NÃO o diff), e {{FALSIFIABLE_QUESTIONS}} com as perguntas
+                  formuladas no PLAN (passo 7). Use
                   <field name="run_in_background">true</field> para TODOS —
                   eles rodarão ENQUANTO a próxima onda executa.</substep>
                 <substep><strong>REGISTRAR NO TASK_PLAN.md:</strong> Crie a seção
@@ -838,7 +1008,12 @@ metadata:
             <substep><strong>TESTING SUBWAVE (fluxo atual):</strong>
               <substeps>
                 <substep><strong>BARREIRA:</strong> Aguarde TODOS os agentes de
-                  teste da última onda terminarem.</substep>
+                  teste da última onda terminarem.
+                  MICRO-OTIMIZAÇÃO (F3-10): enquanto a barreira espera, você
+                  PODE adiantar o gate PARCIAL do estado SEM os testes e o
+                  RASCUNHO do EXPLAINER — o gate final (passo 3) e o EXPLAINER
+                  final (passo 4) só rodam após o merge dos testes, mantendo a
+                  sequência.</substep>
                 <substep><strong>REVISÃO DE TESTES:</strong> Revisores
                   adversariais frescos para cada agente de teste (mesmo
                   protocolo do passo 6 da EXECUTE-ONDA, adaptado para diffs de
@@ -907,8 +1082,9 @@ metadata:
           <cmd>rm /TASK_PLAN.md</cmd></step>
         <step order="2">Verifique o estado final:
           <cmd>. '&lt;ENV_FILE&gt;'; gstatus; gwt diff --stat</cmd></step>
-        <step order="3">Rode o gate COMPLETO uma última vez (build + todos os
-          testes), com cwd em $BASE_DIR</step>
+        <step order="3">Rode o gate COMPLETO uma última vez — o trio registrado
+          no TASK_PLAN.md (GATE_BUILD/GATE_TEST/GATE_LINT; FASE 1 passo 9,
+          F3-03), com cwd em $BASE_DIR</step>
         <step order="4"><strong>HTML EXPLAINER (antes do commit — ele precisa
           entrar nele):</strong> gere o explainer do que foi feito (de-para de
           TODAS as mudanças: antes/depois de cada arquivo, decisões e
@@ -1024,6 +1200,10 @@ Siga estas instruções EXATAMENTE.
    orquestrador) — a interface UNIFICADA de busca do deep-orchestrator.
    Parâmetros: --task, --goal, --insights, --deliverable, --brief-file,
    --count, --json, --max-evolutions N, --dev-mode (afeta só o Tier 2/Brave).
+   Para MÚLTIPLAS buscas, NUNCA chame search.sh em loop — monte o lote (uma
+   query por linha) e chame {{SKILL_HOME}}/scripts/search-parallel.sh UMA vez;
+   o resultado agregado e deduplicado volta num único relatório. Prefira
+   documentação oficial e fontes primárias; desconfie de listicles/SEO farms.
    O script implementa fallback automático em 3 tiers:
    <strong>Tier 1:</strong> surf-skill (multi-provider AI-powered) →
    <strong>Tier 2:</strong> Brave Search API direta →
@@ -1076,6 +1256,10 @@ Siga estas instruções EXATAMENTE.
 9. **DEPENDÊNCIAS (instale só SE NECESSÁRIO):**
    - Instale apenas se a sub-tarefa não puder ser concluída sem isso. Análise,
      leitura e documentação não precisam de instalação.
+   - **SINGLETON (F3-04):** se precisar de dependência NOVA e NÃO for o agente
+     designado para deps nesta onda, registre no handoff ("deps pendentes:
+     <pacote@versão>") e prossiga SEM ela (ou com implementação que não
+     dependa dela) — a adição acontece no COMMIT PREP da onda seguinte.
    - SEMPRE com cwd = {{WORKTREE_PATH}} e SEMPRE em modo congelado:
      `npm ci` | `pnpm install --frozen-lockfile` | `yarn install --immutable` |
      `bun install --frozen-lockfile` | `uv sync --frozen` |
@@ -1124,9 +1308,9 @@ Se nada a propagar, escreva "Nada a propagar."]
 
   <adversarial-review-template>
     <![CDATA[
-Você é um revisor adversarial com contexto ZERO. Você recebe APENAS
-o diff abaixo e a tarefa original. Sua missão é TENTAR REFUTAR
-este trabalho.
+Você é um revisor adversarial com contexto ZERO. Você recebe o diff
+abaixo, a tarefa original e as perguntas falsificáveis. Sua missão é
+TENTAR REFUTAR este trabalho.
 
 ## Tarefa original
 {{ORIGINAL_TASK}}
@@ -1141,6 +1325,9 @@ este trabalho.
 - Se encontrar UM problema que derruba o trabalho, reporte com evidência
 - Se não encontrar NADA, responda "Nada a refutar."
 - NÃO sugira melhorias cosméticas — só problemas REAIS
+- Você pode LER qualquer arquivo do repositório (SOMENTE LEITURA — o
+  repositório é {{BASE_DIR}}) para verificar contexto fora do diff; cite
+  arquivo:linha como evidência. NUNCA modifique nada (nem arquivos, nem git).
 ]]>
   </adversarial-review-template>
 
@@ -1153,6 +1340,18 @@ VOCÊ NÃO MODIFICA CÓDIGO DE PRODUÇÃO — apenas escreve testes.
 ## TAREFA
 Escrever testes ABRANGENTES para os seguintes arquivos/módulos:
 {{TEST_SCOPE_FILES}}
+
+## FONTE PRIMÁRIA — O CONTRATO (não o diff)
+Sua fonte primária de verdade é a descrição ORIGINAL da sub-tarefa e seus
+critérios de aceitação: os testes verificam o CONTRATO, não a implementação.
+O comportamento esperado deriva do comportamento esperado da TAREFA e dos
+critérios de aceitação — nunca do diff. Se o código contradiz a tarefa,
+reporte como bug (arquivo:linha) — NÃO escreva um teste que valide o
+comportamento contraditório.
+- Descrição original da sub-tarefa: {{ORIGINAL_TASK_DESCRIPTION}}
+- Critérios de aceitação: {{ACCEPTANCE_CRITERIA}}
+- Perguntas falsificáveis (formuladas pelo orquestrador no PLAN — passo 7):
+{{FALSIFIABLE_QUESTIONS}}
 
 ## SUA WORKTREE — SUA RAIZ-DE-MUNDO
 - Diretório: {{WORKTREE_PATH}} (absoluto — criado e travado pelo orquestrador)
@@ -1173,10 +1372,12 @@ Escrever testes ABRANGENTES para os seguintes arquivos/módulos:
   `git -C {{WORKTREE_PATH}} add -A -- ':(exclude,top).deep-orchestrator'`
   `git -C {{WORKTREE_PATH}} commit -m "wip"`
 
-## CONTEXTO
-- Handoffs dos sub-agentes que implementaram estes arquivos:
+## CONTEXTO — REFERÊNCIA DO QUE EXISTE (NÃO é a especificação)
+- Handoffs dos sub-agentes que implementaram estes arquivos (referência do
+  que existe — não é a especificação):
 {{WAVE_HANDOFFS}}
-- Diff completo do que foi implementado (para referência):
+- Diff completo do que foi implementado (referência do que existe — não é a
+  especificação):
 {{WAVE_DIFF}}
 
 ## METODOLOGIA: TDD Workflow (ECC Skill #1)
@@ -1184,7 +1385,11 @@ Escrever testes ABRANGENTES para os seguintes arquivos/módulos:
 Siga o fluxo GATED documentado em `{{SKILL_HOME}}/prompts/ecc-skills.md`
 skill #1 (somente leitura). Se o arquivo não existir, siga o fluxo TDD abaixo e
 registre a ausência no handoff — NÃO saia da sua worktree para procurá-lo:
-1. **Entenda o comportamento implementado** lendo os handoffs e o diff.
+1. **Entenda o comportamento ESPERADO, não o implementado:** derive o
+   comportamento esperado da TAREFA e dos critérios de aceitação (seção FONTE
+   PRIMÁRIA), NUNCA do diff — handoffs/diff são apenas referência do que
+   existe. Se o código contradiz a tarefa, reporte como bug — não escreva
+   teste que valide o comportamento contraditório.
 2. **Escreva testes que VERIFICAM cada comportamento.** Tipos em ordem de
    prioridade:
    a. Testes de unidade para TODAS as funções/métodos públicos
@@ -1269,11 +1474,16 @@ reportar o veredito POR ETAPA. VOCÊ NÃO MODIFICA NADA — nem testes nem produ
 
 ## TAREFA
 Rodar o gate completo no estado integrado (o código de produção JÁ está
-mergeado nesta worktree) e reportar o veredito de CADA etapa:
-1. **build** — comando de build do projeto, com cwd na worktree.
-2. **lint** — comando de lint do projeto.
-3. **typecheck** — comando de typecheck do projeto (se o projeto tem).
-4. **testes** — a suíte de testes EXISTENTE (sem adicionar testes novos).
+mergeado nesta worktree) e reportar o veredito de CADA etapa.
+O gate é SEMPRE o trio registrado no TASK_PLAN.md pelo orquestrador
+(GATE_BUILD/GATE_TEST/GATE_LINT — FASE 1 passo 9, F3-03): nunca invente
+comandos na hora; a lista abaixo organiza o trio em etapas (typecheck entra
+quando o trio o registra):
+1. **build** — o GATE_BUILD registrado, com cwd na worktree.
+2. **lint** — o GATE_LINT registrado.
+3. **typecheck** — o typecheck do projeto (se o trio o registra).
+4. **testes** — o GATE_TEST registrado (a suíte EXISTENTE, sem adicionar
+   testes novos).
 Cada veredito DEVE citar o comando executado + a saída real (resumida) +
 arquivo:linha de cada falha. Nunca invente PASS/FAIL.
 
@@ -1437,7 +1647,15 @@ justificativas.
     </case>
     <case id="gate-red">
       <symptom>Gate ficou VERMELHO após squash-merge</symptom>
-      <action>NÃO limpe a worktree nem a branch (são seu material de
+      <action><strong>CLASSIFICAÇÃO 4-VIAS (antes de agir — vale para gate
+        VERMELHO e para refutações da revisão adversarial, passo 6):</strong>
+        (1) bug → sub-agente de fix (fluxo abaixo);
+        (2) spec gap → REPLAN/nova sub-tarefa (passo 5 da EXECUTE-ONDA);
+        (3) ruído → falha de AMBIENTE — re-instale deps congeladas e re-rode
+        (R9; espelho do validation-subwave-failure);
+        (4) ambiguidade de contrato → atualize o contrato no TASK_PLAN.md —
+        NUNCA retente às cegas.
+        NÃO limpe a worktree nem a branch (são seu material de
         investigação). Crie um sub-agente de FIX numa worktree NOVA e nomeada
         (<cmd>"$DO_WT" new fix onda2-fix-endpoint-busca</cmd> — mesmo
         $CHILD_ROOT, mesmo $BRANCH_NS) com o prompt: "O gate quebrou após
@@ -1457,7 +1675,16 @@ justificativas.
         as toca) — porque um <cmd>reset --hard</cmd> apagaria em
         silêncio a edição não commitada que o usuário deixou na worktree, sem
         stash e sem reflog. Mesmo no caminho permitido, o commit desfeito é
-        arquivado em refs/do-archive/.</action>
+        arquivado em refs/do-archive/.
+        <strong>FALHA TARDIA (F3-01):</strong> o gate roda no snapshot
+        int-ondaN-&lt;nome&gt; (passo 7) — o VERMELHO pode chegar DEPOIS dos
+        merges seguintes, com HEAD avançado. O <code>undo</code> cobre isso: o
+        caminho revert usa o SHA pós-merge registrado, desfaz EXATAMENTE o
+        squash daquela filha (os demais ficam intactos no log) e arquiva o
+        commit desfeito em refs/do-archive/$RUN_ID/undo-&lt;nome&gt; — nos
+        DOIS caminhos (revert e reset). Gates posteriores que já passaram só
+        são re-rodados se o revert tocar os arquivos deles (cheque a
+        sobreposição de paths; na dúvida, re-rode).</action>
     </case>
     <case id="merge-conflict">
       <symptom>git merge --squash reportou conflito</symptom>
