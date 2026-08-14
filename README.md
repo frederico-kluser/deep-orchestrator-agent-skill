@@ -1,8 +1,8 @@
-# deep-orchestrator v3.2.0
+# deep-orchestrator v3.3.0
 
-![Versão](https://img.shields.io/badge/version-3.2.0-00d4ff)
+![Versão](https://img.shields.io/badge/version-3.3.0-00d4ff)
 
-Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge com gate, verifica créditos Brave antes de cada onda, e commita tudo ao final **sem perguntar nada ao usuário**.
+Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda, e commita tudo ao final **sem perguntar nada ao usuário**.
 
 ## Glossário (leia antes do resto)
 
@@ -29,12 +29,21 @@ O único vestígio compartilhado aceito é o registro administrativo das filhas 
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
 
+## Novidades na v3.3.0
+
+- **Gate em snapshot de integração (F3-01)**: o squash-merge é atômico e o gate (build + testes + linter) sai da seção crítica — roda em background numa worktree efêmera `int-ondaN-<nome>` (kind=integration, registrada no owned.tsv) criada no SHA pós-merge. Merges seguem em sequência; a limpeza de cada filha e o fim da onda aguardam o respectivo gate de snapshot (`status=gate-pending` no owned.tsv; o `do-wt.sh sweep` detecta gate-pending, avisa e sai != 0). Falha tardia: `do-wt.sh undo <nome>` reverte exatamente aquele squash com HEAD avançado, arquivando o commit em `refs/do-archive/$RUN_ID/undo-<nome>`. **Decisão D1**: builds duplicados (snapshot + validação + gate final) são esperados.
+- **DO_MAX_PARALLEL (F3-02)**: prefixo `max-parallel=N` na invocação (`/deep-orchestrator max-parallel=N <tarefa>`) — o orquestrador exporta `DO_MAX_PARALLEL` antes da FASE 0; ausente, default 20 (CAP protetor; 3-5 é o ponto ótimo recomendado pela Anthropic). Orçamento: features por onda ≤ DO_MAX_PARALLEL; in-flight total ≤ 2×DO_MAX_PARALLEL; ondas maiores viram batches sequenciais com a própria barreira.
+- **Gate definido uma vez (F3-03)**: a FASE 1 detecta e registra no TASK_PLAN.md o trio exato `GATE_BUILD`/`GATE_TEST`/`GATE_LINT` do projeto-alvo (package.json/Makefile/pyproject.toml/Cargo.toml/go.mod); toda invocação de gate referencia esse trio, com cwd conforme o contexto (snapshot, validação ou `$BASE_DIR` no gate final).
+- **Lockfile como singleton (F3-04)**: manifesto + lockfile entram no mapa de propriedade como recurso singleton — no máximo 1 agente por onda adiciona dependências; os demais registram "deps pendentes: <pacote@versão>" no handoff e a adição acontece no COMMIT PREP da onda seguinte.
+- **Tiering de modelos por papel (F3-09)**: quando o harness permite, agentes de teste e revisores adversariais rodam em modelo médio, REVISOR DE PLANO e síntese final em modelo forte, features no padrão; regra de escala: ≤2 sub-tarefas pequenas e independentes não geram fan-out extra.
+- **Testes**: `scripts/test-contencao.sh` — 63 asserções (A33: falha tardia de gate com undo de HEAD avançado; A34: gate-pending bloqueia o fim de onda).
+
 ## Novidades na v3.2.0
 
 - **MODO CONTIDO** (acima) + **FASE 0 — DELIMITAR O MUNDO**: `scripts/do-context.sh` detecta worktree vinculada, resolve a fronteira e grava o arquivo de estado que toda chamada Bash sourceia.
 - **Guardas em código, não em prosa**: `scripts/do-wt.sh` concentra criação, merge, undo, remoção, limpeza e prova de contenção. Cada operação destrutiva recusa alvos que não estejam registrados nesta execução.
 - **Regra de dependências (R9)**: instalação permitida se necessária, sempre com cwd na worktree-filha, em modo congelado e com `HUSKY=0` (um postinstall de husky grava `core.hooksPath` no `.git` compartilhado). Cache global do usuário é permitido; escopo global de instalação é proibido.
-- **Testes de regressão**: `scripts/test-contencao.sh` — 50 asserções cobrindo detecção de modo, colocação, limpeza segura, worktrees de terceiros, preservação da sujeira do usuário, paths com acento e espaço, guarda de índice sujo e distinção entre vazamento nosso e trabalho do usuário no projeto principal.
+- **Testes de regressão**: `scripts/test-contencao.sh` — 63 asserções cobrindo detecção de modo, colocação, limpeza segura, worktrees de terceiros, preservação da sujeira do usuário, paths com acento e espaço, guarda de índice sujo, distinção entre vazamento nosso e trabalho do usuário no projeto principal, falha tardia de gate (A33) e gate-pending (A34).
 
 ## Novidades na v3.0.0
 
@@ -47,7 +56,7 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 
 ## Como funciona
 
-O deep-orchestrator nunca escreve código. Ele atua como arquiteto-distribuidor: projeta o plano, divide o trabalho em ondas topológicas (quantas forem necessárias — o REVISOR DE PLANO recalcula após cada onda), cria e batiza worktrees isoladas do Git (uma por sub-agente), dispara os agentes em paralelo, aplica revisão adversarial, integra cada resultado via `git merge --squash` um a um com gate (build + testes + linter) entre merges, remove worktree + branch + commits intermediários ao fim de cada onda, e commita tudo ao final.
+O deep-orchestrator nunca escreve código. Ele atua como arquiteto-distribuidor: projeta o plano, divide o trabalho em ondas topológicas (quantas forem necessárias — o REVISOR DE PLANO recalcula após cada onda), cria e batiza worktrees isoladas do Git (uma por sub-agente), dispara os agentes em paralelo, aplica revisão adversarial, integra cada resultado via `git merge --squash` um a um — o gate (o trio GATE_BUILD/GATE_TEST/GATE_LINT registrado na FASE 1) roda em background numa worktree de snapshot efêmera `int-ondaN-*`, fora da seção crítica — remove worktree + branch + commits intermediários ao fim de cada onda (a limpeza de cada filha aguarda o verde do snapshot), e commita tudo ao final.
 
 ```
 ANALYZE  →  PLAN  →  EXECUTE-ONDA (repeat, ILIMITADO)  →  COMMIT-FINAL
@@ -60,8 +69,8 @@ ANALYZE  →  PLAN  →  EXECUTE-ONDA (repeat, ILIMITADO)  →  COMMIT-FINAL
 | 0 | **DELIMITAR O MUNDO** | Roda `$SKILL_HOME/scripts/do-context.sh`: detecta se o cwd está numa worktree vinculada, resolve `$BASE_DIR`, `$BASE_BRANCH`, `$MAIN_ROOT`, `$CHILD_ROOT`, `$BRANCH_NS` e `$SKILL_HOME`, e captura os baselines de contenção. Aborta com mensagem acionável se não houver branch de integração |
 | 1 | **ANALYZE** | Lê o prompt, mapeia a estrutura do repositório, identifica subsistemas, classifica greenfield/brownfield, localiza golden masters, verifica que `BRAVE_API_KEY` está definida e que há créditos (`$SKILL_HOME/scripts/check-brave-credits.sh --fail-fast`) |
 | 2 | **PLAN** | Decompõe a tarefa em sub-tarefas atômicas, identifica o grafo de dependências, organiza em ondas topológicas (número NÃO fixo — o plano é um ponto de partida), define o mapa de propriedade de arquivos, batiza cada worktree, escreve os prompts de delegação, publica o TASK_PLAN.md |
-| 3 | **EXECUTE-ONDA** | Para cada onda: verificação de créditos → commit prep (se necessário) → cria worktrees → dispara agentes em paralelo → barreira → **recálculo dinâmico (REVISOR DE PLANO)** → revisão adversarial → squash-merge um a um com gate → remoção APENAS das worktrees-filhas e branches desta execução, por nome registrado → prova de contenção → handoff para a próxima onda. Repete até o REVISOR DE PLANO declarar CONVERGÊNCIA |
-| 4 | **COMMIT-FINAL** | Remove o TASK_PLAN.md, roda o gate completo, commita **apenas o que esta execução produziu** (a sujeira preexistente do usuário é preservada), varredura final restrita à lista nominal registrada, **gera o EXPLAINER.html** (a partir do template `$SKILL_HOME/templates/html-explainer.html`) e produz o relatório final |
+| 3 | **EXECUTE-ONDA** | Para cada onda: verificação de créditos → commit prep (se necessário) → cria worktrees → dispara agentes em paralelo (escalonado) → barreira → **recálculo dinâmico (REVISOR DE PLANO)** → revisão adversarial → squash-merge um a um (gate em snapshot `int-ondaN-*`, em background; limpeza aguarda o verde de cada snapshot) → remoção APENAS das worktrees-filhas e branches desta execução, por nome registrado → prova de contenção → handoff para a próxima onda. Repete até o REVISOR DE PLANO declarar CONVERGÊNCIA |
+| 4 | **COMMIT-FINAL** | Remove o TASK_PLAN.md, roda o gate completo (o trio GATE_BUILD/GATE_TEST/GATE_LINT da FASE 1), commita **apenas o que esta execução produziu** (a sujeira preexistente do usuário é preservada), varredura final restrita à lista nominal registrada, **gera o EXPLAINER.html** (a partir do template `$SKILL_HOME/templates/html-explainer.html`) e produz o relatório final |
 
 ### Regras fundamentais
 
@@ -69,7 +78,7 @@ ANALYZE  →  PLAN  →  EXECUTE-ONDA (repeat, ILIMITADO)  →  COMMIT-FINAL
 2. **Nunca pergunta ao usuário** — autonomia total, infere com confiança. Três exceções, e apenas estas: `BRAVE_API_KEY` ausente, créditos Brave esgotados, ou abort da FASE 0 (não é repositório, HEAD destacado, repo sem commits, índice sujo)
 3. **Trabalho completo, do início ao commit** — nunca entrega trabalho parcial
 4. **Worktree é a unidade de isolamento** — cada sub-agente trabalha em sua própria worktree Git com nome descritivo (ex.: `onda1-cache-service`)
-5. **Squash-merge um a um, nunca octopus** — integração sequencial em `$BASE_BRANCH`, com gate entre merges
+5. **Squash-merge um a um, nunca octopus** — integração sequencial em `$BASE_BRANCH`; o gate roda em snapshot de integração `int-ondaN-*` (fora da seção crítica) e a limpeza de cada filha aguarda o verde do snapshot (decisão D1: builds duplicados são esperados)
 6. **Worktree nasce nomeada e morre no fim da própria onda** — limpeza imediata após gate verde, sempre por nome registrado
 7. **Verificar créditos Brave antes de cada onda** — `$SKILL_HOME/scripts/check-brave-credits.sh --fail-fast`; sem créditos, nenhuma worktree é criada e nenhum sub-agente é disparado
 8. **A worktree de invocação é a raiz-de-mundo** — nada é escrito fora dela; o branch dela é o único alvo de integração; a limpeza só toca o que esta execução registrou
@@ -80,7 +89,7 @@ ANALYZE  →  PLAN  →  EXECUTE-ONDA (repeat, ILIMITADO)  →  COMMIT-FINAL
 ```
 deep-orchestrator/
 ├── README.md                    # Este arquivo
-├── SKILL.md                     # Definição do skill v3.2.0 (frontmatter YAML + XML do orquestrador)
+├── SKILL.md                     # Definição do skill v3.3.0 (frontmatter YAML + XML do orquestrador)
 ├── scripts/
 │   ├── do-context.sh            # FASE 0 — delimita a raiz-de-mundo e grava o estado
 │   ├── do-wt.sh                 # ciclo de vida das worktrees-filhas (guardas de contenção)
@@ -130,7 +139,10 @@ export BRAVE_API_KEY=<chave>
 
 ```
 /deep-orchestrator <descrição da tarefa>
+/deep-orchestrator max-parallel=N <descrição da tarefa>   # prefixo OPCIONAL
 ```
+
+O prefixo `max-parallel=N` define o cap de features por onda (F3-02): o orquestrador o parseia antes da FASE 0 e exporta `DO_MAX_PARALLEL=N` (validado como inteiro positivo; inválido → aborta com mensagem clara). Ausente → default **20** — que é o **CAP protetor, não o alvo**: 3-5 é o ponto ótimo recomendado pela Anthropic. Ondas com mais features que o cap viram batches sequenciais, cada batch com a sua barreira.
 
 ### Triggers
 
@@ -166,6 +178,8 @@ O orquestrador vai:
 Ao final, o histórico do **branch da raiz-de-mundo** (o branch da worktree em que a skill foi invocada; `main`/`master` apenas quando a invocação foi na árvore principal) terá 3 commits squash de feature — um por sub-agente —, mais um commit por testing subwave integrada (`test-onda1-*`, `test-onda2-*`) e o commit final com o `EXPLAINER.html`. Nenhuma worktree-filha nem branch desta execução sobra; worktrees e branches pré-existentes de outras sessões não são tocados.
 
 ## Versão
+
+**3.3.0** — gate em snapshot de integração (F3-01), DO_MAX_PARALLEL (F3-02), gate definido uma vez (F3-03), lockfile singleton (F3-04), tiering de modelos por papel (F3-09).
 
 **3.2.0** — MODO CONTIDO (worktree como raiz-de-mundo), FASE 0 de bootstrap, guardas de contenção em `do-wt.sh`, regra de dependências (R9), testes de regressão.
 

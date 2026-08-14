@@ -13,9 +13,16 @@
 #   do-wt.sh new <kind> <nome>            cria filha, trava e registra
 #   do-wt.sh merge <nome> "<mensagem>"    squash-merge guardado na raiz-de-mundo
 #   do-wt.sh undo <nome>                  desfaz o squash (revert; reset só sob guarda)
+#                                        — funciona com HEAD avançado: numa FALHA TARDIA
+#                                        de gate de snapshot (F3-01), reverte EXATAMENTE
+#                                        o squash daquela filha e arquiva o commit em
+#                                        refs/do-archive/$RUN_ID/undo-<nome>
 #   do-wt.sh remove <nome> [--artifacts]  remove a filha (com guardas de posse)
 #   do-wt.sh drop-branch <nome>           arquiva e apaga o branch (só se MERGED)
-#   do-wt.sh sweep                        fim de onda: fecha o que já foi integrado
+#   do-wt.sh sweep                        fim de onda: fecha o que já foi integrado;
+#                                        DETECTA status=gate-pending — imprime aviso e
+#                                        sai != 0 (o fim de onda não fecha com gate de
+#                                        snapshot pendente, F3-01)
 #   do-wt.sh verify                       prova de contenção (roda a cada onda)
 #   do-wt.sh stage-delta                  estagia SÓ o que é nosso (COMMIT-FINAL)
 #   do-wt.sh clean-ignored-delta          remove SÓ ignorados pós-FASE 0 (COMMIT-FINAL)
@@ -24,9 +31,10 @@
 #                                        mergeada, resolve pela filha MERGED de menor
 #                                        pre_merge_sha do mesmo prefixo ondaN-)
 #   do-wt.sh status                       tabela do owned.tsv
-#   do-wt.sh mark <nome> <STATUS>         ACTIVE|MERGED|REMOVED|BLOCKED|ORPHANED
+#   do-wt.sh mark <nome> <STATUS>         ACTIVE|MERGED|REMOVED|BLOCKED|ORPHANED|
+#                                        REVERTED|gate-pending
 #
-# kind: feature | test | validation | fix | prep
+# kind: feature | test | validation | fix | prep | integration
 # =============================================================================
 
 set -uo pipefail
@@ -187,6 +195,11 @@ cmd_undo() { # <nome> — desfaz o squash-commit de UMA filha
   # que $BASE_BRANCH já tenha sido pushado.
   if [ "$cur" != "$post" ]; then
     err "HEAD avançou desde o squash de $name — revert é o único caminho seguro."
+    # Rede de segurança igual à do caminho reset: o commit desfeito fica em
+    # refs/do-archive. FALHA TARDIA (F3-01): o gate do snapshot de $name só
+    # ficou vermelho DEPOIS de merges seguintes — este revert desfaz exatamente
+    # este squash e a ref permite recuperar o commit desfeito.
+    gwt update-ref "refs/do-archive/$RUN_ID/undo-$name" "$post"
     gwt revert --no-edit "$post" || { err "FALHA no revert — resolva manualmente"; return 1; }
     row_set "$name" 9 REVERTED; echo "OK  revert de $post"; return 0
   fi
@@ -298,13 +311,30 @@ cmd_sweep() { # fim de onda — fecha o que JÁ FOI INTEGRADO. Nunca destrói tr
 
   # ACTIVE não é limpo: ou o merge ainda não aconteceu, ou é uma testing subwave
   # rodando em background. Ambos guardam trabalho — apenas relatamos.
-  local pend
+  # gate-pending (F3-01): o gate do snapshot int-ondaN-* da filha ainda não
+  # reportou verde. O fim de onda NÃO fecha com gate pendente — merges seguem em
+  # sequência, mas a limpeza da filha e o fim da onda aguardam o verde de cada
+  # snapshot (passo 7 do SKILL.md): avisa e sai != 0.
+  local pend pend_gate pend_rev
   pend=$(awk -F'\t' 'NR>1 && $9=="ACTIVE" {c++} END{print c+0}' "$OWNED")
-  if [ "$pend" = 0 ]; then
+  pend_gate=$(awk -F'\t' 'NR>1 && $9=="gate-pending" {c++} END{print c+0}' "$OWNED")
+  pend_rev=$(awk -F'\t' 'NR>1 && $9=="REVERTED" {c++} END{print c+0}' "$OWNED")
+  if [ "$pend" = 0 ] && [ "$pend_gate" = 0 ] && [ "$pend_rev" = 0 ]; then
     echo "SWEEP OK — nada desta execução ficou pendente"
   else
-    echo "SWEEP: $pend sub-tarefa(s) ainda ACTIVE (não integradas ou testing subwave em voo):"
-    awk -F'\t' 'NR>1 && $9=="ACTIVE" {printf "  %-28s kind=%s\n",$3,$2}' "$OWNED"
+    if [ "$pend" -gt 0 ]; then
+      echo "SWEEP: $pend sub-tarefa(s) ainda ACTIVE (não integradas ou testing subwave em voo):"
+      awk -F'\t' 'NR>1 && $9=="ACTIVE" {printf "  %-28s kind=%s\n",$3,$2}' "$OWNED"
+    fi
+    if [ "$pend_gate" -gt 0 ]; then
+      echo "SWEEP: $pend_gate sub-tarefa(s) com gate-pending (gate do snapshot int-ondaN-* ainda rodando — espere o verde e rode o sweep de novo):"
+      awk -F'\t' 'NR>1 && $9=="gate-pending" {printf "  %-28s kind=%s\n",$3,$2}' "$OWNED"
+      rc=1
+    fi
+    if [ "$pend_rev" -gt 0 ]; then
+      echo "SWEEP: $pend_rev sub-tarefa(s) REVERTED (undo aplicado — decida: re-merge ou conclusão):"
+      awk -F'\t' 'NR>1 && $9=="REVERTED" {printf "  %-28s kind=%s\n",$3,$2}' "$OWNED"
+    fi
   fi
   local foreign; foreign=$(wc -l < "$DO_STATE/foreign-worktrees.txt" 2>/dev/null || echo 0)
   [ "$foreign" -gt 0 ] && echo "  (worktrees pré-existentes de terceiros: $foreign — não tocadas)"

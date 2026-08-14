@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Testes de aceitação do MODO CONTIDO — A1..A20 + A22/A25/A26 + A32 (59 asserções)
+# Testes de aceitação do MODO CONTIDO — A1..A20 + A22/A25/A26 + A32/A33/A34 (63 asserções)
 set -uo pipefail
 SKILL=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 CTX="$SKILL/scripts/do-context.sh"
@@ -351,6 +351,52 @@ fi
 "$WT" remove test-onda32-x >/dev/null 2>&1; "$WT" drop-branch test-onda32-x >/dev/null 2>&1
 "$WT" remove test-onda32-y >/dev/null 2>&1; "$WT" drop-branch test-onda32-y >/dev/null 2>&1
 "$WT" remove onda31-prev >/dev/null 2>&1; "$WT" drop-branch onda31-prev >/dev/null 2>&1
+
+echo "=== A33: FALHA TARDIA de gate de snapshot — undo da 1ª com HEAD avançado (F3-01) ==="
+# O gate do snapshot da 1ª filha só ficou vermelho DEPOIS do merge da 2ª (gate
+# em worktree efêmera, fora da seção crítica). O undo precisa reverter EXATAMENTE
+# o squash da 1ª, deixando o squash da 2ª INTACTO no log, e arquivar o commit
+# desfeito em refs/do-archive/$RUN_ID/undo-<nome>.
+env33=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env33"
+"$WT" new feature onda33-a >/dev/null
+echo 'A33' > "$CHILD_ROOT/onda33-a/a33.txt"
+git -C "$CHILD_ROOT/onda33-a" add -A && git -C "$CHILD_ROOT/onda33-a" commit -qm wip
+"$WT" merge onda33-a "onda33-a: adiciona a33" >/dev/null || bad "A33 merge a"
+"$WT" new feature onda33-b >/dev/null
+echo 'B33' > "$CHILD_ROOT/onda33-b/b33.txt"
+git -C "$CHILD_ROOT/onda33-b" add -A && git -C "$CHILD_ROOT/onda33-b" commit -qm wip
+"$WT" merge onda33-b "onda33-b: adiciona b33" >/dev/null || bad "A33 merge b"
+"$WT" undo onda33-a >/dev/null 2>&1
+if [ "$(git -C "$BASE_DIR" log --oneline -1 --format=%s)" = 'Revert "onda33-a: adiciona a33"' ] \
+   && [ "$(git -C "$BASE_DIR" log --oneline -1 --format=%s 'HEAD~1')" = 'onda33-b: adiciona b33' ] \
+   && [ "$(git -C "$BASE_DIR" for-each-ref --format='%(refname)' "refs/do-archive/$RUN_ID" | grep -c 'undo-onda33-a')" = 1 ]; then
+  ok "A33 undo da 1ª com HEAD avançado: revert exato do squash da 1ª, 2ª intacta, undo arquivado"
+else
+  bad "A33 (log='$(git -C "$BASE_DIR" log --oneline -2 | tr '\n' '|')' refs='$(git -C "$BASE_DIR" for-each-ref --format='%(refname)' "refs/do-archive/$RUN_ID" | tr '\n' '|')')"
+fi
+# Restauração (como o orquestrador faria após o fix): re-merge da filha corrigida
+"$WT" merge onda33-a "onda33-a: adiciona a33 (re-merge pós-fix)" >/dev/null || bad "A33 re-merge"
+chk "A33 re-merge restaurou a33.txt" "$(test -f "$BASE_DIR/a33.txt" && echo sim || echo nao)" "sim"
+"$WT" remove onda33-a >/dev/null 2>&1; "$WT" drop-branch onda33-a >/dev/null 2>&1
+"$WT" remove onda33-b >/dev/null 2>&1; "$WT" drop-branch onda33-b >/dev/null 2>&1
+
+echo "=== A34: gate-pending bloqueia o fim de onda (sweep sai != 0), F3-01 ==="
+env34=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env34"
+"$WT" new feature onda34-a >/dev/null
+echo 'A34' > "$CHILD_ROOT/onda34-a/a34.txt"
+git -C "$CHILD_ROOT/onda34-a" add -A && git -C "$CHILD_ROOT/onda34-a" commit -qm wip
+"$WT" merge onda34-a "onda34-a: adiciona a34" >/dev/null || bad "A34 merge"
+"$WT" mark onda34-a gate-pending >/dev/null
+out34=$("$WT" sweep 2>&1); rc34=$?
+if [ "$rc34" != 0 ] && case "$out34" in *gate-pending*) true ;; *) false ;; esac; then
+  ok "A34 sweep sai != 0 com aviso de gate-pending (fim de onda não fecha)"
+else
+  bad "A34 (rc=$rc34 out=[$out34])"
+fi
+"$WT" mark onda34-a MERGED >/dev/null
+out34b=$("$WT" sweep 2>&1); rc34b=$?
+chk "A34 sweep OK após mark MERGED" "$rc34b" "0"
+"$WT" remove onda34-a >/dev/null 2>&1; "$WT" drop-branch onda34-a >/dev/null 2>&1
 
 echo; printf 'RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1

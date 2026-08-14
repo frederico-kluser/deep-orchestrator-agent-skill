@@ -27,6 +27,7 @@
 #
 # Exit codes:
 #   0 = ok
+#   2 = DO_MAX_PARALLEL inválido (não é inteiro positivo)
 #   3 = cwd não está dentro de um repositório git
 #   4 = HEAD destacado (não há branch de integração)
 #   5 = repositório sem commits
@@ -213,6 +214,19 @@ mkdir -p "$DO_STATE" "$CHILD_ROOT" || die 7 "não consegui criar $DO_STATE / $CH
 
 printf 'run_id\tkind\tname\tbranch\tpath\tbase_sha\tpre_merge_sha\tpost_merge_sha\tstatus\n' > "$OWNED"
 
+# --- (0.9b) DO_MAX_PARALLEL: cap de paralelismo (F3-02) ----------------------
+# O orquestrador parseia o prefixo `max-parallel=N` da invocação e exporta
+# DO_MAX_PARALLEL antes da FASE 0; ausente → default 20 (CAP protetor — o ponto
+# ótimo recomendado é 3-5). Validação: inteiro positivo. Só dígitos, então a
+# interpolação no ENV_FILE (aspas simples) é segura.
+case "${DO_MAX_PARALLEL:-}" in
+  "") DO_MAX_PARALLEL=20 ;;   # ausente → default 20 (CAP protetor)
+  *[!0-9]*)
+    die 2 "DO_MAX_PARALLEL inválido: '${DO_MAX_PARALLEL}' — precisa ser um inteiro positivo (ex.: max-parallel=20)" ;;
+esac
+[ "$DO_MAX_PARALLEL" -gt 0 ] 2>/dev/null \
+  || die 2 "DO_MAX_PARALLEL inválido: '$DO_MAX_PARALLEL' — precisa ser maior que zero"
+
 cat > "$ENV_FILE" <<EOF
 # deep-orchestrator — estado da execução $RUN_ID. Sourceie em TODA chamada Bash.
 MODE='$MODE'
@@ -234,9 +248,10 @@ DO_STATE='$DO_STATE'
 PLAN_FILE='$PLAN_FILE'
 OWNED='$OWNED'
 DO_WT='$SKILL_HOME/scripts/do-wt.sh'
+DO_MAX_PARALLEL='$DO_MAX_PARALLEL'
 export MODE BASE_DIR BASE_BRANCH BASE_NAME BASE_SLUG MAIN_ROOT MAIN_ROOT_DESC
 export COMMON_DIR PARENT_DIR CHILD_ROOT PLACEMENT RUN_ID BRANCH_NS SKILL_HOME
-export DO_HOME DO_STATE PLAN_FILE OWNED DO_WT
+export DO_HOME DO_STATE PLAN_FILE OWNED DO_WT DO_MAX_PARALLEL
 
 # GIT_DIR exportada VENCE \`git -C\`: zerar em toda chamada.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_NAMESPACE 2>/dev/null || true
@@ -310,6 +325,7 @@ say "  MAIN_ROOT     = $MAIN_ROOT_DESC    (ZONA PROIBIDA)"
 say "  CHILD_ROOT    = $CHILD_ROOT ($PLACEMENT)"
 say "  BRANCH_NS     = $BRANCH_NS"
 say "  SKILL_HOME    = ${SKILL_HOME:-<não resolvido>}  (somente leitura)"
+say "  DO_MAX_PARALLEL = $DO_MAX_PARALLEL  (cap de paralelismo por onda — F3-02)"
 say "  worktrees de terceiros: $(wc -l < "$DO_STATE/foreign-worktrees.txt" 2>/dev/null || echo 0) (NÃO tocar)"
 say ""
 say "Sourceie em TODA chamada Bash posterior:"
