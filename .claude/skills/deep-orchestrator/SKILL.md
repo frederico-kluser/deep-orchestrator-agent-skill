@@ -208,7 +208,10 @@ metadata:
         eles enxergam a árvore principal e as worktrees de OUTRAS sessões.
         São PROIBIDOS: <cmd>git worktree prune</cmd>,
         <cmd>git worktree remove -f -f</cmd>, <cmd>git clean</cmd> em BASE_DIR
-        (apaga os arquivos não rastreados do usuário, sem desfazer) e
+        (apaga os arquivos não rastreados do usuário, sem desfazer) — com UMA
+        exceção: <cmd>do-wt.sh clean-ignored-delta</cmd> é permitido, pois
+        remove apenas o delta contra o baseline de ignorados da FASE 0 (nunca
+        os ignorados pré-existentes do usuário) — e
         <cmd>git reset --hard</cmd> fora do <cmd>do-wt.sh undo</cmd>;
         (e) todo comando git de orquestração usa os helpers do ENV_FILE
         (gwt = git -C BASE_DIR, gch = git -C &lt;filha&gt;), NUNCA `git` nu
@@ -480,8 +483,9 @@ metadata:
               squash-commit problemático com
               <cmd>do-wt.sh undo test-ondaN-&lt;foco&gt;</cmd> — que usa o SHA
               registrado, prefere <cmd>revert</cmd> e só aceita
-              <cmd>reset --hard</cmd> quando o working tree está idêntico ao
-              baseline da FASE 0. NUNCA use <cmd>git reset --hard HEAD~1</cmd>:
+              <cmd>reset --hard</cmd> quando o working tree não tem NENHUMA
+              modificação tracked (linhas untracked "??" são toleradas — o
+              reset não as toca). NUNCA use <cmd>git reset --hard HEAD~1</cmd>:
               numa testing subwave assíncrona, HEAD~1 pode ser o COMMIT PREP da
               onda seguinte ou o squash de outra sub-tarefa. Depois limpe a
               worktree/branch e registre os arquivos não cobertos.</substep>
@@ -755,9 +759,11 @@ metadata:
           e o usuário fica com <code>?? .deep-orchestrator/</code> no
           <cmd>git status</cmd> dele para sempre.
           Se você instalou dependências em $BASE_DIR para rodar o gate (R9),
-          apague-as agora: <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; gwt clean -fdXq</cmd>
-          (só o que o .gitignore já declara descartável) — deixá-las é lixo de
-          gigabytes dentro da worktree do usuário</step>
+          apague-as agora: <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$DO_WT" clean-ignored-delta</cmd>
+          (remove SOMENTE os ignorados que NÃO existiam na FASE 0 — o baseline
+          de ignorados protege node_modules/.venv/.env.local pré-existentes do
+          usuário; NUNCA use <cmd>git clean -fdX</cmd> às cegas) — deixá-las é
+          lixo de gigabytes dentro da worktree do usuário</step>
       </steps>
     </phase>
 
@@ -1152,8 +1158,9 @@ justificativas.
         SHAs pré e pós-merge registrados no owned.tsv, prefere
         <cmd>git revert</cmd> (que não toca no working tree) e só aceita
         <cmd>reset --hard</cmd> quando HEAD é exatamente o squash daquela filha,
-        está a 1 commit do pré-merge, e o working tree está IDÊNTICO ao
-        dirty-baseline da FASE 0 — porque um <cmd>reset --hard</cmd> apagaria em
+        está a 1 commit do pré-merge, e o working tree não tem NENHUMA
+        modificação tracked (linhas untracked "??" são toleradas — o reset não
+        as toca) — porque um <cmd>reset --hard</cmd> apagaria em
         silêncio a edição não commitada que o usuário deixou na worktree, sem
         stash e sem reflog. Mesmo no caminho permitido, o commit desfeito é
         arquivado em refs/do-archive/.</action>

@@ -262,11 +262,21 @@ EOF
 
 # --- (0.10) Baselines: a prova de que nada vazou ----------------------------
 # Todos os escapes conhecidos são SILENCIOSOS. Sem baseline não há detecção.
-gstatus > "$DO_STATE/dirty-baseline.txt"
+# -uall é OBRIGATÓRIO: sem ele, um diretório untracked colapsa numa única
+# linha "?? docs/" e o stage-delta excluiria o diretório INTEIRO do commit
+# final — engolindo arquivos novos que a execução criou dentro dele.
+gstatus --untracked-files=all > "$DO_STATE/dirty-baseline.txt"
 # Forma NUL-delimitada: `git status --porcelain` sem -z aplica C-quoting em
 # path com espaço ou acento ("relat\303\263rio.md") e o path volta com aspas
 # literais, que o `git add` recusa. O consumidor (stage-delta) usa esta.
-gstatus -z > "$DO_STATE/dirty-baseline.nul"
+gstatus -z --untracked-files=all > "$DO_STATE/dirty-baseline.nul"
+# Baseline de IGNORADOS: `git clean -fdX` às cegas (outrora no COMMIT-FINAL)
+# apagaria node_modules/.venv/.env.local que o usuário já tinha ANTES da
+# FASE 0 junto com as dependências instaladas pelo gate. O ÚNICO clean
+# permitido em BASE_DIR é o delta contra este baseline
+# (do-wt.sh clean-ignored-delta).
+gstatus --ignored > "$DO_STATE/ignored-baseline.txt"
+gstatus --ignored -z > "$DO_STATE/ignored-baseline.nul"
 gwt config --list --local 2>/dev/null > "$DO_STATE/config-baseline.txt"
 [ -s "$DO_STATE/config-baseline.txt" ] || die 8 "baseline de config vazio — a FASE 0 falhou em silêncio"
 

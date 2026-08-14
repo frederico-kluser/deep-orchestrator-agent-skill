@@ -18,6 +18,7 @@
 #   do-wt.sh sweep                        fim de onda: fecha o que já foi integrado
 #   do-wt.sh verify                       prova de contenção (roda a cada onda)
 #   do-wt.sh stage-delta                  estagia SÓ o que é nosso (COMMIT-FINAL)
+#   do-wt.sh clean-ignored-delta          remove SÓ ignorados pós-FASE 0 (COMMIT-FINAL)
 #   do-wt.sh wave-files <nome-da-1a-filha> arquivos tocados pela onda
 #   do-wt.sh status                       tabela do owned.tsv
 #   do-wt.sh mark <nome> <STATUS>         ACTIVE|MERGED|REMOVED|BLOCKED|ORPHANED
@@ -189,11 +190,23 @@ cmd_undo() { # <nome> — desfaz o squash-commit de UMA filha
 
   # reset --hard só é permitido quando: HEAD é exatamente o squash desta filha,
   # o pré-merge é ancestral, há exatamente 1 commit de distância, e o working
-  # tree não tem nada além da sujeira que já existia ANTES da execução.
-  local baseline="$DO_STATE/dirty-baseline.txt"
-  if [ "$(gstatus)" != "$(cat "$baseline" 2>/dev/null)" ]; then
-    err "A worktree tem mudanças além do baseline da FASE 0 — reset --hard PROIBIDO."
-    err "Usando revert (preserva o working tree)."
+  # tree não tem NENHUMA modificação tracked — nem do usuário (o baseline da
+  # FASE 0 pode conter " M root.txt" dele), nem da execução. Linhas "??"
+  # (untracked) são aceitas: reset --hard não as toca. A comparação contra o
+  # baseline é FALSA como guarda: o baseline pode já ter tracked sujo e o
+  # reset --hard apagaria essa edição silenciosamente.
+  # ATENÇÃO (verificado em lab): NUNCA use `gstatus | grep -qv` com -q aqui —
+  # o grep sai no 1º match, fecha o pipe, o gstatus morre com SIGPIPE e, com
+  # pipefail, a condição vira falsa -> reset --hard COM modificações tracked.
+  # Capturar a saída INTEIRA primeiro (falha real do git aborta aqui) e só
+  # então filtrar: grep sem -q consome tudo, SIGPIPE é impossível. O `|| true`
+  # no filtro é obrigatório: sem linhas não-"??" o grep -v sai 1 (esperado).
+  local st mods
+  st=$(gstatus) || { err "FALHA: não consegui ler o status da raiz-de-mundo"; return 1; }
+  mods=$(printf '%s\n' "$st" | grep -v '^??' || true)
+  if [ -n "$mods" ]; then
+    err "Há modificações tracked no working tree — reset --hard PROIBIDO."
+    err "Usando revert (preserva o working tree e o histórico)."
     gwt revert --no-edit "$post" || return 1
     row_set "$name" 9 REVERTED; echo "OK  revert de $post"; return 0
   fi
@@ -356,6 +369,11 @@ cmd_stage_delta() { # COMMIT-FINAL: estagia SÓ o que esta execução produziu
   local basepaths="$DO_STATE/baseline-paths.txt"
   status_paths < "$DO_STATE/dirty-baseline.nul" | tr '\0' '\n' | sort -u > "$basepaths"
 
+  # -uall nos DOIS lados (baseline da FASE 0 e leitura aqui) é OBRIGATÓRIO:
+  # sem ele, um diretório untracked colapsa numa única linha "?? docs/" e a
+  # comparação EXATA excluiria o diretório INTEIRO — inclusive arquivos novos
+  # que a execução criou dentro dele. O diff de paths tem que ser por arquivo,
+  # não por diretório.
   local -a add=()
   while IFS= read -r -d '' path; do
     # Comparação EXATA de path. Substring classificaria "relatorio.md" como
@@ -363,13 +381,53 @@ cmd_stage_delta() { # COMMIT-FINAL: estagia SÓ o que esta execução produziu
     grep -qxF -- "$path" "$basepaths" && continue
     case "$path" in .deep-orchestrator/*|.deep-orchestrator) continue ;; esac
     add+=("$path")
-  done < <(gstatus -z | status_paths)
+  done < <(gstatus -z --untracked-files=all | status_paths)
 
   if [ "${#add[@]}" = 0 ]; then echo "Nada novo a estagiar."; return 0; fi
   gwt add -- "${add[@]}" || return 1
   printf 'Estagiados %s path(s):\n' "${#add[@]}"; printf '  %s\n' "${add[@]}"
   local kept; kept=$(wc -l < "$basepaths")
   [ "$kept" -gt 0 ] && printf 'Preservados fora do commit (sujeira preexistente do usuário): %s\n' "$kept"
+  return 0
+}
+
+# =============================================================================
+cmd_clean_ignored_delta() { # COMMIT-FINAL: limpa SÓ os ignorados que esta
+  # execução criou (dependências do gate). Nunca os ignorados pré-existentes:
+  # o baseline de ignorados da FASE 0 protege node_modules/.venv/.env.local
+  # que o usuário já tinha antes — `git clean -fdX` às cegas apagaria tudo.
+  [ -f "$DO_STATE/ignored-baseline.nul" ] \
+    || { err "RECUSADO: sem ignored-baseline.nul — clean-ignored-delta exige a FASE 0 (baseline de ignorados)"; return 1; }
+  gassert || return 1
+  local basepaths="$DO_STATE/ignored-baseline-paths.txt"
+  status_paths < "$DO_STATE/ignored-baseline.nul" | tr '\0' '\n' | sort -u > "$basepaths"
+
+  # Mesmo modo da gravação do baseline (--ignored, colapso de diretório
+  # padrão): um diretório inteiramente ignorado vira UMA linha "!! dir/". Assim
+  # um node_modules/ pré-existente é um único path no baseline e nunca vira
+  # delta, mesmo que o gate tenha instalado mais coisas dentro dele.
+  local -a delta=()
+  while IFS= read -r -d '' path; do
+    # Comparação EXATA de path (mesmo padrão do stage-delta): substring
+    # classificaria um ignorado novo como preexistente.
+    grep -qxF -- "$path" "$basepaths" && continue
+    case "$path" in .deep-orchestrator/*|.deep-orchestrator) continue ;; esac
+    delta+=("$path")
+  done < <(gstatus --ignored -z | status_paths)
+
+  if [ "${#delta[@]}" = 0 ]; then echo "Nada novo a limpar (todos os ignorados já existiam na FASE 0)."; return 0; fi
+  local path
+  for path in "${delta[@]}"; do
+    # clean -fdX por pathspec EXPLÍCITO: -X só toca ignorados, e o path veio
+    # do próprio --ignored -z (cru, sem quoting). GIT_LITERAL_PATHSPECS impede
+    # que um path com metacaractere glob (ex.: "a[1].tmp") vire padrão e
+    # remova OUTRO arquivo (verificado em lab: o glob removia "a1.tmp" junto).
+    if GIT_LITERAL_PATHSPECS=1 gwt clean -fdXq -- "$path"; then
+      echo "Removido ignorado novo: $path"
+    else
+      err "AVISO: não consegui remover ignorado novo: $path"
+    fi
+  done
   return 0
 }
 
@@ -400,6 +458,7 @@ case "${1:-}" in
   sweep)        shift; cmd_sweep "$@" ;;
   verify)       shift; cmd_verify "$@" ;;
   stage-delta)  shift; cmd_stage_delta "$@" ;;
+  clean-ignored-delta) shift; cmd_clean_ignored_delta "$@" ;;
   wave-files)   shift; cmd_wave_files "$@" ;;
   status)       shift; cmd_status "$@" ;;
   mark)         shift; cmd_mark "$@" ;;

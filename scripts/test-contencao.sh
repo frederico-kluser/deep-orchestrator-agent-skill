@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Testes de aceitação do MODO CONTIDO — A1..A20 (50 asserções)
+# Testes de aceitação do MODO CONTIDO — A1..A20 + A22/A25/A26 (57 asserções)
 set -uo pipefail
 SKILL=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 CTX="$SKILL/scripts/do-context.sh"
@@ -19,6 +19,7 @@ export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER
 # --- fixture: repo principal + worktree irmã + worktree de terceiro ----------
 git init -q main && cd main
 mkdir -p src && echo 'print("v1")' > src/app.py && echo root > root.txt
+printf 'node_modules/\n.venv/\n' > .gitignore
 git add -A && git commit -qm init
 git worktree add -q ../wtA -b feat/x
 git worktree add -q ../wtThird -b thirdparty
@@ -209,6 +210,96 @@ chk "A20 raiz-de-mundo intacta" "$(git -C "$BASE_DIR" rev-parse HEAD)" "$head_an
 chk "A20 commit foi para o branch da filha" "$(git -C "$CHILD_ROOT/onda9-commit" log --oneline -1 --format=%s)" "wip"
 chk "A20 estado da skill não entrou no commit" "$(git -C "$CHILD_ROOT/onda9-commit" show --name-only --format= HEAD | grep -c deep-orchestrator)" "0"
 "$WT" mark onda9-commit MERGED >/dev/null; "$WT" remove onda9-commit >/dev/null 2>&1; "$WT" drop-branch onda9-commit >/dev/null 2>&1
+
+echo "=== A22a: undo com edição tracked do usuário no baseline → revert preserva a edição ==="
+echo "edicao-do-usuario" >> wtA/root.txt
+env22a=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env22a"
+"$WT" new feature onda22a-undo >/dev/null
+echo 'FEAT22A' > "$CHILD_ROOT/onda22a-undo/feat22a.py"
+git -C "$CHILD_ROOT/onda22a-undo" add -A && git -C "$CHILD_ROOT/onda22a-undo" commit -qm wip
+"$WT" merge onda22a-undo "onda22a-undo: adiciona feat22a" >/dev/null || bad "A22a merge"
+"$WT" undo onda22a-undo >/dev/null 2>&1
+if [ "$(grep -c 'edicao-do-usuario' "$BASE_DIR/root.txt")" = 1 ] \
+   && [ "$(git -C "$BASE_DIR" log --oneline -1 --format=%s)" = 'Revert "onda22a-undo: adiciona feat22a"' ]; then
+  ok "A22a undo reverteu (log mostra Revert) e preservou a edição do usuário em root.txt"
+else
+  bad "A22a (grep='$(grep -c 'edicao-do-usuario' "$BASE_DIR/root.txt")' log='$(git -C "$BASE_DIR" log --oneline -1 --format=%s)')"
+fi
+
+echo "=== A22b: undo com working tree sem modificações tracked → reset --hard arquivado ==="
+git -C wtA checkout -q -- root.txt
+env22b=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env22b"
+"$WT" new feature onda22b-undo >/dev/null
+echo 'FEAT22B' > "$CHILD_ROOT/onda22b-undo/feat22b.py"
+git -C "$CHILD_ROOT/onda22b-undo" add -A && git -C "$CHILD_ROOT/onda22b-undo" commit -qm wip
+"$WT" merge onda22b-undo "onda22b-undo: adiciona feat22b" >/dev/null || bad "A22b merge"
+pre22b=$(git -C "$BASE_DIR" rev-parse HEAD~1)
+"$WT" undo onda22b-undo >/dev/null 2>&1
+if [ "$(git -C "$BASE_DIR" rev-parse HEAD)" = "$pre22b" ] \
+   && [ "$(git -C "$BASE_DIR" for-each-ref --format='%(refname)' "refs/do-archive/$RUN_ID" | grep -c 'undo-onda22b-undo')" = 1 ]; then
+  ok "A22b undo usou reset --hard (HEAD voltou ao pré-merge; commit arquivado em refs/do-archive)"
+else
+  bad "A22b (HEAD='$(git -C "$BASE_DIR" rev-parse HEAD)' pre='$pre22b' refs='$(git -C "$BASE_DIR" for-each-ref --format='%(refname)' "refs/do-archive/$RUN_ID" | grep -c 'undo-onda22b-undo')')"
+fi
+
+echo "=== A22c: undo com fixture GRANDE (4000 untracked + 1 tracked) — caça o padrão SIGPIPE ==="
+# O fixture pequeno (A22a) não manifesta o bug do `gstatus | grep -qv`:
+# com saída de poucos KB o grep não fecha o pipe antes do git terminar.
+# Com ~75KB de saída (4000 untracked + " M root.txt" no começo), o grep -q
+# sai no 1º match, o pipe fecha, o git morre com SIGPIPE (141) e o pipefail
+# vira a condição para o reset --hard COM edição tracked (verificado em lab).
+git -C wtA checkout -q -- root.txt
+env22c=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env22c"
+"$WT" new feature onda22c-undo >/dev/null
+echo 'FEAT22C' > "$CHILD_ROOT/onda22c-undo/feat22c.py"
+git -C "$CHILD_ROOT/onda22c-undo" add -A && git -C "$CHILD_ROOT/onda22c-undo" commit -qm wip
+"$WT" merge onda22c-undo "onda22c-undo: adiciona feat22c" >/dev/null || bad "A22c merge"
+echo "edicao-do-usuario-22c" >> "$BASE_DIR/root.txt"
+for i in $(seq 1 4000); do echo "$i" > "$BASE_DIR/bulk-$i.tmp"; done
+"$WT" undo onda22c-undo >/dev/null 2>&1
+if [ "$(grep -c 'edicao-do-usuario-22c' "$BASE_DIR/root.txt")" = 1 ] \
+   && [ "$(git -C "$BASE_DIR" log --oneline -1 --format=%s)" = 'Revert "onda22c-undo: adiciona feat22c"' ]; then
+  ok "A22c fixture grande (4000 untracked + tracked): undo fez revert e preservou a edição"
+else
+  bad "A22c (grep='$(grep -c 'edicao-do-usuario-22c' "$BASE_DIR/root.txt")' log='$(git -C "$BASE_DIR" log --oneline -1 --format=%s)')"
+fi
+rm -f "$BASE_DIR"/bulk-*.tmp
+
+echo "=== A25: stage-delta com arquivo novo em diretório untracked preexistente ==="
+mkdir -p wtA/docs && echo "notas do usuario" > wtA/docs/notas-do-usuario.md
+env25=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env25"
+echo 'gerado pela skill' > "$BASE_DIR/docs/gerado-pela-skill.md"
+"$WT" stage-delta >/dev/null 2>&1
+staged=$(git -C "$BASE_DIR" diff --cached --name-only | tr '\n' ' ')
+novo=0; usuario=0
+case "$staged" in *docs/gerado-pela-skill.md*) novo=1 ;; esac
+case "$staged" in *notas-do-usuario*) usuario=1 ;; esac
+if [ "$novo" = 1 ] && [ "$usuario" = 0 ]; then
+  ok "A25 arquivo novo dentro de dir untracked preexistente estagiado; o do usuário não"
+else
+  bad "A25 (novo=$novo usuario=$usuario estagiado=[$staged])"
+fi
+git -C "$BASE_DIR" reset -q
+
+echo "=== A26: clean-ignored-delta preserva ignorados pré-existentes, remove só os novos ==="
+mkdir -p wtA/node_modules/pkg && echo 1 > wtA/node_modules/pkg/i.js
+env26=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env26"
+"$WT" clean-ignored-delta >/dev/null 2>&1
+if [ "$(test -f "$BASE_DIR/node_modules/pkg/i.js" && echo sim || echo nao)" = sim ]; then
+  ok "A26a node_modules pré-existente (no baseline de ignorados) intacto após o delta"
+else
+  bad "A26a node_modules do usuário foi apagado"
+fi
+mkdir -p "$BASE_DIR/.venv/bin" && echo 1 > "$BASE_DIR/.venv/bin/python"
+"$WT" clean-ignored-delta >/dev/null 2>&1
+if [ "$(test -e "$BASE_DIR/.venv" && echo sim || echo nao)" = nao ] \
+   && [ "$(test -f "$BASE_DIR/node_modules/pkg/i.js" && echo sim || echo nao)" = sim ]; then
+  ok "A26b .venv novo removido; node_modules pré-existente preservado"
+else
+  bad "A26b (venv='$(test -e "$BASE_DIR/.venv" && echo sim || echo nao)' node_modules='$(test -f "$BASE_DIR/node_modules/pkg/i.js" && echo sim || echo nao)')"
+fi
+rm -f "$DO_STATE/ignored-baseline.nul"
+"$WT" clean-ignored-delta >/dev/null 2>&1; chk "A26c recusa sem baseline de ignorados" "$?" "1"
 
 echo; printf 'RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1

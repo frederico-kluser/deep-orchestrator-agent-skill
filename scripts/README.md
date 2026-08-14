@@ -26,7 +26,7 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 
 | Script | Proposito |
 |---|---|
-| `test-contencao.sh` | Testes de aceitacao do MODO CONTIDO (A1..A20, 50 assercoes — expande para A34 nas fases seguintes do plano v3.3.0). Cria fixtures (repo principal + worktree irma + worktree de terceiro) e verifica invariantes: deteccao de MODE, fronteira BASE_DIR, isolamento de worktrees, protecao contra operacoes em branches de terceiros. Portavel: resolve o path da skill dinamicamente e limpa o lab em /tmp via trap. |
+| `test-contencao.sh` | Testes de aceitacao do MODO CONTIDO (A1..A20 + A22/A25/A26, 57 assercoes — expande para A34 nas fases seguintes do plano v3.3.0). Cria fixtures (repo principal + worktree irma + worktree de terceiro) e verifica invariantes: deteccao de MODE, fronteira BASE_DIR, isolamento de worktrees, protecao contra operacoes em branches de terceiros. Portavel: resolve o path da skill dinamicamente e limpa o lab em /tmp via trap. |
 
 ---
 
