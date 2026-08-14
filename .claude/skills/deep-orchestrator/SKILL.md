@@ -30,7 +30,7 @@ when_to_use: >-
   Quando o usuário quer uma tarefa resolvida do início ao fim sem interrupções,
   especialmente tarefas complexas que se beneficiam de decomposição em ondas
   paralelas. NUNCA invoque para tarefas triviais de um passo só.
-argument-hint: "[max-parallel=N] <descrição da tarefa>"   # prefixo opcional max-parallel=N: cap de features por onda (default 20; 3-5 é o ponto ótimo recomendado — F3-02)
+argument-hint: "[max-parallel=N] <descrição da tarefa>"   # prefixo opcional max-parallel=N: cap de concorrência (default 20 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto)
 disable-model-invocation: false
 user-invocable: true
 disallowed-tools:
@@ -324,8 +324,7 @@ metadata:
         <step order="0"><strong>PARSEIE O PREFIXO max-parallel=N (F3-02):</strong>
           se $ARGUMENTS começa com <code>max-parallel=N</code>, exporte
           <code>DO_MAX_PARALLEL=N</code> ANTES da FASE 0 e use o resto como
-          tarefa. Ausente → default 20 (o CAP protetor; 3-5 é o ponto ótimo
-          recomendado pela Anthropic — o cap NÃO é o alvo). A validação de
+          tarefa. Ausente → default 20. A validação de
           inteiro positivo acontece no próprio do-context.sh (exit 2 com
           mensagem clara) — nunca tente "recuperar" uma FASE 0 que abortou
           por isso</step>
@@ -464,12 +463,12 @@ metadata:
             <substep><strong>ORÇAMENTO DE PARALELISMO (DO_MAX_PARALLEL,
               F3-02):</strong> features por onda ≤ $DO_MAX_PARALLEL (default 20;
               prefixo max-parallel=N na invocação — FASE 0 passo 0); in-flight
-              TOTAL — features da onda + subwaves da onda anterior + revisores
-              + REVISOR DE PLANO — ≤ 2×DO_MAX_PARALLEL; ondas maiores viram
+              TOTAL — features da onda + worktrees de teste/validação das
+              subwaves da onda anterior (incluindo as até 3 worktrees de teste)
+              + revisores + REVISOR DE PLANO — ≤ DO_MAX_PARALLEL: TUDO cabe no
+              MESMO teto, as subwaves contam dentro dele; ondas maiores viram
               BATCHES sequenciais dentro da mesma onda, cada batch com a sua
-              barreira (passo 4) e compartilhando o mesmo passo 7.
-              <note>3-5 é o ponto ótimo recomendado pela Anthropic; o default
-              20 é o CAP protetor, não o alvo.</note></substep>
+              barreira (passo 4) e compartilhando o mesmo passo 7.</substep>
             <substep><strong>ESCALA DE FAN-OUT (F3-09):</strong> ≤2 sub-tarefas
               independentes e pequenas → execute SEM fan-out extra (um único
               sub-agente as absorve, ou ficam na onda existente); crie
@@ -955,7 +954,10 @@ metadata:
                 <substep><strong>PLANEJAR AGENTES DE TESTE:</strong> Divida os arquivos
                   em subconjuntos disjuntos (mapa de propriedade de arquivo de teste).
                   Máximo 3 worktrees de teste por onda — agrupe arquivos relacionados
-                  no mesmo agente. Batize cada worktree com o prefixo
+                  no mesmo agente. As worktrees de teste CONTAM no teto
+                  DO_MAX_PARALLEL da execução (in-flight total, PLAN passo 3):
+                  com o teto em uso, reduza o número de agentes de teste antes de
+                  estourá-lo. Batize cada worktree com o prefixo
                   <code>test-ondaN-</code> (ex.: test-onda1-cache-coverage,
                   test-onda1-schema-tests).</substep>
                 <substep><strong>CRIAR WORKTREES DE TESTE:</strong>
