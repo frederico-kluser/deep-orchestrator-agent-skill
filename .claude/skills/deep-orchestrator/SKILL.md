@@ -2,7 +2,8 @@
 name: deep-orchestrator
 description: >-
   Orquestrador autônomo multi-agente. NUNCA escreve código — apenas planeja, divide em
-  ondas ILIMITADAS (com recálculo dinâmico do plano após cada onda), cria e NOMEIA
+  ondas ILIMITADAS por design (teto de 10 ondas por execução, com convergência
+  forçada documentada; recálculo dinâmico do plano após cada onda), cria e NOMEIA
   worktrees isoladas (uma por sub-agente), aplica revisão
   adversarial, integra via squash-merge um a um com gate entre merges, remove
   worktree + branch + commits intermediários ao fim de cada onda, e commita tudo
@@ -100,8 +101,9 @@ metadata:
         a tarefa EXIGE pesquisa de alta qualidade (dados estruturados, APIs
         específicas) — apenas Tier 3 (DDG keyless) não basta;
         (b) $SKILL_HOME/scripts/check-search-credits.sh retorna exit 2 (todos
-        os tiers de busca indisponíveis, nenhum sub-agente pode pesquisar — ver
-        R7); (c) a FASE 0
+        os tiers de busca indisponíveis) E a tarefa ou alguma sub-tarefa
+        planejada EXIGE pesquisa — nenhum sub-agente pode pesquisar (ver R7);
+        (c) a FASE 0
         aborta (não é repositório, HEAD destacado, repo sem commits, índice
         sujo) — repasse a mensagem acionável e aguarde, porque sem fronteira
         definida não há execução segura (ver R8). Em qualquer uma delas, informe
@@ -172,22 +174,27 @@ metadata:
         AI-powered (Tavily + Parallel + Brave + DDG + Wikipedia) com AI planner.
         <strong>Tier 2:</strong> Brave Search API direta — via função
         search_brave_api() sourceada do brave-search.sh.
-        <strong>Tier 3:</strong> DuckDuckGo Instant Answer API — keyless, sempre
-        disponível, fallback final de qualidade reduzida.
+        <strong>Tier 3:</strong> DuckDuckGo Instant Answer API — não requer
+        chave; disponível enquanto houver rede — mas é Instant Answer,
+        cobertura limitada (não é busca full-text). Fallback final de
+        qualidade reduzida.
         O script check-search-credits.sh testa os tiers em cascata. Ação por
         exit code:
         • Exit 0 — Tier 1 ou 2 disponível: pesquisa completa. OK, prosseguir.
         • Exit 1 — apenas Tier 3 (keyless): qualidade reduzida, mas funciona.
           REGISTRE no TASK_PLAN.md: "Pesquisa em modo degradado — apenas DDG
           keyless." e prossiga normalmente.
-        • Exit 2 — nada disponível: PARE TUDO. Não crie worktrees. Não dispare
+        • Exit 2 — nada disponível: PARE TUDO quando a tarefa ou alguma
+          sub-tarefa planejada EXIGE pesquisa. Não crie worktrees. Não dispare
           sub-agentes. Informe o usuário: "Sistema de busca indisponível —
           verifique conectividade e configuração da BRAVE_API_KEY." Aguarde o
           usuário responder. NENHUM sub-agente deve ser disparado sem
-          capacidade de pesquisa.
-        ATENÇÃO: script ausente ou não-executável NÃO é "sem busca" —
-        registre no TASK_PLAN.md e prossiga com fallback direto (search.sh
-        usará Tier 3 DDG keyless automaticamente); não dispare R7.</body>
+          capacidade de pesquisa quando a tarefa a exige. Sem pesquisa
+          exigida, a execução pode prosseguir sem busca, com registro no
+          TASK_PLAN.md.
+        ATENÇÃO: script ausente ou não-executável NÃO é R7 — registre no
+        TASK_PLAN.md e prossiga; sub-agentes continuam usando search.sh, cujo
+        fallback Tier 3 (DDG keyless) é automático.</body>
     </rule>
     <rule id="R8" severity="FATAL">
       <title>RAIZ-DE-MUNDO: a worktree onde você foi invocado é a fronteira</title>
@@ -333,9 +340,10 @@ metadata:
         <step order="4"><strong>ABORTOU?</strong> O script sai com código
           diagnóstico e mensagem acionável: 3 = não é repositório · 4 = HEAD
           destacado (exige <cmd>git switch -c &lt;branch&gt;</cmd>) · 5 = repo
-          sem commits · 7 = path com caractere proibido · 8 = git inesperado ·
+          sem commits · 6 = índice sujo (mudanças estagiadas de terceiros) ·
+          7 = path com caractere proibido · 8 = git inesperado ·
           9 = colisão de namespace. Nesses casos, repasse a mensagem ao usuário
-          e PARE — é a segunda exceção legítima à R2.</step>
+          e PARE — é a exceção (c) da R2.</step>
         <step order="5">Registre no TASK_PLAN.md (assim que ele existir) o bloco
           de contexto: MODE, BASE_DIR, BASE_BRANCH, MAIN_ROOT, CHILD_ROOT,
           PLACEMENT, BRANCH_NS, SKILL_HOME, ENV_FILE e a contagem de worktrees
@@ -381,21 +389,28 @@ metadata:
           convenção (main/master) ou por <cmd>git remote show</cmd>. O
           diretório das filhas é <strong>$CHILD_ROOT</strong>. Apenas confirme
           e registre no TASK_PLAN.md</step>
-        <step order="7">Verifique que $BRAVE_API_KEY está definida
-          (<cmd>printenv BRAVE_API_KEY</cmd>). Se ausente, REGISTRE no
-          TASK_PLAN.md: "BRAVE_API_KEY não definida — apenas Tier 3 (DDG
-          keyless) disponível para pesquisa." e prossiga normalmente.
-          Tier 3 (DDG) funciona sem chave — a pesquisa fica degradada mas
-          operacional. Se a tarefa EXIGE pesquisa de alta qualidade (dados
-          estruturados, APIs específicas), informe o usuário e AGUARDE a
-          resposta (exceção da R2).</step>
+        <step order="7">Registre a PREMISSA de busca no TASK_PLAN.md (a
+          VERIFICAÇÃO dos tiers acontece uma única vez, no passo 8 — o
+          check-search-credits.sh já reporta Tier 2 NOT_CONFIGURED quando
+          $BRAVE_API_KEY não está definida — e no passo 0 da EXECUTE-ONDA;
+          aqui basta anotar a premissa): se <cmd>printenv BRAVE_API_KEY</cmd>
+          confirma a ausência, REGISTRE "BRAVE_API_KEY não definida — apenas
+          Tier 3 (DDG keyless) disponível para pesquisa." e prossiga
+          normalmente. Tier 3 (DDG) funciona sem chave — a pesquisa fica
+          degradada mas operacional. Se a tarefa EXIGE pesquisa de alta
+          qualidade (dados estruturados, APIs específicas), vale o
+          condicional da exceção R2(a): informe o usuário e AGUARDE a
+          resposta.</step>
         <step order="8">Verifique o sistema de busca ANTES de qualquer execução:
-          <cmd>if [ -x "$SKILL_HOME/scripts/check-search-credits.sh" ]; then "$SKILL_HOME/scripts/check-search-credits.sh" --fail-fast; case $? in 0) ;; 1) echo "AVISO: apenas Tier 3 (DDG keyless) — qualidade reduzida";; 2) echo "R7: busca indisponivel";; esac; else echo "AVISO: script ausente — prosseguir com fallback direto (search.sh usará Tier 3 DDG keyless automaticamente)"; fi</cmd>
-          Se o script existe e retorna exit 2: siga R7 (PARE TUDO, informe o
-          usuário, aguarde). Se retorna exit 1: apenas Tier 3 (DDG keyless),
+          <cmd>if [ -x "$SKILL_HOME/scripts/check-search-credits.sh" ]; then "$SKILL_HOME/scripts/check-search-credits.sh" --fail-fast; case $? in 0) ;; 1) echo "AVISO: apenas Tier 3 (DDG keyless) — qualidade reduzida";; 2) echo "R7: busca indisponivel";; esac; else echo "AVISO: script ausente — não é R7; registre no TASK_PLAN.md e prossiga (search.sh usará fallback Tier 3 DDG keyless automaticamente)"; fi</cmd>
+          Se o script existe e retorna exit 2: siga R7 — PARE TUDO quando a
+          tarefa EXIGE pesquisa (informe o usuário, aguarde); sem pesquisa
+          exigida, a execução prossegue sem busca, com registro no
+          TASK_PLAN.md. Se retorna exit 1: apenas Tier 3 (DDG keyless),
           registre no TASK_PLAN.md e prossiga com qualidade reduzida. Se o
-          script está AUSENTE, isso NÃO é R7 — registre e siga sem pesquisa
-          web</step>
+          script está AUSENTE, isso NÃO é R7 — registre no TASK_PLAN.md e
+          prossiga; sub-agentes continuam usando search.sh, cujo fallback
+          Tier 3 (DDG keyless) é automático</step>
       </steps>
       <output>Compreensão completa do escopo, subsistemas afetados, e o que NÃO pode quebrar</output>
     </phase>
@@ -406,8 +421,8 @@ metadata:
         <step order="1">Decomponha a tarefa em sub-tarefas ATÔMICAS</step>
         <step order="2">Identifique o GRAFO de dependências: cada sub-tarefa declara
           explicitamente do que depende</step>
-        <step order="3">Organize em ONDAS topológicas: Onda 1 = sem dependências,
-          Onda 2 = depende só da Onda 1, etc. Sub-tarefas da mesma onda são
+        <step order="3">Organize em ONDAS topológicas: onda K depende apenas de
+          ondas &lt; K. Sub-tarefas da mesma onda são
           INDEPENDENTES entre si e rodam em PARALELO. O número de ondas NÃO é
           fixo: o plano é um PONTO DE PARTIDA — o REVISOR DE PLANO o recalcula
           após cada onda (fase 3, passo 5), podendo adicionar ou remover ondas</step>
@@ -436,7 +451,9 @@ metadata:
           FASE 0. NUNCA use <code>$CLAUDE_PROJECT_DIR</code>: fora de hooks ela
           é vazia e o comando passaria a operar na raiz do filesystem
           (<cmd>rm /TASK_PLAN.md</cmd>). O único path do plano é $PLAN_FILE, que
-          vive sob .deep-orchestrator/ e por isso nunca é rastreado pelo git</step>
+          vive sob .deep-orchestrator/ — o que o protege não é gitignore: é a
+          exclusão EXPLÍCITA por pathspec no gstatus/stage-delta
+          (do-context.sh)</step>
       </steps>
       <output>Plano com N sub-tarefas, M ondas, mapa de propriedade de arquivo,
         nomes de worktree definidos, e prompts prontos (plano inicial — será
@@ -465,12 +482,16 @@ metadata:
       <steps>
         <step order="0"><strong>SISTEMA DE BUSCA (R7) — antes de criar qualquer
           worktree desta onda:</strong>
-          <cmd>. '&lt;ENV_FILE&gt;'; if [ -x "$SKILL_HOME/scripts/check-search-credits.sh" ]; then "$SKILL_HOME/scripts/check-search-credits.sh" --fail-fast; case $? in 0) ;; 1) echo "AVISO: apenas Tier 3 (DDG keyless) — qualidade reduzida";; 2) echo "R7: busca indisponivel";; esac; else echo "AVISO: script ausente — prosseguir com fallback direto (search.sh usará Tier 3 DDG keyless automaticamente)"; fi</cmd>
+          <cmd>. '&lt;ENV_FILE&gt;'; if [ -x "$SKILL_HOME/scripts/check-search-credits.sh" ]; then "$SKILL_HOME/scripts/check-search-credits.sh" --fail-fast; case $? in 0) ;; 1) echo "AVISO: apenas Tier 3 (DDG keyless) — qualidade reduzida";; 2) echo "R7: busca indisponivel";; esac; else echo "AVISO: script ausente — não é R7; registre no TASK_PLAN.md e prossiga (search.sh usará fallback Tier 3 DDG keyless automaticamente)"; fi</cmd>
           Exit 0: Tier 1 ou 2 disponível — OK, prosseguir.
           Exit 1: apenas Tier 3 (DDG keyless) — registrar no TASK_PLAN.md e
           prosseguir com qualidade reduzida.
-          Exit 2: nada disponível — PARE, informe o usuário, aguarde (R7).
-          Script ausente NÃO é R7 — registre e siga sem pesquisa web</step>
+          Exit 2: nada disponível — PARE quando a tarefa EXIGE pesquisa,
+          informe o usuário, aguarde (R7); sem pesquisa exigida, a execução
+          prossegue sem busca, com registro no TASK_PLAN.md.
+          Script ausente NÃO é R7 — registre no TASK_PLAN.md e prossiga;
+          sub-agentes continuam usando search.sh, cujo fallback Tier 3 (DDG
+          keyless) é automático</step>
         <step order="1"><strong>COMMIT PREP (se necessário):</strong> se esta onda tem
           recursos compartilhados (singletons), faça um commit preparatório com
           stubs/contratos ANTES de criar as worktrees. Escreva os stubs via Bash
@@ -494,7 +515,10 @@ metadata:
           <field name="prompt">O prompt de delegação (TEMPLATE DE PROMPT), com
             TODOS os placeholders preenchidos com os valores literais resolvidos
             na FASE 0: {{WORKTREE_PATH}}, {{BRANCH_NAME}}, {{BASE_DIR}},
-            {{BASE_BRANCH}}, {{SKILL_HOME}}, e {{MAIN_ROOT}} preenchido com o
+            {{BASE_BRANCH}}, {{SKILL_HOME}}, {{SEARCH_TIER}} (preenchido com o
+            resultado do check do passo 0 desta onda: "Tier 1/2 disponível",
+            "apenas Tier 3 — qualidade reduzida" ou "indisponível — sem busca
+            nesta onda"), e {{MAIN_ROOT}} preenchido com o
             valor de <code>$MAIN_ROOT_DESC</code> (em MODE=normal o MAIN_ROOT é
             vazio e o texto vira "&lt;nenhum — não há checkout principal
             separado&gt;"; nesse caso instrua o sub-agente a trocar a
@@ -514,7 +538,9 @@ metadata:
           NÃO use isolation: "worktree" — a worktree JÁ EXISTE e tem o SEU nome;
           o sub-agente trabalha dentro dela via WORKTREE_PATH</step>
         <step order="3.5"><strong>PROCESSAR SUBWAVES PENDENTES (TESTES +
-          VALIDAÇÃO da onda N-1):</strong> Enquanto os features desta onda já
+          VALIDAÇÃO da onda N-1):</strong> N = onda atual; a subwave pendente
+          processada aqui é a da onda N-1 — nomeada test-onda(N-1)-* /
+          val-onda(N-1)-*. Enquanto os features desta onda já
           foram DISPARADOS (passo 3), as subwaves da onda anterior rodam em
           background — processe-as AGORA, em paralelo com o passo 4:
           <substeps>
@@ -537,17 +563,17 @@ metadata:
               fato (evidência real)? Há falsos positivos (testes que passam sem
               exercitar o código)? Há gaps (edge cases não testados)?</substep>
             <substep><strong>SQUASH-MERGE + GATE + LIMPEZA (testes):</strong>
-              Mesmo fluxo do passo 7: para cada agente de teste,
-              <cmd>do-wt.sh merge test-ondaN-&lt;foco&gt; "test-ondaN-&lt;foco&gt;: adiciona testes para &lt;desc&gt;"</cmd>,
+              Mesmo fluxo do passo 7: para cada agente de teste da onda N-1,
+              <cmd>do-wt.sh merge test-onda(N-1)-&lt;foco&gt; "test-onda(N-1)-&lt;foco&gt;: adiciona testes para &lt;desc&gt;"</cmd>,
               gate (build + testes + linter), e SÓ com gate verde a limpeza
               (<cmd>do-wt.sh remove</cmd> + <cmd>do-wt.sh drop-branch</cmd>).</substep>
             <substep><strong>VALIDAÇÃO: VEREDITO + LIMPEZA SEM MERGE:</strong>
               Avalie o veredito do validador (por etapa:
               build/lint/typecheck/testes) e os achados do revisor adversarial
-              do diff integrado. A worktree val-ondaN-gate NUNCA é mergeada —
+              do diff integrado. A worktree val-onda(N-1)-gate NUNCA é mergeada —
               o gate de validação é assíncrono e somente-leitura. Encerre com
-              <cmd>"$DO_WT" remove val-ondaN-gate</cmd> +
-              <cmd>"$DO_WT" drop-branch val-ondaN-gate</cmd>. Falha por
+              <cmd>"$DO_WT" remove val-onda(N-1)-gate</cmd> +
+              <cmd>"$DO_WT" drop-branch val-onda(N-1)-gate</cmd>. Falha por
               AMBIENTE (deps ausentes na worktree de validação): re-instalar
               deps congeladas e re-rodar — NUNCA gerar fix de produção por
               falha de ambiente (espelho de R9). Falhas de código viram
@@ -558,7 +584,7 @@ metadata:
               Se algum agente de teste
               falhou (gate vermelho persistente após 2 fix attempts), desfaça o
               squash-commit problemático com
-              <cmd>do-wt.sh undo test-ondaN-&lt;foco&gt;</cmd> — que usa o SHA
+              <cmd>do-wt.sh undo test-onda(N-1)-&lt;foco&gt;</cmd> — que usa o SHA
               registrado, prefere <cmd>revert</cmd> e só aceita
               <cmd>reset --hard</cmd> quando o working tree não tem NENHUMA
               modificação tracked (linhas untracked "??" são toleradas — o
@@ -568,7 +594,7 @@ metadata:
               worktree/branch e registre os arquivos não cobertos.</substep>
             <substep><strong>BUGS DOS HANDOFFS VIRAM SUB-TAREFAS DE FIX:</strong>
               Se algum handoff de teste ou validação reporta BUGS, crie
-              sub-tarefas de fix com PRIORIDADE na onda atual: worktree
+              sub-tarefas de fix com PRIORIDADE na onda em curso: worktree
               ondaN-fix-&lt;foco&gt; (kind=fix,
               <cmd>"$DO_WT" new fix ondaN-fix-&lt;foco&gt;</cmd>), integrada
               pelo fluxo normal (merge → gate → limpeza). Máx 2 tentativas de
@@ -578,13 +604,14 @@ metadata:
             em background e são processadas AQUI, depois que os features já
             foram disparados — e, por construção, subwaves não bloqueiam o
             DISPARO da onda seguinte. Uma validation subwave reprovada não
-            bloqueia a onda em curso, MAS seus fixes têm prioridade na onda
-            seguinte e o COMMIT-FINAL não fecha com validação VERMELHA sem
+            bloqueia a onda em curso, MAS seus fixes têm prioridade na onda em
+            curso e o COMMIT-FINAL não fecha com validação VERMELHA sem
             degradação documentada.</note></step>
         <step order="4"><strong>BARREIRA:</strong> Aguarde TODOS os sub-agentes
           desta onda terminarem (notificações de conclusão do harness, ou o
-          mecanismo de espera disponível — ex.: get_subagent_result/TaskOutput
-          com wait: true). NUNCA prossiga antes de TODOS terminarem</step>
+          mecanismo de espera equivalente do SEU harness — ex.:
+          get_subagent_result/TaskOutput com wait: true). NUNCA prossiga antes
+          de TODOS terminarem</step>
         <step order="5"><strong>RECÁLCULO DINÂMICO (REPLAN):</strong> Ao fim da
           barreira do passo 4, dispare em BACKGROUND
           (<field name="run_in_background">true</field>) um sub-agente REVISOR
@@ -678,9 +705,9 @@ metadata:
         <step order="8"><strong>FIM DE ONDA — ALLOWLIST, NUNCA VARREDURA:</strong>
           <cmd>. '&lt;ENV_FILE&gt;'; "$DO_WT" sweep; "$DO_WT" verify</cmd>
           (separados por <code>;</code>, NUNCA por <code>&amp;&amp;</code>: o
-          <code>sweep</code> sai != 0 sempre que há sub-tarefa ACTIVE — inclusive
-          uma testing ou validation subwave em voo, que é normal — e a prova de
-          contenção importa MAIS quando a limpeza não fechou)
+          <code>sweep</code> sai != 0 sempre que há sub-tarefa ACTIVE — ACTIVE =
+          merge pendente ou testing/validation subwave legitimamente em voo — e
+          a prova de contenção importa MAIS quando a limpeza não fechou)
           <substeps>
             <substep><code>sweep</code> fecha o que JÁ FOI INTEGRADO: remove as filhas
               com status=MERGED e apaga os branches delas (arquivando antes).
@@ -761,7 +788,9 @@ metadata:
                   que difia a partir do SHA pré-merge registrado — determinístico e
                   imune ao COMMIT PREP, ao contrário de <code>HEAD~N</code>, que
                   conta commits às cegas. Agrupe por
-                  módulo/subsistema. Exclua arquivos puramente de documentação,
+                  módulo/subsistema. Se o COMMIT PREP desta onda criou
+                  stubs/contratos reais, inclua os paths do PREP no escopo de
+                  teste. Exclua arquivos puramente de documentação,
                   templates HTML ou configuração declarativa — estes são "isentos
                   de teste".</substep>
                 <substep><strong>PLANEJAR AGENTES DE TESTE:</strong> Divida os arquivos
@@ -817,7 +846,11 @@ metadata:
                 <substep><strong>SQUASH-MERGE + GATE + LIMPEZA:</strong> Mesmo
                   fluxo do passo 7 da EXECUTE-ONDA. Commits com prefixo
                   "test-ondaN-". Se gate VERMELHO persistente (2 tentativas de
-                  fix): REVERTA o squash-commit, limpe a worktree/branch, e
+                  fix): REVERTA o squash-commit com
+                  <cmd>"$DO_WT" undo test-ondaN-&lt;foco&gt;</cmd> — o comando
+                  prefere <cmd>revert</cmd> e só aceita <cmd>reset --hard</cmd>
+                  quando o working tree não tem NENHUMA modificação tracked —,
+                  limpe a worktree/branch, e
                   documente os arquivos sem cobertura no relatório final.</substep>
                 <substep><strong>ATUALIZAR TASK_PLAN.md:</strong> Marque como
                   "Testing Subwave Onda N — CONCLUÍDA".</substep>
@@ -847,7 +880,9 @@ metadata:
               precedente do degradation gate-red) → squash-merge + gate +
               limpeza pelo fluxo normal → RE-RODA a validação UMA vez (nova
               worktree val-ondaN-gate-r2, mesmo protocolo da validation
-              subwave) → se persistir, desfaça o squash problemático com
+              subwave) — a re-validação roda UMA vez, APÓS o lote de fixes;
+              com máx 2 tentativas de fix por achado, o loop é finito. Se
+              persistir, desfaça o squash problemático com
               <cmd>"$DO_WT" undo &lt;nome&gt;</cmd> e documente a degradação
               no relatório final (seção "Arquivos sem cobertura" e/ou
               "Validação de Código (Validation Subwaves)").
@@ -862,9 +897,11 @@ metadata:
           Se NÃO existe subwave pendente, este passo é NO-OP.</step>
 
         <step order="1">O TASK_PLAN.md é descartável e NUNCA entra na história —
-          mas ele vive sob <path>$DO_STATE</path>, dentro de
-          <code>.deep-orchestrator/</code>, que nunca foi rastreado. Não há
-          <cmd>git rm</cmd> a fazer. A remoção acontece no passo 7, depois do
+          ele vive sob <path>$DO_STATE</path>, dentro de
+          <code>.deep-orchestrator/</code>. O que o protege não é gitignore: é
+          a exclusão EXPLÍCITA por pathspec no gstatus/stage-delta
+          (do-context.sh) — não há <cmd>git rm</cmd> a fazer. A remoção
+          acontece no passo 7, depois do
           relatório. NUNCA use <code>$CLAUDE_PROJECT_DIR</code>: vazia fora de
           hooks, <cmd>rm $CLAUDE_PROJECT_DIR/TASK_PLAN.md</cmd> vira
           <cmd>rm /TASK_PLAN.md</cmd></step>
@@ -930,7 +967,9 @@ Siga estas instruções EXATAMENTE.
 - TODO cwd, TODA escrita, TODO artefato e TODA instalação de dependência
   acontecem sob {{WORKTREE_PATH}}.
 - É PROIBIDO escrever, commitar ou instalar fora dela. Isso inclui:
-  * o checkout principal {{MAIN_ROOT}} e o diretório .git compartilhado;
+  * o checkout principal {{MAIN_ROOT}} — se MAIN_ROOT = <nenhum>
+    (MODE=normal), não há checkout principal separado (o checkout é o
+    próprio {{BASE_DIR}}) — e o diretório .git compartilhado;
   * a worktree-pai {{BASE_DIR}} e qualquer outra worktree;
   * `git -C <path-fora>`, redirecionamentos `> ../algo`, `cd ..` seguido de escrita;
   * instaladores com escopo global (-g, --user, --system, sudo).
@@ -988,14 +1027,19 @@ Siga estas instruções EXATAMENTE.
    O script implementa fallback automático em 3 tiers:
    <strong>Tier 1:</strong> surf-skill (multi-provider AI-powered) →
    <strong>Tier 2:</strong> Brave Search API direta →
-   <strong>Tier 3:</strong> DuckDuckGo Instant Answer (keyless, sempre
-   funciona). NUNCA invente fatos, URLs ou APIs.
+   <strong>Tier 3:</strong> DuckDuckGo Instant Answer (não requer chave;
+   disponível enquanto houver rede — mas é Instant Answer, cobertura
+   limitada, não é busca full-text). NUNCA invente fatos, URLs ou APIs.
    {{SKILL_HOME}} fica FORA da sua worktree: você pode INVOCAR o script, mas
    NÃO pode escrever nada lá nem fazer `cd` para dentro. Se {{SKILL_HOME}} vier
    vazio, registre no handoff e prossiga sem pesquisa — NÃO saia da sua worktree
    para procurar o script.
    Estado da busca: NÃO verifique — o orquestrador já verificou os tiers
-   disponíveis antes de disparar esta onda.
+   antes de disparar esta onda e preencheu {{SEARCH_TIER}} com o resultado
+   (ex.: "Tier 1/2 disponível", "apenas Tier 3 — qualidade reduzida" ou
+   "indisponível — sem busca nesta onda") — calibre a expectativa da sua
+   busca por isso. Se {{SEARCH_TIER}} for "indisponível" e o search.sh ainda
+   assim falhar, prossiga SEM pesquisa e registre no handoff — não insista.
 
 3. **ECC PROMPTS:** Consulte `{{SKILL_HOME}}/prompts/ecc-prompts.md` (somente
    leitura) para templates de prompt avançados. Para tarefas de segurança, use o
@@ -1026,7 +1070,8 @@ Siga estas instruções EXATAMENTE.
    - `git -C {{WORKTREE_PATH}} symbolic-ref --short HEAD` == {{BRANCH_NAME}}
    - Nenhum arquivo fora de {{WORKTREE_PATH}} foi criado ou modificado —
      confira: `git -C {{MAIN_ROOT}} status --porcelain` deve estar exatamente
-     como estava quando você começou
+     como estava quando você começou — se MAIN_ROOT = <nenhum> (MODE=normal),
+     use `git -C {{BASE_DIR}} status --porcelain` no lugar
 
 9. **DEPENDÊNCIAS (instale só SE NECESSÁRIO):**
    - Instale apenas se a sub-tarefa não puder ser concluída sem isso. Análise,
@@ -1460,14 +1505,16 @@ justificativas.
     </case>
     <case id="search-credits-expired">
       <symptom>check-search-credits.sh --fail-fast retornou exit 2 (nenhum tier disponível)</symptom>
-      <action>NÃO criar worktrees. NÃO disparar sub-agentes. Informar o
+      <action>Quando a tarefa ou alguma sub-tarefa planejada EXIGE pesquisa:
+        NÃO criar worktrees. NÃO disparar sub-agentes. Informar o
         usuário: sistema de busca completamente indisponível — verifique
         conectividade e configuração da BRAVE_API_KEY. Aguardar
         resposta do usuário. Se o usuário disser que resolveu,
         re-executar check-search-credits.sh e, se OK, retomar do ponto
-        onde parou. Se retornou exit 1 (apenas Tier 3 keyless), NÃO é
-        este caso — é degradação aceitável, registre no TASK_PLAN.md e
-        prossiga.</action>
+        onde parou. Sem pesquisa exigida, a execução prossegue sem busca,
+        com registro no TASK_PLAN.md. Se retornou exit 1 (apenas Tier 3
+        keyless), NÃO é este caso — é degradação aceitável, registre no
+        TASK_PLAN.md e prossiga.</action>
     </case>
     <case id="test-subwave-failure">
       <symptom>Agente de teste da testing subwave falhou (erro, timeout, vazio)</symptom>
@@ -1564,11 +1611,14 @@ justificativas.
     Entregue.
     E lembre-se: o sistema de busca 3-tier (surf-skill → Brave → DDG keyless) é
     verificado ANTES de cada onda via check-search-credits.sh. O Tier 3 (DDG
-    keyless) sempre funciona — qualidade reduzida mas sem bloqueio.
+    keyless) não requer chave — disponível enquanto houver rede — mas é Instant
+    Answer, cobertura limitada (não é busca full-text): qualidade reduzida mas
+    sem bloqueio.
     Testing subwaves (test-ondaN-*) e validation subwaves (val-ondaN-*) rodam
     em BACKGROUND e são integradas na PRÓXIMA onda (passo 3.5) ou no
     COMMIT-FINAL. Elas NUNCA bloqueiam o disparo das ondas de feature.
-    Sem busca = sem sub-agentes.
+    Sem busca = sem sub-agentes quando a tarefa exige pesquisa (R7); sem
+    pesquisa exigida, a execução prossegue sem busca, com registro.
   </final-note>
 
 </orchestrator>
