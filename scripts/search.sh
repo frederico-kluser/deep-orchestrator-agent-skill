@@ -7,7 +7,8 @@ set -euo pipefail
 # Smart wrapper com cadeia de fallback automática:
 #   Tier 1: surf-skill (multi-provider AI-powered) — BEST
 #   Tier 2: Brave Search API (direct, via search_brave_api sourced) — GOOD
-#   Tier 3: DuckDuckGo Instant Answer API (keyless) — ALWAYS WORKS
+#   Tier 3: DuckDuckGo Instant Answer API (keyless) — conectividade garantida,
+#           cobertura limitada a instant answers (não é busca full-text)
 #
 # Interface CLI idêntica ao brave-search.sh para backward compatibility.
 # =============================================================================
@@ -50,9 +51,6 @@ DEV_MODE=0
 TIMEOUT="$DEFAULT_TIMEOUT"
 JSON_OUT=0
 
-# Provider que efetivamente serviu a resposta (surf-skill, brave, ou ddg)
-ACTIVE_PROVIDER=""
-
 # --- Ajuda --------------------------------------------------------------------
 usage() {
   cat <<EOF
@@ -80,7 +78,12 @@ OPÇÕES
   --max-evolutions N        Evoluções de query (default $DEFAULT_MAX_EVOLUTIONS, máx 5)
   --dev-mode                Adiciona contexto de dev às queries (afeta só o Tier 2/Brave)
   --timeout N               Timeout por chamada em segundos (default $DEFAULT_TIMEOUT)
-  --json                    Saída em JSON puro (avisos vão para stderr)
+  --json                    Saída em JSON puro com envelope UNIFICADO: a saída
+                            do Tier 1 (surf, envelope {answer, sources}) é
+                            normalizada para o mesmo formato dos Tiers 2/3
+                            ({query_original, answer?, query_evolution?, task,
+                            goal, insights, deliverable, results, total_results,
+                            credits_remaining?, diagnostics}); avisos vão para stderr
   -h, --help                Mostra esta ajuda
 
 PROVIDERS (fallback automático)
@@ -89,8 +92,26 @@ PROVIDERS (fallback automático)
   3. DuckDuckGo             Sempre disponível, sem chave (Tier 3 — fallback final)
 
 EXIT CODES
-  0 sucesso · 1 erro de busca · 2 erro de configuração/uso
+  0 sucesso (resultados encontrados)
+  1 sem resultados em TODA a cadeia de fallback, ou erro de busca
+  2 erro de configuração/uso (dependências ausentes, flag inválida, query ausente)
 EOF
+}
+
+# --- Dependências --------------------------------------------------------------
+# Verificadas UMA vez, no início (antes de qualquer uso de jq/curl/python3,
+# inclusive no --brief-file). Exit 2 coerente com a mensagem clara.
+check_deps() {
+  local missing=()
+  for bin in curl jq python3; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+      missing+=("$bin")
+    fi
+  done
+  if (( ${#missing[@]} > 0 )); then
+    echo "ERRO: dependências ausentes no PATH: ${missing[*]} (necessárias: curl, jq, python3)" >&2
+    exit 2
+  fi
 }
 
 # flag_val <flag> <args...> → valor (exit 2 se faltar)
@@ -137,13 +158,32 @@ parse_args() {
       --timeout=*)       TIMEOUT="${1#*=}"; shift ;;
       --json)      JSON_OUT=1; shift ;;
       --dev-mode)  DEV_MODE=1; shift ;;
-      --)          shift; break ;;
+      --)
+        shift
+        # Tudo após "--" é posicional (permite query começando com "-")
+        local pos
+        for pos in "$@"; do
+          if [[ -n "$QUERY" ]]; then
+            echo "ERRO: apenas UMA query é permitida (recebidas múltiplas)." >&2
+            usage >&2
+            exit 2
+          fi
+          QUERY="$pos"
+        done
+        break
+        ;;
       -*)
         echo "ERRO: flag desconhecida: $1" >&2
         usage >&2
         exit 2
         ;;
-      *) QUERY="$1"; shift ;;
+      *)
+        if [[ -n "$QUERY" ]]; then
+          echo "ERRO: apenas UMA query é permitida (recebidas múltiplas: '$QUERY' e '$1')." >&2
+          usage >&2
+          exit 2
+        fi
+        QUERY="$1"; shift ;;
     esac
   done
 }
@@ -266,10 +306,18 @@ human_report() {
   echo "$results_json" | jq -r '.[].url'
 }
 
+# Envelope JSON UNIFICADO do search.sh — os 3 tiers emitem o MESMO formato
+# (o Tier 1 é normalizado para ele). Campos opcionais só aparecem quando
+# presentes: answer (Tier 1), query_evolution (Tier 2, --max-evolutions),
+# credits_remaining (Tier 2, header X-RateLimit-Remaining).
+# Uso: json_report <results-json> <duration-ms> <provider> [answer] [evolution-json] [credits]
 json_report() {
   local results_json="$1"
   local duration_ms="$2"
   local provider="$3"
+  local answer="${4:-}"
+  local evolution_json="${5:-[]}"
+  local credits="${6:-null}"
   local total_results
   total_results="$(echo "$results_json" | jq 'length')"
 
@@ -280,8 +328,11 @@ json_report() {
     --argjson duration "$duration_ms" \
     '{provider: $provider, total_results: $total, duration_ms: $duration}')"
 
+  # NOTA: valor `empty` dentro de objeto zera o objeto INTEIRO no jq 1.7 —
+  # campos opcionais viram null e são removidos com with_entries(select(.value != null))
   jq -n \
     --arg qo "$QUERY" \
+    --arg ans "$answer" \
     --arg task "$TASK" \
     --arg goal "$GOAL" \
     --arg insights "$INSIGHTS" \
@@ -289,7 +340,13 @@ json_report() {
     --argjson results "$results_json" \
     --argjson total "$total_results" \
     --argjson diagnostics "$diagnostics" \
-    '{query_original: $qo, task: $task, goal: $goal, insights: $insights, deliverable: $deliverable, results: $results, total_results: $total, diagnostics: $diagnostics}'
+    --argjson qe "$evolution_json" \
+    --argjson cr "$credits" \
+    '{query_original: $qo, answer: $ans, query_evolution: $qe, task: $task, goal: $goal, insights: $insights, deliverable: $deliverable, results: $results, total_results: $total, credits_remaining: $cr, diagnostics: $diagnostics}
+     | .answer = (if $ans != "" then $ans else null end)
+     | .query_evolution = (if ($qe | length) > 0 then $qe else null end)
+     | .credits_remaining = (if $cr != null then $cr else null end)
+     | with_entries(select(.value != null))'
 }
 
 # --- Tier 1: surf-skill -------------------------------------------------------
@@ -298,6 +355,7 @@ json_report() {
 try_surf_skill() {
   local surf_bin="surf-search-normal"
   if ! command -v "$surf_bin" &>/dev/null; then
+    echo "[search.sh] Tier 1 (surf-skill) não encontrado no PATH, pulando Tier 1." >&2
     return 1
   fi
 
@@ -307,16 +365,15 @@ try_surf_skill() {
   [[ -n "$INSIGHTS" ]]    && args+=( --insights "$INSIGHTS" )
   [[ -n "$DELIVERABLE" ]] && args+=( --deliverable "$DELIVERABLE" )
 
-  # Map --count to --max-queries
+  # Map --count to --max-queries (COUNT é validado em 1..20, então o
+  # último ramo cobre 11..20 — sem caso inalcançável)
   local maxq
   if (( COUNT <= 5 )); then
     maxq=3
   elif (( COUNT <= 10 )); then
     maxq=6
-  elif (( COUNT <= 20 )); then
-    maxq=12
   else
-    maxq=6
+    maxq=12
   fi
   args+=( --max-queries "$maxq" )
 
@@ -328,38 +385,58 @@ try_surf_skill() {
   # (fonte: src/lib/dispatch.mjs do surf); TIMEOUT do search.sh é em segundos.
   args+=( --budget-ms "$(( TIMEOUT * 1000 ))" )
 
-  # Executa surf-skill — output flui diretamente (sem captura)
-  local surf_rc
+  # CAPTURA a saída (não flui direto): se o surf imprimir parcial e falhar,
+  # o parcial é descartado — os tiers seguintes não concatenam lixo no stdout
+  # (que quebraria o --json). Só emite se rc=0.
+  local surf_out_file surf_rc
+  surf_out_file="$(mktemp)"
   set +e
-  "$surf_bin" "${args[@]}" "$QUERY"
+  "$surf_bin" "${args[@]}" "$QUERY" > "$surf_out_file"
   surf_rc=$?
   set -e
 
-  if [[ $surf_rc -eq 0 ]]; then
-    return 0
+  if [[ $surf_rc -ne 0 ]]; then
+    echo "[search.sh] Tier 1 (surf-skill) retornou exit code $surf_rc" >&2
+    rm -f "$surf_out_file"
+    return 1
   fi
 
-  echo "[search.sh] Tier 1 (surf-skill) retornou exit code $surf_rc" >&2
-  return 1
+  if (( JSON_OUT )); then
+    # NORMALIZAÇÃO: o Tier 1 fala {answer, sources}; reembrulha no envelope
+    # unificado do search.sh (answer + results extraídos de sources).
+    local raw
+    raw="$(cat "$surf_out_file")"
+    rm -f "$surf_out_file"
+    if echo "$raw" | jq -e . >/dev/null 2>&1; then
+      local results answer duration_ms end_ms start_ms
+      results="$(echo "$raw" | jq -c '[.sources // [] | .[] | select(.url != null and .url != "") | {title: (.title // ""), url: .url, description: (.description // ""), published: (.published // .date // .page_age // ""), source: "surf"}]')"
+      answer="$(echo "$raw" | jq -r '.answer // empty' 2>/dev/null || true)"
+      end_ms="$(now_ms)"
+      start_ms="${_search_start_ms:-$end_ms}"
+      duration_ms=$(( end_ms - start_ms ))
+      json_report "$results" "$duration_ms" "surf-skill" "$answer"
+    else
+      echo "AVISO: saída do Tier 1 não é JSON válido (com --json); repassando cru." >&2
+      echo "$raw"
+    fi
+  else
+    cat "$surf_out_file"
+    rm -f "$surf_out_file"
+  fi
+
+  return 0
 }
 
 # --- Tier 2: Brave API (sourced from brave-search.sh) --------------------------
 # Retorna 0 e imprime resultados em stdout se bem-sucedido.
 # Retorna não-zero se falhar.
+# Implementa o loop de evolução do --max-evolutions reutilizando
+# classify_feedback/evolve_query (sourceadas de brave-search.sh).
 try_brave_direct() {
-  # Verifica pré-requisitos básicos
+  # Verifica pré-requisitos básicos (curl/jq/python3 já foram checados em
+  # check_deps, no início do script)
   if [[ -z "${BRAVE_API_KEY:-}" ]]; then
     echo "[search.sh] Tier 2 indisponível: BRAVE_API_KEY não definida." >&2
-    return 1
-  fi
-
-  if ! command -v curl &>/dev/null; then
-    echo "[search.sh] Tier 2 indisponível: curl não encontrado." >&2
-    return 1
-  fi
-
-  if ! command -v jq &>/dev/null; then
-    echo "[search.sh] Tier 2 indisponível: jq não encontrado." >&2
     return 1
   fi
 
@@ -370,45 +447,84 @@ try_brave_direct() {
   fi
 
   # Prepara ambiente para search_brave_api
-  local search_out_file
+  local search_out_file all_tmp
   search_out_file="$(mktemp)"
+  all_tmp="$(mktemp)"
   export SEARCH_OUT_FILE="$search_out_file"
   export API_URL="${BRAVE_API_URL:-https://api.search.brave.com/res/v1/web/search}"
 
-  # search_brave_api usa retorno (não exit), seguro para ser chamado aqui
-  local api_rc=0
-  set +e
-  search_brave_api "$QUERY"
-  api_rc=$?
-  set -e
+  # Loop de evolução: 1ª busca usa a query original; cada iteração classifica
+  # o feedback (empty/few/lowq/good) e evolui a query até --max-evolutions.
+  local -a queries_done=( "$QUERY" )
+  local -a query_evolutions=()
+  local i q fb next results api_rc
+  for (( i = 0; i <= MAX_EVOLUTIONS; i++ )); do
+    q="${queries_done[$i]}"
+    set +e
+    search_brave_api "$q"
+    api_rc=$?
+    set -e
+    if [[ $api_rc -ne 0 ]]; then
+      echo "[search.sh] Tier 2 (Brave) falhou na evolução $i com código $api_rc." >&2
+      rm -f "$all_tmp" "$search_out_file"
+      return 1
+    fi
+    results="$(cat "$search_out_file")"
+    echo "$results" >> "$all_tmp"
 
-  if [[ $api_rc -ne 0 ]]; then
-    echo "[search.sh] Tier 2 (Brave) falhou com código $api_rc." >&2
-    rm -f "$search_out_file"
-    return 1
-  fi
+    if [[ $i -lt $MAX_EVOLUTIONS ]]; then
+      sleep "${QUERY_INTERVAL:-1.1}"
+      fb="$(classify_feedback "$results")"
+      next="$(evolve_query "$q" "$(( i + 1 ))" "$fb")"
 
-  # Lê resultados
-  local results
-  results="$(cat "$search_out_file")"
-  rm -f "$search_out_file"
+      # Evita repetir uma query já usada (loop de evolução)
+      local dup=0 tries=0 used
+      while (( tries < 3 )); do
+        dup=0
+        for used in "${queries_done[@]}"; do
+          if [[ "$next" == "$used" ]]; then dup=1; break; fi
+        done
+        (( dup == 0 )) && break
+        next="${next} overview"
+        tries=$(( tries + 1 ))
+      done
+      if (( dup == 1 )); then
+        echo "AVISO: evolução não produziu query nova; parando após $(( i + 1 )) busca(s)." >&2
+        break
+      fi
+      queries_done+=( "$next" )
+      query_evolutions+=( "$next" )
+    fi
+  done
 
-  if [[ -z "$results" ]] || [[ "$results" == "[]" ]]; then
+  # Consolida todos os resultados e deduplica por URL (primeira ocorrência vence)
+  local merged unique
+  merged="$(jq -s 'add' "$all_tmp")"
+  unique="$(echo "$merged" | jq 'unique_by(.url)')"
+  rm -f "$all_tmp" "$search_out_file"
+
+  if [[ -z "$unique" ]] || [[ "$unique" == "[]" ]]; then
     echo "[search.sh] Tier 2 (Brave) retornou 0 resultados." >&2
     return 1
   fi
 
   # Emite resultado
-  local duration_ms end_ms start_ms
+  local duration_ms end_ms start_ms qe_json cr_json
   end_ms="$(now_ms)"
   start_ms="${_search_start_ms:-$end_ms}"
   duration_ms=$(( end_ms - start_ms ))
 
-  ACTIVE_PROVIDER="brave"
+  qe_json="[]"
+  if (( ${#query_evolutions[@]} > 0 )); then
+    qe_json="$(printf '%s\n' "${query_evolutions[@]}" | jq -R -s 'split("\n") | map(select(length > 0))')"
+  fi
+  cr_json="null"
+  if [[ "${LAST_CREDITS:-}" =~ ^[0-9]+$ ]]; then cr_json="$LAST_CREDITS"; fi
+
   if (( JSON_OUT )); then
-    json_report "$results" "$duration_ms" "brave"
+    json_report "$unique" "$duration_ms" "brave" "" "$qe_json" "$cr_json"
   else
-    human_report "$results" "$duration_ms" "brave"
+    human_report "$unique" "$duration_ms" "brave"
   fi
 
   return 0
@@ -434,7 +550,7 @@ try_ddg_keyless() {
 
   if [[ $ddg_rc -ne 0 ]]; then
     echo "ERRO: falha ao chamar DuckDuckGo API (curl exit $ddg_rc)." >&2
-    exit 1
+    return 1
   fi
   if [[ -z "$ddg_out" ]]; then
     echo "[search.sh] DuckDuckGo API retornou resposta vazia." >&2
@@ -514,17 +630,23 @@ except Exception as e:
 " 2>/dev/null)"
   fi
 
-  if [[ -z "$results" ]] || [[ "$results" == "[]" ]]; then
-    echo "[search.sh] DuckDuckGo não retornou instant answers para esta query (esperado para queries genéricas)." >&2
-    results="[]"
-  fi
-
   local duration_ms end_ms start_ms
   end_ms="$(now_ms)"
   start_ms="${_search_start_ms:-$end_ms}"
   duration_ms=$(( end_ms - start_ms ))
 
-  ACTIVE_PROVIDER="ddg"
+  if [[ -z "$results" ]] || [[ "$results" == "[]" ]]; then
+    echo "[search.sh] DuckDuckGo não retornou instant answers para esta query (esperado para queries genéricas — é Instant Answer, não full-text)." >&2
+    # Toda a cadeia vazia: ainda emite o relatório (vazio) mas sai 1 —
+    # o orquestrador precisa distinguir "sem matches" de "tudo falhou".
+    if (( JSON_OUT )); then
+      json_report "[]" "$duration_ms" "ddg"
+    else
+      human_report "[]" "$duration_ms" "ddg"
+    fi
+    return 1
+  fi
+
   if (( JSON_OUT )); then
     json_report "$results" "$duration_ms" "ddg"
   else
@@ -537,6 +659,7 @@ except Exception as e:
 # --- Main ----------------------------------------------------------------------
 main() {
   parse_args "$@"
+  check_deps
   load_brief_file
   validate
 
@@ -544,15 +667,11 @@ main() {
   _search_start_ms="$(now_ms)"
   export _search_start_ms
 
-  # --- Tier 1: surf-skill ---
-  if command -v surf-search-normal &>/dev/null; then
-    if try_surf_skill; then
-      return 0
-    fi
-    echo "[search.sh] Tier 1 (surf-skill) falhou, caindo para Tier 2..." >&2
-  else
-    echo "[search.sh] surf-search-normal não encontrado no PATH, pulando Tier 1." >&2
+  # --- Tier 1: surf-skill (a própria função decide se o binário existe) ---
+  if try_surf_skill; then
+    return 0
   fi
+  echo "[search.sh] Tier 1 (surf-skill) falhou, caindo para Tier 2..." >&2
 
   # --- Tier 2: Brave API ---
   if [[ -n "${BRAVE_API_KEY:-}" ]]; then
@@ -564,7 +683,8 @@ main() {
     echo "[search.sh] BRAVE_API_KEY não definida, pulando Tier 2." >&2
   fi
 
-  # --- Tier 3: DuckDuckGo (always works) ---
+  # --- Tier 3: DuckDuckGo (fallback final; conectividade garantida, cobertura
+  # limitada a instant answers — pode retornar vazio → exit 1) ---
   try_ddg_keyless
 }
 

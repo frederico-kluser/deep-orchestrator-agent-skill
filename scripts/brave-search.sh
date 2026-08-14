@@ -54,10 +54,11 @@ LAST_RATE_RESET=""
 LAST_BILLING=""
 LAST_HTTP=""
 
-# Arquivos temporários globais (limpos no EXIT)
+# Arquivos temporários globais (limpos no EXIT — o trap é instalado apenas
+# quando executado como script principal; quando sourceado (ex.: pelo
+# search.sh), NÃO instala, para não vazar para o processo do chamador)
 ALL_TMP=""
 SEARCH_OUT_FILE=""
-trap '[[ -n "$ALL_TMP" ]] && rm -rf "$ALL_TMP" "$SEARCH_OUT_FILE"' EXIT
 
 # --- Ajuda --------------------------------------------------------------------
 usage() {
@@ -105,6 +106,22 @@ EXIT CODES
 EOF
 }
 
+# --- Dependências --------------------------------------------------------------
+# Verificadas UMA vez, no início (antes de qualquer uso de jq/curl,
+# inclusive no --brief-file). Exit 2 coerente com a mensagem clara.
+check_deps() {
+  local missing=()
+  for bin in curl jq python3; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+      missing+=("$bin")
+    fi
+  done
+  if (( ${#missing[@]} > 0 )); then
+    echo "ERRO: dependências ausentes no PATH: ${missing[*]} (necessárias: curl, jq, python3)" >&2
+    exit 2
+  fi
+}
+
 # flag_val <flag> <args...> → valor (exit 2 se faltar)
 flag_val() {
   local flag="$1"
@@ -149,13 +166,32 @@ parse_args() {
       --timeout=*)       TIMEOUT="${1#*=}"; shift ;;
       --json)      JSON_OUT=1; shift ;;
       --dev-mode)  DEV_MODE=1; shift ;;
-      --)          shift; break ;;
+      --)
+        shift
+        # Tudo após "--" é posicional (permite query começando com "-")
+        local pos
+        for pos in "$@"; do
+          if [[ -n "$QUERY" ]]; then
+            echo "ERRO: apenas UMA query é permitida (recebidas múltiplas)." >&2
+            usage >&2
+            exit 2
+          fi
+          QUERY="$pos"
+        done
+        break
+        ;;
       -*)
         echo "ERRO: flag desconhecida: $1" >&2
         usage >&2
         exit 2
         ;;
-      *) QUERY="$1"; shift ;;
+      *)
+        if [[ -n "$QUERY" ]]; then
+          echo "ERRO: apenas UMA query é permitida (recebidas múltiplas: '$QUERY' e '$1')." >&2
+          usage >&2
+          exit 2
+        fi
+        QUERY="$1"; shift ;;
     esac
   done
 }
@@ -211,12 +247,7 @@ validate() {
     echo "      Ex.: export BRAVE_API_KEY=BSA_xxxx" >&2
     exit 2
   fi
-  for bin in curl jq; do
-    if ! command -v "$bin" >/dev/null 2>&1; then
-      echo "ERRO: '$bin' não encontrado no PATH (necessário para $SCRIPT_NAME)." >&2
-      exit 2
-    fi
-  done
+  # Dependências (curl/jq/python3) já foram verificadas em check_deps, no início.
 }
 
 # --- Utilitários ---------------------------------------------------------------
@@ -241,8 +272,11 @@ header_val() {
 }
 
 # credits_from_headers <arquivo-headers> → créditos restantes (ou vazio)
-# Prefere X-Credit-Remaining; senão usa o 2º valor de X-RateLimit-Remaining
-# (quota mensal restante, ex.: "1, 950" → 950).
+# Na resposta REAL da Brave (verificado ao vivo 14/08/2026) o header
+# X-Credit-Remaining NÃO existe — só X-RateLimit-{Limit,Remaining,Reset},
+# com o par "por segundo, por mês". O 2º valor de X-RateLimit-Remaining é a
+# quota mensal restante (ex.: "1, 950" → 950). O ramo X-Credit-Remaining é
+# mantido apenas como fallback defensivo.
 credits_from_headers() {
   local f="$1" v m
   v="$(header_val "$f" "X-Credit-Remaining")"
@@ -309,6 +343,8 @@ search_brave() {
   LAST_CREDITS="$(credits_from_headers "$headers")"
   LAST_RATE_REMAINING="$(header_val "$headers" "X-RateLimit-Remaining")"
   LAST_RATE_RESET="$(header_val "$headers" "X-RateLimit-Reset")"
+  # billing-status: header NÃO existe na resposta real da Brave (verificado
+  # 14/08/2026); mantido como opcional/defensivo — na prática sai vazio.
   LAST_BILLING="$(header_val "$headers" "billing-status")"
 
   case "${http_code:-}" in
@@ -409,6 +445,8 @@ search_brave_api() {
   LAST_CREDITS="$(credits_from_headers "$headers")"
   LAST_RATE_REMAINING="$(header_val "$headers" "X-RateLimit-Remaining")"
   LAST_RATE_RESET="$(header_val "$headers" "X-RateLimit-Reset")"
+  # billing-status: header NÃO existe na resposta real da Brave (verificado
+  # 14/08/2026); mantido como opcional/defensivo — na prática sai vazio.
   LAST_BILLING="$(header_val "$headers" "billing-status")"
 
   case "${http_code:-}" in
@@ -475,7 +513,10 @@ classify_feedback() {
     echo "empty"
     return
   fi
+  # half com mínimo de 1: com --count 1, um único resultado NÃO é classificado
+  # como "lowq" (half=0 faria lowq > 0 sempre que a descrição viesse vazia)
   half=$(( COUNT / 2 ))
+  (( half < 1 )) && half=1
   if (( total < half )); then
     echo "few"
     return
@@ -494,7 +535,9 @@ evolve_query() {
   local words=() n
   q="${q//\"/}"
   q="${q//\'/}"
-  words=( $q )
+  # read -ra divide por IFS sem glob expansion: query com "*" não vira
+  # arquivos do cwd (words=( $q ) expandiria globs)
+  IFS=' ' read -r -a words <<< "$q"
   n="${#words[@]}"
 
   case "$fb" in
@@ -598,6 +641,7 @@ human_report() {
 # --- Fluxo principal -----------------------------------------------------------
 main() {
   parse_args "$@"
+  check_deps
   load_brief_file
   validate
 
@@ -684,8 +728,7 @@ main() {
 }
 
 # Quando sourceado (ex.: por search.sh), não executar main
-if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-  return 0
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  trap '[[ -n "$ALL_TMP" ]] && rm -rf "$ALL_TMP" "$SEARCH_OUT_FILE"' EXIT
+  main "$@"
 fi
-
-main "$@"

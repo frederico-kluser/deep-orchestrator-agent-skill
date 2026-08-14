@@ -3,8 +3,12 @@
 # check-brave-credits.sh — Verifica saldo de créditos da Brave Search API
 # -----------------------------------------------------------------------------
 # Faz uma query mínima (q=test, count=1) e lê os créditos dos headers de
-# resposta (X-Credit-Remaining ou o 2º valor de X-RateLimit-Remaining =
-# quota mensal restante) e o billing-status.
+# resposta. NA RESPOSTA REAL da Brave (verificado ao vivo 14/08/2026) o
+# header X-Credit-Remaining NÃO existe — só X-RateLimit-{Limit,Remaining,
+# Reset}, com o par "por segundo, por mês": usamos o 2º valor de
+# X-RateLimit-Remaining (quota mensal restante). billing-status também não
+# existe na prática — tratado como opcional. (O parsing de X-Credit-Remaining
+# é mantido apenas como fallback defensivo para proxies/endpoints antigos.)
 #
 # QUANDO OS CRÉDITOS APARECEM COMO 0, uma segunda verificação é feita:
 # uma busca real (count=3) para confirmar se a API está realmente bloqueada
@@ -57,7 +61,9 @@ Se a busca real retornar resultados → SUBSCRIPTION_ACTIVE (exit 0).
 
 OPÇÕES
   --json         Saída em JSON parseável (sem texto em stdout)
-  --fail-fast    Exit 1 se o status != CREDITS_OK (para o orquestrador)
+  --fail-fast    Exit 1 para status de créditos não-confirmados
+                 (CREDITS_LOW/CREDITS_UNKNOWN/NO_CREDITS); CREDITS_OK,
+                 SUBSCRIPTION_ACTIVE e RATE_LIMITED seguem exit 0
   --no-cache     Ignora cache e força verificação real (se necessária)
   --timeout N    Timeout da chamada em segundos (default $DEFAULT_TIMEOUT)
   -h, --help     Mostra esta ajuda
@@ -80,6 +86,18 @@ EXIT CODES
 EOF
 }
 
+# flag_val <flag> <args...> → valor (exit 2 se faltar — sem "unbound variable")
+flag_val() {
+  local flag="$1"
+  shift
+  if [[ $# -lt 1 ]]; then
+    echo "ERRO: a flag $flag requer um valor" >&2
+    usage >&2
+    exit 2
+  fi
+  echo "$1"
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -87,7 +105,7 @@ parse_args() {
       --json)      JSON_OUT=1; shift ;;
       --fail-fast) FAIL_FAST=1; shift ;;
       --no-cache)  NO_CACHE=1; shift ;;
-      --timeout)   TIMEOUT="$2"; shift 2 ;;
+      --timeout)   TIMEOUT="$(flag_val "$1" "${@:2}")"; shift 2 ;;
       --timeout=*) TIMEOUT="${1#*=}"; shift ;;
       -*)
         echo "ERRO: flag desconhecida: $1" >&2
@@ -114,6 +132,10 @@ header_val() {
 }
 
 # credits_from_headers <arquivo-headers> → créditos restantes (ou vazio)
+# Na resposta REAL da Brave (verificado 14/08/2026) X-Credit-Remaining NÃO
+# existe — só X-RateLimit-{Limit,Remaining,Reset} (par "por segundo, por mês").
+# Usamos o 2º valor de X-RateLimit-Remaining (quota mensal); o ramo
+# X-Credit-Remaining é mantido como fallback defensivo.
 credits_from_headers() {
   local f="$1" v m
   v="$(header_val "$f" "X-Credit-Remaining")"
@@ -262,6 +284,14 @@ main() {
     case "$c_exit" in
       NO_CREDITS) exit 1 ;;
       CONFIG_ERROR) exit 2 ;;
+      CREDITS_LOW|CREDITS_UNKNOWN)
+        # Mesma lógica do fluxo sem cache: com --fail-fast, créditos
+        # não-confirmados saem 1 (cache-hit não pode ignorar o --fail-fast)
+        if (( FAIL_FAST )); then
+          exit 1
+        fi
+        exit 0
+        ;;
       *) exit 0 ;;
     esac
   fi

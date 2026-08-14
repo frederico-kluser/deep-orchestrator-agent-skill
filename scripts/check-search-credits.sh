@@ -57,8 +57,21 @@ AMBIENTE
   BRAVE_API_URL  Override do endpoint da Brave API (uso interno/testes)
 
 EXIT CODES
-  0 pesquisa completa disponível (Tier 1 ou 2) · 1 apenas keyless (Tier 3) · 2 nada disponível
+  0 pesquisa completa disponível (Tier 1 ou 2) · 1 apenas keyless (Tier 3) ·
+  2 nada disponível ou dependências ausentes (curl/jq)
 EOF
+}
+
+# flag_val <flag> <args...> → valor (exit 2 se faltar — sem "unbound variable")
+flag_val() {
+  local flag="$1"
+  shift
+  if [[ $# -lt 1 ]]; then
+    echo "ERRO: a flag $flag requer um valor" >&2
+    usage >&2
+    exit 2
+  fi
+  echo "$1"
 }
 
 # ---------------------------------------------------------------------------
@@ -70,7 +83,7 @@ parse_args() {
       -h|--help) usage; exit 0 ;;
       --json)      JSON_OUT=1; shift ;;
       --fail-fast) FAIL_FAST=1; shift ;;
-      --timeout)   TIMEOUT="$2"; shift 2 ;;
+      --timeout)   TIMEOUT="$(flag_val "$1" "${@:2}")"; shift 2 ;;
       --timeout=*) TIMEOUT="${1#*=}"; shift ;;
       -*)
         echo "ERRO: flag desconhecida: $1" >&2
@@ -106,7 +119,10 @@ header_val() {
 }
 
 # credits_from_headers <arquivo-headers> → créditos restantes (ou vazio)
-# Prefere X-Credit-Remaining; senão usa o 2º valor de X-RateLimit-Remaining
+# Na resposta REAL da Brave (verificado 14/08/2026) X-Credit-Remaining NÃO
+# existe — só X-RateLimit-{Limit,Remaining,Reset} (par "por segundo, por mês").
+# Usamos o 2º valor de X-RateLimit-Remaining (quota mensal); o ramo
+# X-Credit-Remaining é mantido como fallback defensivo.
 credits_from_headers() {
   local f="$1" v m
   v="$(header_val "$f" "X-Credit-Remaining")"
@@ -147,7 +163,7 @@ now_ms() {
 # ---------------------------------------------------------------------------
 
 # Retorna via variáveis globais:
-#   T1_STATUS   = AVAILABLE | NOT_FOUND
+#   T1_STATUS   = AVAILABLE | DEGRADED | NOT_FOUND
 #   T1_DETAIL   = descrição textual
 #   T1_VERSION  = versão do surf-search-normal (ou "unknown")
 #   T1_HAS_SSN  = "true" | "false"
@@ -178,6 +194,16 @@ check_tier1_surf_skill() {
   else
     # Extrai só o número da versão (ex.: "surf-search-normal v5.4.0" → "5.4.0")
     T1_VERSION="$(echo "$ver" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || echo "unknown")"
+  fi
+
+  # Tier 1 SÓ é AVAILABLE com um provedor configurado: keys.json do surf
+  # existente e NÃO-vazio (~/.config/surf/keys.json). Sem isso o binário
+  # existe mas não tem com o que pesquisar — DEGRADED, não "ALL SYSTEMS GO".
+  local keys_file="${HOME}/.config/surf/keys.json"
+  if [[ ! -f "$keys_file" ]] || [[ ! -s "$keys_file" ]]; then
+    T1_STATUS="DEGRADED"
+    T1_DETAIL="surf-search-normal found but ${keys_file} missing or empty — no AI provider configured"
+    return
   fi
 
   # Verifica surf-free-skill
@@ -245,8 +271,11 @@ check_tier2_brave_api() {
   body="$(mktemp)"
   headers="$(mktemp)"
   curl_err="$(mktemp)"
+  # Guarda ${var:-} + auto-remoção: o trap RETURN dispara também no retorno de
+  # funções chamadoras, quando as locals já saíram de escopo — sem a guarda
+  # isso vira "unbound variable" e corrompe o exit code (bash 4.4/5.x).
   # shellcheck disable=SC2064
-  trap 'rm -f "$body" "$headers" "$curl_err"' RETURN
+  trap 'rm -f "${body:-}" "${headers:-}" "${curl_err:-}"; trap - RETURN' RETURN
 
   set +e
   http_code="$(curl -sS --max-time "$TIMEOUT" -G "$API_URL" \
@@ -274,6 +303,8 @@ check_tier2_brave_api() {
   credits="$(credits_from_headers "$headers")"
   rate_remaining="$(header_val "$headers" "X-RateLimit-Remaining")"
   rate_reset="$(header_val "$headers" "X-RateLimit-Reset")"
+  # billing-status: header NÃO existe na resposta real da Brave (verificado
+  # 14/08/2026); mantido como opcional/defensivo — na prática sai vazio.
   billing="$(header_val "$headers" "billing-status")"
 
   if [[ -n "$credits" ]] && [[ "$credits" =~ ^[0-9]+$ ]]; then
@@ -349,8 +380,6 @@ _brave_real_search_works() {
   body="$(mktemp)"
   headers="$(mktemp)"
   curl_err="$(mktemp)"
-  # shellcheck disable=SC2064
-  trap 'rm -f "$body" "$headers" "$curl_err"' RETURN
 
   set +e
   http_code="$(curl -sS --max-time "$TIMEOUT" -G "$API_URL" \
@@ -367,17 +396,23 @@ _brave_real_search_works() {
   set -e
 
   if [[ $rc -ne 0 ]] || [[ "$http_code" != "200" ]]; then
+    # Sem trap RETURN aqui: limpeza explícita em cada saída — um trap com
+    # locals vazaria para o retorno da função chamadora (unbound variable)
+    rm -f "$body" "$headers" "$curl_err"
     return 1
   fi
 
   result_count="$(jq -r '(.web.results // .results // empty | length) // 0' "$body" 2>/dev/null || echo 0)"
 
-  # Atualiza billing-status com o da busca real (mais confiável)
+  # Atualiza billing-status com o da busca real (mais confiável; header
+  # opcional — na prática a Brave não envia billing-status)
   local real_billing
   real_billing="$(header_val "$headers" "billing-status")"
   if [[ -n "$real_billing" ]]; then
     T2_BILLING="$real_billing"
   fi
+
+  rm -f "$body" "$headers" "$curl_err"
 
   if [[ "$result_count" =~ ^[0-9]+$ ]] && (( result_count > 0 )); then
     return 0
@@ -408,8 +443,10 @@ check_tier3_keyless_ddg() {
 
   local http_code rc curl_err start_ms end_ms latency
   curl_err="$(mktemp)"
+  # Guarda ${var:-} + auto-remoção: o trap RETURN dispara também no retorno de
+  # funções chamadoras, quando as locals já saíram de escopo (unbound variable)
   # shellcheck disable=SC2064
-  trap 'rm -f "$curl_err"' RETURN
+  trap 'rm -f "${curl_err:-}"; trap - RETURN' RETURN
 
   start_ms="$(now_ms)"
   set +e
@@ -433,8 +470,9 @@ check_tier3_keyless_ddg() {
     return
   fi
 
-  # 200/301/302/403: servidor está respondendo (403 acontece com alguns endpoints DDG mas conectividade existe)
-  if [[ "$http_code" =~ ^[23][0-9][0-9]$ ]]; then
+  # 200/301/302/403: servidor está respondendo (403 acontece com alguns
+  # endpoints DDG mas conectividade existe) — o regex inclui 403 explicitamente
+  if [[ "$http_code" =~ ^([23][0-9][0-9]|403)$ ]]; then
     T3_STATUS="REACHABLE"
     T3_DETAIL="DuckDuckGo API reachable"
   else
@@ -499,6 +537,7 @@ status_icon() {
     AVAILABLE|ACTIVE|REACHABLE)  echo "OK" ;;
     NOT_FOUND|NOT_CONFIGURED)    echo "--" ;;
     NO_CREDITS)                  echo "XX" ;;
+    DEGRADED)                    echo "!!" ;;
     ERROR|UNREACHABLE)           echo "!!" ;;
     SKIPPED)                     echo "~~" ;;
     *)                           echo "??" ;;
@@ -626,6 +665,19 @@ json_output() {
 # ---------------------------------------------------------------------------
 main() {
   parse_args "$@"
+
+  # Dependências verificadas UMA vez, no início (o script não tem como testar
+  # tiers 2/3 sem curl, nem emitir --json sem jq) — exit 2 com mensagem clara
+  local missing_tools=()
+  for bin in curl jq; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+      missing_tools+=("$bin")
+    fi
+  done
+  if (( ${#missing_tools[@]} > 0 )); then
+    echo "ERRO: dependências ausentes no PATH: ${missing_tools[*]} (necessárias: curl, jq)" >&2
+    exit 2
+  fi
 
   # --- Tier 1: surf-skill ---
   check_tier1_surf_skill
