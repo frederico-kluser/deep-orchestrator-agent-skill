@@ -89,3 +89,15 @@ check-search-credits.sh
 - Sub-agentes devem usar `search.sh` como interface unica de busca
 - `check-brave-credits.sh` -> substituido por `check-search-credits.sh`
 - A interface CLI do `search.sh` e identica a do `brave-search.sh` (--task, --goal, --insights, --deliverable, --brief-file, --count, --max-evolutions), garantindo backward compatibility para scripts e sub-agentes existentes
+
+---
+
+## Roadmap
+
+- **Evolucao candidata do Tier 2 — Brave LLM Context endpoint:** a doc oficial
+  da Brave recomenda o endpoint LLM Context (resposta token-eficiente para
+  maquinas/agentes, ~$5/1K) no lugar do Web Search para uso por agentes.
+  Candidato a evoluir o Tier 2 da cadeia (`brave-search.sh` /
+  `search_brave_api()`): continua sendo Brave — compativel com a decisao D3
+  (nenhum provedor novo entra na cadeia). FORA do escopo atual — registro
+  para nao esquecer.

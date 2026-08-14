@@ -54,7 +54,7 @@
 
 ## SYNTHESIZE — Resposta Final ✅
 - 7 decisões de produto com timeline, esforço e evidência
-- Ver `research/RESEARCH_ANSWER.md`
+- Ver `RESEARCH_ANSWER.md` (mesmo diretório)
 
 ## Correções da revisão adversarial
 - **A1:** Worktree isolation virou commodity em 2026 (não é mais diferenciador isolado)
