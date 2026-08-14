@@ -44,8 +44,13 @@ set -uo pipefail
 # Vazamento verificado: GIT_DIR exportada VENCE `git -C <path>`. Se o processo
 # pai tiver qualquer uma dessas variáveis no ambiente, todo comando git deste
 # script operaria no repositório errado — inclusive os `git -C "$BASE_DIR"`.
+# DO_STATE/DO_HOME/DO_WT também são EXPORTADOS pelo ENV_FILE de uma execução
+# anterior: sem desfazê-los, o rollback do die() apagaria a run de OUTRA
+# sessão (verificado em lab: run R1 sourceada + die 6 numa 2ª FASE 0 -> R1
+# DELETADA). Zerar como as GIT_*.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
-      GIT_COMMON_DIR GIT_NAMESPACE GIT_ALTERNATE_OBJECT_DIRECTORIES 2>/dev/null || true
+      GIT_COMMON_DIR GIT_NAMESPACE GIT_ALTERNATE_OBJECT_DIRECTORIES \
+      DO_STATE DO_HOME DO_WT 2>/dev/null || true
 
 QUIET=0
 NEW_RUN=0
@@ -65,11 +70,20 @@ die() {
   # Rollback da FASE 0 (F4-07.11): até o estado ser gravado por completo,
   # QUALQUER falha remove o run-* — um run sem env é invisível ao reuso (0.2)
   # e acumula lixo na máquina; um env parcialmente escrito seria reutilizado
-  # corrupto por uma sessão seguinte. Guardas: DO_STATE vazio (falhas ANTES do
-  # mkdir não criaram nada) e DO_STATE forjado fora de DO_HOME.
-  if [ -n "${DO_STATE:-}" ] && [ "$DO_STATE" != "/" ] \
-     && [ "${DO_STATE#${DO_HOME:-}/}" != "$DO_STATE" ]; then
+  # corrupto por uma sessão seguinte. Guardas (F4-07, validador adversarial):
+  # DO_STATE vazio (falhas ANTES do mkdir não criaram nada) E DO_STATE EXATO
+  # desta invocação ($DO_HOME/run-$RUN_ID) — a guarda por prefixo deixava o
+  # rollback apagar a run de OUTRA sessão quando DO_STATE/DO_HOME vinham
+  # EXPORTADOS do ENV_FILE anterior (verificado em lab: run R1 sourceada +
+  # die 6 numa 2ª FASE 0 -> R1 DELETADA). O unset no topo zera o vetor; a
+  # igualdade ancla o alvo nesta invocação.
+  if [ -n "${DO_STATE:-}" ] && [ "$DO_STATE" = "${DO_HOME:-}/run-${RUN_ID:-}" ]; then
     rm -rf "$DO_STATE" 2>/dev/null || true
+  fi
+  # CHILD_ROOT recém-criado (vazio) também é lixo acumulativo — rmdir só
+  # remove diretório VAZIO (nunca toca em worktree com conteúdo).
+  if [ -n "${CHILD_ROOT:-}" ]; then
+    rmdir "$CHILD_ROOT" 2>/dev/null || true
   fi
   printf 'DO_ABORT %s: %s\n' "$1" "$2" >&2
   exit "$1"
@@ -254,6 +268,15 @@ SKILL_HOME=""
 # cedo, com mensagem clara (exit 2).
 [ -n "$SKILL_HOME" ] \
   || die 2 "não consegui resolver SKILL_HOME — scripts/ não está ao lado de do-context.sh (skill incompleta?)"
+# SKILL_HOME é fonte INDEPENDENTE (localização do script) — fora do loop de
+# validação acima; sem checá-la, uma skill em path com aspa corrompia o
+# ENV_FILE e o source 'sucedia' silenciosamente com DO_STATE/DO_WT unset
+# (verificado em lab: /tmp/do-probe-skill-o'brien).
+case "$SKILL_HOME" in
+  *\'*)     die 7 "SKILL_HOME contém aspa simples: $SKILL_HOME" ;;
+  *"$(printf '\t')"*) die 7 "SKILL_HOME contém TAB: $SKILL_HOME" ;;
+  *$'\n'*)  die 7 "SKILL_HOME contém newline: $SKILL_HOME" ;;
+esac
 
 # --- (0.9) Estado persistente ------------------------------------------------
 # O shell NÃO persiste entre chamadas Bash do harness. Sem este arquivo, toda

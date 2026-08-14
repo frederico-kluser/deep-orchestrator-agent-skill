@@ -109,6 +109,10 @@ owned_lock() { # flock(1) do util-linux. Ausente (ex.: macOS sem util-linux):
   if command -v flock >/dev/null 2>&1; then
     flock 9 2>/dev/null \
       || { err "FALHA: não consegui travar $LOCK_FILE (flock(1) indisponível?)"; return 1; }
+  else
+    err "AVISO: flock(1) indisponível no PATH — exclusão mútua do owned.tsv"
+    err "       DEGRADADA (orquestrador serial por onda; sem garantia sob"
+    err "       concorrência — marks paralelos de subwaves podem perder atualização)."
   fi
 }
 owned_unlock() {
@@ -250,8 +254,15 @@ cmd_merge() { # <nome> <mensagem>
     gwt reset -q || { err "FALHA: não consegui limpar o índice residual"; return 1; }
     while IFS= read -r p; do
       [ -n "$p" ] || continue
-      GIT_LITERAL_PATHSPECS=1 gwt checkout -q HEAD -- "$p" \
-        || { err "FALHA: não consegui restaurar '$p' do HEAD"; return 1; }
+      # Só restaura do HEAD se o arquivo AINDA tiver marcadores de conflito do
+      # NOSSO merge (verificado em lab: uma resolução feita na raiz-de-mundo,
+      # fora do fluxo documentado, seria destruída pelo checkout cego). Se o
+      # usuário resolveu, o arquivo fica limpo e o re-merge é recusado pelo
+      # guard de índice — ele estagia a resolução e re-executa.
+      if grep -q '^<<<<<<< ' "$BASE_DIR/$p" 2>/dev/null; then
+        GIT_LITERAL_PATHSPECS=1 gwt checkout -q HEAD -- "$p" \
+          || { err "FALHA: não consegui restaurar '$p' do HEAD"; return 1; }
+      fi
     done <<< "$unmerged"
   fi
 

@@ -510,7 +510,16 @@ echo "=== A30: flock — dois marks PARALELOS no owned.tsv sem lost update (F4-0
 env30=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env30"
 "$WT" new feature onda30-a >/dev/null
 "$WT" new feature onda30-b >/dev/null
-"$WT" mark onda30-a BLOCKED >/dev/null 2>&1 & "$WT" mark onda30-b ORPHANED >/dev/null 2>&1 & wait
+# BARREIRA: os dois processos só PROSSEGUEM depois que ambos sinalizaram —
+# sem isso, o catch do lost update vira corrida de timing (se o 2º mark
+# começar depois do 1º terminar, o bug passa batido — verificado em lab).
+bar30="$LAB/a30-barrier"
+( touch "$bar30.1"; while [ ! -f "$bar30.2" ]; do sleep 0.01; done
+  "$WT" mark onda30-a BLOCKED >/dev/null 2>&1 ) &
+( touch "$bar30.2"; while [ ! -f "$bar30.1" ]; do sleep 0.01; done
+  "$WT" mark onda30-b ORPHANED >/dev/null 2>&1 ) &
+wait
+rm -f "$bar30".*
 st30a=$(awk -F'\t' 'NR>1 && $3=="onda30-a" {print $9}' "$OWNED")
 st30b=$(awk -F'\t' 'NR>1 && $3=="onda30-b" {print $9}' "$OWNED")
 n30=$(wc -l < "$OWNED")
