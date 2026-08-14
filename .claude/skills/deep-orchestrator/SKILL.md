@@ -43,29 +43,22 @@ allowed-tools:
   - Glob
   - Agent
   - Skill
-  - Task
-  - web_search
-  - fetch_content
-  - source_check
-  - get_search_content
-  - mcp
-  - ffgrep
-  - fffind
-  - find
-  - ls
-  - project_report
-  - module_report
-  - read_symbol
-  - read_enclosing
-  - lsp_diagnostics
-  - lens_diagnostics
+  # NOTA — ferramentas de busca web (web_search, fetch_content,
+  # source_check, get_search_content), de relatórios/LSP (project_report,
+  # module_report, read_symbol, read_enclosing, lsp_diagnostics,
+  # lens_diagnostics, ffgrep, fffind) e o prefixo genérico `mcp` NÃO estão na
+  # whitelist: são OPCIONAIS via MCP, se o harness as expuser (a FASE 1 já as
+  # trata como opcionais). O orquestrador NÃO pesquisa ele mesmo — os
+  # sub-agentes usam search.sh / search-parallel.sh via Bash. Sub-agentes são
+  # disparados via Agent (subagent_type); a espera de conclusão usa as
+  # notificações do harness (ex.: TaskOutput com wait: true), onde existir.
 model: inherit
 effort: xhigh
 metadata:
   version: "3.3.0"
   created: "2026-08-02"
   updated: "2026-08-14"
-  skill-home: "~/Projects/deep-orchestrator"   # casa da skill (scripts/, prompts/, templates/) — NÃO é o projeto-alvo
+  skill-home: "exemplo: ~/Projects/deep-orchestrator — a resolução real é dinâmica na FASE 0 (do-context.sh → $SKILL_HOME)"   # casa da skill (scripts/, prompts/, templates/) — NÃO é o projeto-alvo
   based-on: "playbook-modernizar-legado-agentes-paralelos"
 ---
 
@@ -1088,9 +1081,15 @@ metadata:
         <step order="4"><strong>HTML EXPLAINER (antes do commit — ele precisa
           entrar nele):</strong> gere o explainer do que foi feito (de-para de
           TODAS as mudanças: antes/depois de cada arquivo, decisões e
-          justificativas) a partir do template
+          justificativas) com o gerador oficial, a partir do template
           <path>$SKILL_HOME/templates/html-explainer.html</path> (leitura;
-          $SKILL_HOME é somente leitura). Salve em
+          $SKILL_HOME é somente leitura):
+          <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$SKILL_HOME/scripts/generate-explainer.sh" --version "&lt;versão&gt;" --date "&lt;data&gt;" --branch "$BASE_BRANCH" --task-summary "&lt;resumo da tarefa&gt;" --total-waves &lt;N&gt; --total-agents &lt;N&gt; --total-commits &lt;N&gt; [--waves-table "&lt;arquivo&gt;"] [--files-table "&lt;arquivo&gt;"] [--commits-list "&lt;arquivo&gt;"] [--before-after "&lt;arquivo&gt;"] [--impact "&lt;arquivo&gt;"] [--capabilities "&lt;arquivo&gt;"] [--decisions "&lt;arquivo&gt;"] [--timeline "&lt;arquivo&gt;"] --output "$BASE_DIR/EXPLAINER.html"</cmd>
+          Os 7 tokens são OBRIGATÓRIOS (erro claro + exit != 0 se faltar); os
+          8 slots recebem arquivos com o conteúdo HTML de cada seção (gere-os
+          sob $DO_STATE/explainer/ — descartáveis; conteúdo de slot não pode
+          conter "{{"). Slot sem arquivo mantém o bloco demo do template,
+          anotado como não preenchido. Salve em
           <path>$BASE_DIR/EXPLAINER.html</path> — a raiz da RAIZ-DE-MUNDO,
           jamais um path derivado de <cmd>--git-common-dir</cmd></step>
         <step order="5">Se tudo verde, commite o que RESTA — e apenas o que é
@@ -1202,7 +1201,10 @@ Siga estas instruções EXATAMENTE.
    --count, --json, --max-evolutions N, --dev-mode (afeta só o Tier 2/Brave).
    Para MÚLTIPLAS buscas, NUNCA chame search.sh em loop — monte o lote (uma
    query por linha) e chame {{SKILL_HOME}}/scripts/search-parallel.sh UMA vez;
-   o resultado agregado e deduplicado volta num único relatório. Prefira
+   o resultado agregado e deduplicado volta num único relatório. Para
+   formular/evoluir queries (estratégias de evolução, métricas de qualidade,
+   Query Evolver), consulte {{SKILL_HOME}}/prompts/search-prompts.md (somente
+   leitura). Prefira
    documentação oficial e fontes primárias; desconfie de listicles/SEO farms.
    O script implementa fallback automático em 3 tiers:
    <strong>Tier 1:</strong> surf-skill (multi-provider AI-powered) →
@@ -1324,6 +1326,9 @@ TENTAR REFUTAR este trabalho.
 ## Regras
 - Se encontrar UM problema que derruba o trabalho, reporte com evidência
 - Se não encontrar NADA, responda "Nada a refutar."
+- Veredito final em UMA linha: APPROVE (sem CRITICAL/HIGH — "Nada a
+  refutar." equivale a APPROVE) / WARNING (HIGHs — mergeável com cautela) /
+  BLOCK (CRITICALs) — mesmo formato canônico do ecc-prompts.md #3.
 - NÃO sugira melhorias cosméticas — só problemas REAIS
 - Você pode LER qualquer arquivo do repositório (SOMENTE LEITURA — o
   repositório é {{BASE_DIR}}) para verificar contexto fora do diff; cite
