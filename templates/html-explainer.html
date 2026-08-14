@@ -16,11 +16,13 @@
      HTML: um com o texto {{SLOT}} begin e outro com {{SLOT}} end (sem os
      delimitadores — veja os exemplos reais no corpo do arquivo). O gerador
      substitui TUDO entre o par pelo conteúdo real. O que está entre os
-     marcadores é EXEMPLO demonstrativo (fallback) e morre na geração.
+     marcadores é apenas conteúdo de demonstração (fallback) e morre na geração.
        {{WAVES_TABLE}}   (aba Ondas — <table> com colunas Onda|Worktree|Tarefas|Commits|Status)
        {{FILES_TABLE}}   (aba Arquivos — <table> com colunas Arquivo|Tipo|Diff)
        {{COMMITS_LIST}}  (aba Arquivos — lista de commits squash)
-       {{BEFORE_AFTER}}  (aba De-Para — seções de de-para adicionais)
+       {{BEFORE_AFTER}}  (aba De-Para — cards Antes/Depois + seções de-para adicionais)
+       {{IMPACT}}        (aba De-Para — lista de impactos da execução)
+       {{CAPABILITIES}}  (aba De-Para — grid de novas capacidades)
        {{DECISIONS}}     (aba Decisões — lista de premissas inferidas)
        {{TIMELINE}}      (aba Timeline — linha do tempo da execução)
 
@@ -306,10 +308,12 @@
               <tr><td><code>&#123;&#123;TOTAL_COMMITS&#125;&#125;</code></td><td>Cards de estatística</td><td>Número de commits</td></tr>
               <tr><td><code>&#123;&#123;WAVES_TABLE&#125;&#125;</code></td><td>Aba Ondas</td><td>Tabela HTML de ondas (Onda | Worktree | Tarefas | Commits | Status)</td></tr>
               <tr><td><code>&#123;&#123;FILES_TABLE&#125;&#125;</code></td><td>Aba Arquivos</td><td>Tabela HTML de arquivos modificados (Arquivo | Tipo | Diff)</td></tr>
-              <tr><td><code>&#123;&#123;BEFORE_AFTER&#125;&#125;</code></td><td>Aba De-Para</td><td>Seções de de-para adicionais</td></tr>
+              <tr><td><code>&#123;&#123;COMMITS_LIST&#125;&#125;</code></td><td>Aba Arquivos</td><td>Lista de commits squash</td></tr>
+              <tr><td><code>&#123;&#123;BEFORE_AFTER&#125;&#125;</code></td><td>Aba De-Para</td><td>Cards Antes/Depois + seções de-para adicionais</td></tr>
+              <tr><td><code>&#123;&#123;IMPACT&#125;&#125;</code></td><td>Aba De-Para</td><td>Lista de impactos da execução</td></tr>
+              <tr><td><code>&#123;&#123;CAPABILITIES&#125;&#125;</code></td><td>Aba De-Para</td><td>Grid de novas capacidades</td></tr>
               <tr><td><code>&#123;&#123;DECISIONS&#125;&#125;</code></td><td>Aba Decisões</td><td>Lista de decisões autônomas</td></tr>
               <tr><td><code>&#123;&#123;TIMELINE&#125;&#125;</code></td><td>Aba Timeline</td><td>Linha do tempo da execução</td></tr>
-              <tr><td><code>&#123;&#123;COMMITS_LIST&#125;&#125;</code></td><td>Aba Arquivos</td><td>Lista de commits squash</td></tr>
             </tbody>
           </table>
         </div>
@@ -359,9 +363,8 @@
           </tbody>
         </table>
       </div>
-      <!-- {{WAVES_TABLE}} end -->
-
       <p class="text-body-secondary small">Exemplo demonstrativo — a geração substitui o bloco entre os marcadores pelos dados reais da execução.</p>
+      <!-- {{WAVES_TABLE}} end -->
 
       <h3 class="h6 mt-4 text-body-secondary">Legenda de status</h3>
       <div class="d-flex flex-wrap gap-2">
@@ -431,9 +434,8 @@
           </tbody>
         </table>
       </div>
-      <!-- {{FILES_TABLE}} end -->
-
       <p class="text-body-secondary small">Exemplo demonstrativo — valores aproximados, substituídos na geração.</p>
+      <!-- {{FILES_TABLE}} end -->
 
       <h2 class="h4 pane-title mt-4">Commits (squash)</h2>
       <p>Histórico final do branch principal: um commit squash por sub-agente. Nenhuma worktree ou branch <code>wt/*</code> sobra ao final.</p>
@@ -453,9 +455,8 @@
           <div><strong>Onda 3:</strong> README.md — documentação final</div>
         </li>
       </ul>
-      <!-- {{COMMITS_LIST}} end -->
-
       <p class="text-body-secondary small mt-2">Exemplo demonstrativo — hashes fictícios, substituídos na geração.</p>
+      <!-- {{COMMITS_LIST}} end -->
     </div>
 
     <!-- ══════════════ ABA 4 · DE-PARA (BEFORE/AFTER) ══════════════ -->
@@ -464,15 +465,18 @@
       <h2 class="h4 pane-title">De-Para: o que mudou</h2>
       <p>Comparação lado a lado entre o estado inicial do repositório e o estado final após a execução.</p>
 
+      <!-- {{BEFORE_AFTER}} begin -->
+      <!-- Cards Antes/Depois e seções de de-para adicionais geradas
+           dinamicamente entram aqui (substituídos na geração). -->
       <div class="row g-3 mb-4">
         <div class="col-lg-6">
           <div class="card h-100 depara-antes">
             <div class="card-header"><i class="bi bi-arrow-left-circle me-1"></i><strong>Antes</strong></div>
             <div class="card-body">
-              <p class="card-text text-body-secondary">Estado inicial do repositório — apenas o skill de orquestração, sem recursos auxiliares.</p>
+              <p class="card-text text-body-secondary">Estado inicial — descrição genérica, substituída na geração.</p>
               <ul class="list-unstyled mb-0 d-grid gap-2">
-                <li><i class="bi bi-file-earmark-text me-2 text-body-secondary"></i><code>SKILL.md</code> — definição do orquestrador (XML, fases, regras)</li>
-                <li><i class="bi bi-file-earmark-text me-2 text-body-secondary"></i><code>README.md</code> — documentação pública</li>
+                <li><i class="bi bi-file-earmark-text me-2 text-body-secondary"></i>Item representativo do estado inicial</li>
+                <li><i class="bi bi-file-earmark-text me-2 text-body-secondary"></i>Segundo item representativo</li>
               </ul>
             </div>
           </div>
@@ -481,107 +485,78 @@
           <div class="card h-100 depara-depois">
             <div class="card-header"><i class="bi bi-arrow-right-circle me-1"></i><strong>Depois</strong></div>
             <div class="card-body">
-              <p class="card-text text-body-secondary">Estado final — três novos diretórios e o skill atualizado.</p>
+              <p class="card-text text-body-secondary">Estado final — descrição genérica, substituída na geração.</p>
               <ul class="list-unstyled mb-0 d-grid gap-2">
-                <li><i class="bi bi-terminal me-2 text-body-secondary"></i><code>scripts/</code> — brave-search.sh · check-brave-credits.sh</li>
-                <li><i class="bi bi-file-earmark-text me-2 text-body-secondary"></i><code>prompts/</code> — ecc-prompts.md · ecc-skills.md · search-prompts.md</li>
-                <li><i class="bi bi-file-earmark-code me-2 text-body-secondary"></i><code>templates/</code> — html-explainer.html</li>
-                <li><i class="bi bi-gear me-2 text-body-secondary"></i><code>SKILL.md</code> — atualizado (ondas ilimitadas, novos recursos)</li>
+                <li><i class="bi bi-terminal me-2 text-body-secondary"></i>Item representativo do estado final</li>
+                <li><i class="bi bi-file-earmark-code me-2 text-body-secondary"></i>Segundo item representativo</li>
               </ul>
             </div>
           </div>
         </div>
       </div>
-
-      <!-- {{BEFORE_AFTER}} begin -->
-      <!-- Seções de de-para adicionais geradas dinamicamente entram aqui
-           (ex.: comparação arquivo a arquivo, antes/depois por capacidade). -->
+      <p class="text-body-secondary small">Exemplo demonstrativo — a geração substitui o bloco entre os marcadores pelos dados reais.</p>
       <!-- {{BEFORE_AFTER}} end -->
 
       <h2 class="h4 pane-title">Impacto</h2>
       <p>O que cada mudança significa para quem usa o deep-orchestrator:</p>
+      <!-- {{IMPACT}} begin -->
       <div class="list-group list-group-flush mb-4">
         <div class="list-group-item d-flex gap-3 align-items-start">
-          <i class="bi bi-search fs-5 stat-value flex-shrink-0 mt-1"></i>
-          <div><strong>Busca Brave integrada</strong> — sub-agentes pesquisam na web direto do terminal (curl + API Brave), sem depender de outras ferramentas.</div>
+          <i class="bi bi-stars fs-5 stat-value flex-shrink-0 mt-1"></i>
+          <div><strong>Impacto 1</strong> — descrição genérica, substituída na geração.</div>
         </div>
         <div class="list-group-item d-flex gap-3 align-items-start">
-          <i class="bi bi-credit-card-2-front fs-5 stat-value flex-shrink-0 mt-1"></i>
-          <div><strong>Créditos sob controle</strong> — o orquestrador consulta os créditos restantes da API antes de disparar ondas longas.</div>
+          <i class="bi bi-stars fs-5 stat-value flex-shrink-0 mt-1"></i>
+          <div><strong>Impacto 2</strong> — descrição genérica, substituída na geração.</div>
         </div>
         <div class="list-group-item d-flex gap-3 align-items-start">
-          <i class="bi bi-shield-check fs-5 stat-value flex-shrink-0 mt-1"></i>
-          <div><strong>Execução confiável</strong> — contratos ECC (execução de código confiável) que os sub-agentes seguem ao executar código.</div>
-        </div>
-        <div class="list-group-item d-flex gap-3 align-items-start">
-          <i class="bi bi-chat-square-text fs-5 stat-value flex-shrink-0 mt-1"></i>
-          <div><strong>Busca padronizada</strong> — prompts de pesquisa consistentes entre sub-agentes (search-prompts.md).</div>
-        </div>
-        <div class="list-group-item d-flex gap-3 align-items-start">
-          <i class="bi bi-file-earmark-code fs-5 stat-value flex-shrink-0 mt-1"></i>
-          <div><strong>De-para visível</strong> — toda execução termina com um EXPLAINER.html legível (este documento).</div>
-        </div>
-        <div class="list-group-item d-flex gap-3 align-items-start">
-          <i class="bi bi-gear fs-5 stat-value flex-shrink-0 mt-1"></i>
-          <div><strong>Processo documentado</strong> — ondas ilimitadas e o novo fluxo registrados no SKILL.md.</div>
+          <i class="bi bi-stars fs-5 stat-value flex-shrink-0 mt-1"></i>
+          <div><strong>Impacto 3</strong> — descrição genérica, substituída na geração.</div>
         </div>
       </div>
+      <p class="text-body-secondary small">Exemplo demonstrativo — a geração substitui o bloco entre os marcadores pelos impactos reais.</p>
+      <!-- {{IMPACT}} end -->
 
       <h2 class="h4 pane-title">Novas capacidades</h2>
+      <!-- {{CAPABILITIES}} begin -->
       <div class="row g-3">
         <div class="col-md-6 col-lg-4">
           <div class="card h-100">
             <div class="card-body">
-              <i class="bi bi-search fs-3 stat-value"></i>
-              <h3 class="h6 mt-2 mb-1">Busca Brave interna</h3>
-              <p class="small text-body-secondary mb-0">Sub-agentes pesquisam na web via API Brave, direto do terminal — sem sair do fluxo.</p>
+              <i class="bi bi-stars fs-3 stat-value"></i>
+              <h3 class="h6 mt-2 mb-1">Capacidade 1</h3>
+              <p class="small text-body-secondary mb-0">Descrição genérica, substituída na geração.</p>
             </div>
           </div>
         </div>
         <div class="col-md-6 col-lg-4">
           <div class="card h-100">
             <div class="card-body">
-              <i class="bi bi-shield-check fs-3 stat-value"></i>
-              <h3 class="h6 mt-2 mb-1">ECC prompts</h3>
-              <p class="small text-body-secondary mb-0">Contratos de execução de código confiável que os sub-agentes seguem (ecc-prompts.md, ecc-skills.md).</p>
+              <i class="bi bi-stars fs-3 stat-value"></i>
+              <h3 class="h6 mt-2 mb-1">Capacidade 2</h3>
+              <p class="small text-body-secondary mb-0">Descrição genérica, substituída na geração.</p>
             </div>
           </div>
         </div>
         <div class="col-md-6 col-lg-4">
           <div class="card h-100">
             <div class="card-body">
-              <i class="bi bi-infinity fs-3 stat-value"></i>
-              <h3 class="h6 mt-2 mb-1">Ondas ilimitadas</h3>
-              <p class="small text-body-secondary mb-0">O plano não fica limitado a N ondas — a topologia das dependências manda.</p>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-6 col-lg-4">
-          <div class="card h-100">
-            <div class="card-body">
-              <i class="bi bi-credit-card-2-front fs-3 stat-value"></i>
-              <h3 class="h6 mt-2 mb-1">Verificação de créditos</h3>
-              <p class="small text-body-secondary mb-0">Créditos da API Brave consultados antes de ondas longas — o orquestrador sabe quando parar.</p>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-6 col-lg-4">
-          <div class="card h-100">
-            <div class="card-body">
-              <i class="bi bi-file-earmark-code fs-3 stat-value"></i>
-              <h3 class="h6 mt-2 mb-1">HTML explainer</h3>
-              <p class="small text-body-secondary mb-0">Este documento: o de-para (antes/depois) de tudo que foi feito na execução.</p>
+              <i class="bi bi-stars fs-3 stat-value"></i>
+              <h3 class="h6 mt-2 mb-1">Capacidade 3</h3>
+              <p class="small text-body-secondary mb-0">Descrição genérica, substituída na geração.</p>
             </div>
           </div>
         </div>
       </div>
+      <p class="text-body-secondary small">Exemplo demonstrativo — a geração substitui o bloco entre os marcadores pelas capacidades reais.</p>
+      <!-- {{CAPABILITIES}} end -->
     </div>
 
     <!-- ══════════════ ABA 5 · DECISÕES AUTÔNOMAS ══════════════ -->
     <div class="tab-pane fade" id="pane-decisoes" role="tabpanel"
          aria-labelledby="tab-decisoes" tabindex="0" data-print-title="Decisões autônomas">
       <h2 class="h4 pane-title">Premissas inferidas sem perguntar</h2>
-      <p>O orquestrador opera em autonomia total: nenhuma pergunta foi feita ao usuário. Toda premissa assumida fica registrada aqui — para revisão e reprodutibilidade.</p>
+      <p>O orquestrador opera em autonomia total — nenhuma pergunta é feita ao usuário. Toda premissa assumida fica registrada aqui — para revisão e reprodutibilidade.</p>
 
       <!-- {{DECISIONS}} begin -->
       <ul class="list-group list-group-flush">
@@ -606,9 +581,8 @@
           <div><strong>Placeholders {{...}} em vez de template engine:</strong> substituição simples de string na geração.</div>
         </li>
       </ul>
-      <!-- {{DECISIONS}} end -->
-
       <p class="text-body-secondary small mt-2">Exemplo demonstrativo — a geração substitui o bloco entre os marcadores pelas decisões reais da execução.</p>
+      <!-- {{DECISIONS}} end -->
     </div>
 
     <!-- ══════════════ ABA 6 · TIMELINE ══════════════ -->
@@ -648,9 +622,8 @@
           <p class="mb-0 text-body-secondary small">TASK_PLAN.md removido, gate completo, commit final, varredura de limpeza, EXPLAINER.html gerado (este documento).</p>
         </li>
       </ol>
-      <!-- {{TIMELINE}} end -->
-
       <p class="text-body-secondary small mt-3">Exemplo demonstrativo — a geração substitui o bloco entre os marcadores pela timeline real da execução.</p>
+      <!-- {{TIMELINE}} end -->
     </div>
 
   </div>
