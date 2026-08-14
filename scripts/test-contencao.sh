@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# Testes de aceitação do MODO CONTIDO — A1..A20 + A22/A25/A26 + A32/A33/A34 (63 asserções)
+# Testes de aceitação do MODO CONTIDO — A1..A20 + A22/A23/A25/A26/A27/A28/A29/A30/A31 + A32/A33/A34 (85 asserções)
+# Equivalências do plano registradas aqui (NÃO duplicadas): A33 cobre o A21
+# (undo com HEAD avançado); A32 cobre o A24 (wave-files após 2 squashes — o
+# diff da onda já sai correto com a onda anterior fora do escopo).
+# Cobertura F4-07 (robustez): A23 (re-merge pós-conflito), A28/A29 (exits 6/7/9
+# da FASE 0 — caracteres proibidos e colisão de prefixo), A30 (flock — sem lost
+# update), A31 (kind=validation — ciclo completo).
 set -uo pipefail
 SKILL=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 CTX="$SKILL/scripts/do-context.sh"
 WT="$SKILL/scripts/do-wt.sh"
 LAB="${TMPDIR:-/tmp}/do-accept-$$"
+LAB27="${TMPDIR:-/tmp}/do-accept-$$ espaço é acentuação"   # A27 (F4-06)
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  \033[32mPASS\033[0m %s\n' "$*"; }
 bad()  { FAIL=$((FAIL+1)); printf '  \033[31mFAIL\033[0m %s\n' "$*"; }
@@ -13,7 +20,7 @@ chk()  { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (esperado='$3' obtido='$
 pval() { sed -n "s/.*$1='\([^']*\)'.*/\1/p" "$2"; }
 
 rm -rf "$LAB"; mkdir -p "$LAB"; cd "$LAB"
-trap 'rm -rf "$LAB"' EXIT   # nunca deixar labs /tmp/do-accept-* órfãos
+trap 'rm -rf -- "$LAB" "$LAB27" 2>/dev/null' EXIT   # nunca deixar labs /tmp/do-accept-* órfãos
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
 # --- fixture: repo principal + worktree irmã + worktree de terceiro ----------
@@ -265,6 +272,36 @@ else
 fi
 rm -f "$BASE_DIR"/bulk-*.tmp
 
+echo "=== A23: merge com CONFLITO → resolução na filha → re-merge automático (F4-07.2) ==="
+git -C wtA checkout -q -- root.txt
+env23=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env23"
+"$WT" new feature onda23-conflito >/dev/null
+echo "versao da filha" > "$CHILD_ROOT/onda23-conflito/root.txt"
+git -C "$CHILD_ROOT/onda23-conflito" add -A && git -C "$CHILD_ROOT/onda23-conflito" commit -qm wip
+echo "versao da raiz" >> "$BASE_DIR/root.txt"
+git -C "$BASE_DIR" add root.txt && git -C "$BASE_DIR" commit -qm "raiz-de-mundo mexeu em root.txt"
+out23=$("$WT" merge onda23-conflito "onda23-conflito: conflita" 2>&1); rc23=$?
+if [ "$rc23" != 0 ] && case "$out23" in *CONFLITO*) true ;; *) false ;; esac \
+   && [ "$(git -C "$BASE_DIR" diff --name-only --diff-filter=U)" = "root.txt" ]; then
+  ok "A23 squash com conflito recusa (mensagem CONFLITO) e deixa UU root.txt no índice"
+else
+  bad "A23 conflito (rc=$rc23 out=[$out23] uu='$(git -C "$BASE_DIR" diff --name-only --diff-filter=U | tr '\n' ' ')')"
+fi
+# Fluxo implementado (F4-07.2): resolver DENTRO da filha — a filha traz as
+# mudanças da raiz com `git merge "$BASE_BRANCH"`, resolve lá e commita; o
+# re-merge na raiz limpa o índice residual automaticamente ANTES do guard.
+git -C "$CHILD_ROOT/onda23-conflito" merge -q "$BASE_BRANCH" >/dev/null 2>&1
+echo "resolucao final" > "$CHILD_ROOT/onda23-conflito/root.txt"
+git -C "$CHILD_ROOT/onda23-conflito" add -A && git -C "$CHILD_ROOT/onda23-conflito" commit -qm "resolucao do conflito na filha"
+out23b=$("$WT" merge onda23-conflito "onda23-conflito: adiciona conflito (resolvido)" 2>&1); rc23b=$?
+if [ "$rc23b" = 0 ] && [ "$(git -C "$BASE_DIR" diff --name-only --diff-filter=U | wc -l)" = 0 ] \
+   && [ "$(grep -c 'resolucao final' "$BASE_DIR/root.txt")" = 1 ]; then
+  ok "A23 re-merge automático pós-conflito: sucesso, índice limpo, resolução aplicada"
+else
+  bad "A23 re-merge (rc=$rc23b out=[$out23b] uu='$(git -C "$BASE_DIR" diff --name-only --diff-filter=U | tr '\n' ' ')')"
+fi
+"$WT" remove onda23-conflito >/dev/null 2>&1; "$WT" drop-branch onda23-conflito >/dev/null 2>&1
+
 echo "=== A25: stage-delta com arquivo novo em diretório untracked preexistente ==="
 mkdir -p wtA/docs && echo "notas do usuario" > wtA/docs/notas-do-usuario.md
 env25=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env25"
@@ -300,6 +337,75 @@ else
 fi
 rm -f "$DO_STATE/ignored-baseline.nul"
 "$WT" clean-ignored-delta >/dev/null 2>&1; chk "A26c recusa sem baseline de ignorados" "$?" "1"
+
+echo "=== A27: lab com ESPAÇO e ACENTO no nome — ponta a ponta (F4-06) ==="
+# Espaço e acento SÃO permitidos pelo do-context (só aspa/TAB/newline são
+# proibidos). O script roda com cwd dentro do lab — atenção às aspas.
+rm -rf "$LAB27"; mkdir -p "$LAB27/main"
+cd "$LAB27/main"
+git init -q . && mkdir -p src && echo v1 > src/app.py && echo root > root.txt
+git add -A && git commit -qm init
+git worktree add -q ../wtA27 -b feat27
+mkdir -p ../wtA27/src/deep
+out27=$(cd ../wtA27/src/deep && "$CTX" --quiet 2>&1); env27=$(echo "$out27" | tail -1)
+chk "A27 MODE" "$(pval MODE "$env27")" "contido"
+chk "A27 BASE_DIR" "$(pval BASE_DIR "$env27")" "$LAB27/wtA27"
+. "$env27"
+"$WT" new feature onda27-a >/dev/null 2>&1; chk "A27 new" "$?" "0"
+echo 'FEAT27' > "$CHILD_ROOT/onda27-a/feat27.txt"
+git -C "$CHILD_ROOT/onda27-a" add -A && git -C "$CHILD_ROOT/onda27-a" commit -qm wip
+"$WT" merge onda27-a "onda27-a: adiciona feat27" >/dev/null 2>&1; chk "A27 merge" "$?" "0"
+chk "A27 squash no log" "$(git -C "$BASE_DIR" log --oneline -1 --format=%s)" "onda27-a: adiciona feat27"
+"$WT" remove onda27-a >/dev/null 2>&1; "$WT" drop-branch onda27-a >/dev/null 2>&1
+cd "$LAB"
+
+echo "=== A28/A29: exits 6/7/9 da FASE 0 (validações do do-context.sh) ==="
+git -C main worktree add -q "$LAB/wtA28" -b feat28
+# (a) índice sujo → exit 6
+echo x > wtA28/estagiado.txt && git -C wtA28 add estagiado.txt
+out28a=$(cd wtA28 && "$CTX" --quiet 2>&1); rc28a=$?
+chk "A28a índice sujo → exit 6" "$rc28a" "6"
+git -C wtA28 reset -q && rm -f wtA28/estagiado.txt
+# (b) branch com aspa simples ("it's") → exit 7 com mensagem de path
+git -C main branch "it's"
+git -C wtA28 checkout -q "it's"
+out28b=$(cd wtA28 && "$CTX" --quiet 2>&1); rc28b=$?
+chk "A28b branch com aspa simples → exit 7" "$rc28b" "7"
+case "$out28b" in *aspa*) ok "A28b mensagem clara (aspa simples)" ;; *) bad "A28b sem mensagem de aspa: $out28b" ;; esac
+git -C wtA28 checkout -q feat28; git -C main branch -D "it's" >/dev/null 2>&1
+# (c) branch com newline: o git REFUSA criar refname com newline (check-ref-format
+#     proíbe byte de controle) e REFUSA resolver um symref para refname inválido
+#     ("failed to resolve HEAD as a valid ref") — verificado em lab. O único
+#     estado possível é um HEAD corrompido, que a FASE 0 trata como HEAD não
+#     resolvível: sai com erro CLARO (exit 4, "HEAD destacado"), nunca 0/3/5/6/8/9
+#     enganoso. O guard de newline do próprio do-context (die 7) é exercitado em
+#     (d) pelo MESMO case que cobre BASE_BRANCH.
+brn=$(printf 'feat\nnl')
+mkdir -p "$LAB/main/.git/refs/heads"
+printf '%s\n' "$(git -C main rev-parse feat28)" > "$LAB/main/.git/refs/heads/$brn"
+headf=$(git -C wtA28 rev-parse --git-path HEAD)
+printf 'ref: refs/heads/%s\n' "$brn" > "$headf"
+(cd wtA28 && "$CTX" --quiet >/dev/null 2>&1); chk "A28c symref corrompido com newline → erro claro (exit 4)" "$?" "4"
+rm -f "$LAB/main/.git/refs/heads/$brn"
+git -C wtA28 symbolic-ref HEAD refs/heads/feat28
+# (d) path com newline (diretório com newline no nome) → exit 7
+nl_dir="$LAB/$(printf 'nl\npath')"
+mkdir -p "$nl_dir/inner" && git -C "$nl_dir" init -q && git -C "$nl_dir" commit -q --allow-empty -m init
+out28d=$(cd "$nl_dir/inner" && "$CTX" --quiet 2>&1); rc28d=$?
+chk "A28d path com newline → exit 7" "$rc28d" "7"
+case "$out28d" in *newline*) ok "A28d mensagem clara (newline)" ;; *) bad "A28d sem mensagem de newline: $out28d" ;; esac
+# (e) colisão de PREFIXO do namespace (F4-07.4): branch do/wtA28 pré-existente
+#     na raiz (prefixo do namespace do/wtA28/<run>/...) → FASE 0 recusa com
+#     exit 9 — o cmd_new NUNCA chega a falhar depois. O branch precisa ser o
+#     PREFIXO de um namespace NUNCA usado antes: o slug wtA28 é novo (as runs
+#     anteriores da suíte usam do/wtA/<run>, que já virou diretório).
+git -C main branch do/wtA28
+out28e=$(cd wtA28 && "$CTX" --quiet --new-run 2>&1); rc28e=$?
+chk "A28e branch do/wtA28 (prefixo do namespace) → exit 9" "$rc28e" "9"
+case "$out28e" in *prefixo*) ok "A29 mensagem clara de colisão de prefixo" ;; *) bad "A29 sem mensagem de colisão: $out28e" ;; esac
+git -C main branch -D do/wtA28 >/dev/null 2>&1
+git -C main worktree remove --force "$LAB/wtA28" >/dev/null 2>&1
+git -C main branch -D feat28 >/dev/null 2>&1
 
 echo "=== A32: wave-files resolve a filha MERGED quando a 1ª filha da onda está BLOCKED ==="
 # Fixture (F2-09): onda ANTERIOR mergeada (onda31-prev) cujo arquivo NÃO pode entrar
@@ -397,6 +503,33 @@ fi
 out34b=$("$WT" sweep 2>&1); rc34b=$?
 chk "A34 sweep OK após mark MERGED" "$rc34b" "0"
 "$WT" remove onda34-a >/dev/null 2>&1; "$WT" drop-branch onda34-a >/dev/null 2>&1
+
+echo "=== A30: flock — dois marks PARALELOS no owned.tsv sem lost update (F4-07.1) ==="
+# Sem flock, os dois row_set fariam read-modify-write + mv em rajada e o ÚLTIMO
+# venceria — um dos status sumiria. Com flock (serialização), ambos caem.
+env30=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env30"
+"$WT" new feature onda30-a >/dev/null
+"$WT" new feature onda30-b >/dev/null
+"$WT" mark onda30-a BLOCKED >/dev/null 2>&1 & "$WT" mark onda30-b ORPHANED >/dev/null 2>&1 & wait
+st30a=$(awk -F'\t' 'NR>1 && $3=="onda30-a" {print $9}' "$OWNED")
+st30b=$(awk -F'\t' 'NR>1 && $3=="onda30-b" {print $9}' "$OWNED")
+n30=$(wc -l < "$OWNED")
+if [ "$st30a" = BLOCKED ] && [ "$st30b" = ORPHANED ] && [ "$n30" = 3 ]; then
+  ok "A30 marks paralelos com flock: sem lost update (a=BLOCKED b=ORPHANED, $n30 linhas)"
+else
+  bad "A30 (a=$st30a b=$st30b linhas=$n30)"
+fi
+"$WT" remove onda30-a >/dev/null 2>&1; "$WT" drop-branch onda30-a >/dev/null 2>&1
+"$WT" remove onda30-b >/dev/null 2>&1; "$WT" drop-branch onda30-b >/dev/null 2>&1
+
+echo "=== A31: kind=validation — ciclo completo new → remove → drop-branch (F2-02) ==="
+env31=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env31"
+"$WT" new validation val-onda1-gate >/dev/null 2>&1; chk "A31 new validation" "$?" "0"
+chk "A31 kind registrado" "$(awk -F'\t' 'NR>1 && $3=="val-onda1-gate" {print $2}' "$OWNED")" "validation"
+chk "A31 branch sob o namespace" "$(awk -F'\t' 'NR>1 && $3=="val-onda1-gate" {print $4}' "$OWNED" | sed 's#/[^/]*$##')" "$BRANCH_NS"
+"$WT" remove val-onda1-gate >/dev/null 2>&1; chk "A31 remove" "$?" "0"
+chk "A31 status REMOVED" "$(awk -F'\t' 'NR>1 && $3=="val-onda1-gate" {print $9}' "$OWNED")" "REMOVED"
+"$WT" drop-branch val-onda1-gate >/dev/null 2>&1; chk "A31 drop-branch aceita (REMOVED)" "$?" "0"
 
 echo; printf 'RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1

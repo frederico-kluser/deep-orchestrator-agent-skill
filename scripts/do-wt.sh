@@ -11,18 +11,30 @@
 #
 # Uso (sempre com o ENV_FILE da FASE 0 sourceado, ou via --env <arquivo>):
 #   do-wt.sh new <kind> <nome>            cria filha, trava e registra
-#   do-wt.sh merge <nome> "<mensagem>"    squash-merge guardado na raiz-de-mundo
+#   do-wt.sh merge <nome> "<mensagem>"    squash-merge guardado na raiz-de-mundo.
+#                                        MERGES SÃO SERIAIS: toda reescrita do
+#                                        owned.tsv é serializada por flock
+#                                        (F4-07.1) — dois do-wt.sh simultâneos
+#                                        nunca perdem atualização. Em CONFLITO
+#                                        de squash: resolva DENTRO da filha e
+#                                        re-execute — o índice residual é limpo
+#                                        automaticamente no re-merge (F4-07.2)
 #   do-wt.sh undo <nome>                  desfaz o squash (revert; reset só sob guarda)
 #                                        — funciona com HEAD avançado: numa FALHA TARDIA
 #                                        de gate de snapshot (F3-01), reverte EXATAMENTE
 #                                        o squash daquela filha e arquiva o commit em
 #                                        refs/do-archive/$RUN_ID/undo-<nome>
 #   do-wt.sh remove <nome> [--artifacts]  remove a filha (com guardas de posse)
-#   do-wt.sh drop-branch <nome>           arquiva e apaga o branch (só se MERGED)
+#   do-wt.sh drop-branch <nome>           arquiva e apaga o branch (só se
+#                                        MERGED/REMOVED). REVERTED: rode remove
+#                                        primeiro — o fluxo undo -> remove ->
+#                                        drop-branch fecha o ciclo do revert
+#                                        (F4-07.8)
 #   do-wt.sh sweep                        fim de onda: fecha o que já foi integrado;
 #                                        DETECTA status=gate-pending — imprime aviso e
 #                                        sai != 0 (o fim de onda não fecha com gate de
-#                                        snapshot pendente, F3-01)
+#                                        snapshot pendente, F3-01); LISTA filhas
+#                                        REVERTED (undo aplicado — decida o destino)
 #   do-wt.sh verify                       prova de contenção (roda a cada onda)
 #   do-wt.sh stage-delta                  estagia SÓ o que é nosso (COMMIT-FINAL)
 #   do-wt.sh clean-ignored-delta          remove SÓ ignorados pós-FASE 0 (COMMIT-FINAL)
@@ -53,6 +65,10 @@ fi
 : "${CHILD_ROOT:?ENV_FILE incompleto: CHILD_ROOT}"
 : "${BRANCH_NS:?ENV_FILE incompleto: BRANCH_NS}"
 : "${RUN_ID:?ENV_FILE incompleto: RUN_ID}"
+# F4-07.10: BASE_BRANCH vazio + HEAD destacado fazia o gassert passar
+# indevidamente; DO_STATE é usado por sweep/verify/stage-delta/clean-ignored.
+: "${BASE_BRANCH:?ENV_FILE incompleto: BASE_BRANCH}"
+: "${DO_STATE:?ENV_FILE incompleto: DO_STATE}"
 
 gwt()  { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$BASE_DIR" "$@"; }
 gch()  { local p="$1"; shift; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$p" "$@"; }
@@ -64,17 +80,52 @@ gassert() {
 err() { printf '%s\n' "$*" >&2; }
 
 LOCK_REASON="deep-orchestrator run=$RUN_ID"
+# Lock de exclusão mútua sobre o owned.tsv (F4-07.1) — ver seção de registro.
+LOCK_FILE="$OWNED.lock"
 
 # --- registro (owned.tsv) ----------------------------------------------------
 # colunas: 1 run_id  2 kind  3 name  4 branch  5 path  6 base_sha
 #          7 pre_merge_sha  8 post_merge_sha  9 status
+#
+# Toda reescrita do arquivo passa por row_set() (ou pelo append do cmd_new) e é
+# serializada por flock (F4-07.1): sem isso, dois do-wt.sh simultâneos fariam
+# read-modify-write + mv em rajada e o ÚLTIMO venceria — lost update (um mark
+# de uma onda paralela sumiria). Merges são seriais por design (o orquestrador
+# integra uma filha por vez) — o flock garante que até os acessos CONCORRENTES
+# (marks de subwaves paralelas) são seguros.
+# O lock é num arquivo SEPARADO ($OWNED.lock): o OWNED é substituído por mv a
+# cada escrita, e um flock sobre ele sofreria corrida de inode — o fd antigo
+# travaria um inode ÓRFÃO enquanto outro processo trava o inode novo.
 
 row_get() { awk -F'\t' -v n="$1" -v c="$2" 'NR>1 && $3==n {print $c; exit}' "$OWNED"; }
 
-row_set() { # <nome> <coluna> <valor>  — reescrita atômica
+owned_lock() { # flock(1) do util-linux. Ausente (ex.: macOS sem util-linux):
+  # degrada documentado — o orquestrador já é serial por onda, mas a garantia
+  # de exclusão mútua entre processos paralelos depende do flock.
+  # ATENÇÃO: NUNCA usar `exec 9>"$LOCK_FILE" 2>/dev/null` — exec sem comando
+  # aplica as redireções ao shell PERMANENTEMENTE e mataria o stderr do script.
+  exec 9>"$LOCK_FILE" \
+    || { err "FALHA: não consegui abrir $LOCK_FILE"; return 1; }
+  if command -v flock >/dev/null 2>&1; then
+    flock 9 2>/dev/null \
+      || { err "FALHA: não consegui travar $LOCK_FILE (flock(1) indisponível?)"; return 1; }
+  fi
+}
+owned_unlock() {
+  if command -v flock >/dev/null 2>&1; then flock -u 9 2>/dev/null || true; fi
+  # fd 9 só é fechado aqui se owned_lock o abriu antes — nunca `2>/dev/null`
+  # junto (o exec sem comando tornaria a redireção permanente).
+  exec 9>&- || true
+}
+
+row_set() { # <nome> <coluna> <valor>  — reescrita atômica serializada
   local n="$1" c="$2" v="$3" tmp="$OWNED.tmp.$$"
+  owned_lock || return 1
   awk -F'\t' -v OFS='\t' -v n="$n" -v c="$c" -v v="$v" \
-      'NR>1 && $3==n { $c = v } { print }' "$OWNED" > "$tmp" && mv "$tmp" "$OWNED"
+      'NR>1 && $3==n { $c = v } { print }' "$OWNED" > "$tmp" \
+    && mv "$tmp" "$OWNED" \
+    || { rm -f "$tmp" 2>/dev/null; owned_unlock; return 1; }
+  owned_unlock
 }
 
 # --- guardas de posse --------------------------------------------------------
@@ -118,6 +169,28 @@ status_paths() { # stdin: saída de `status --porcelain -z`  → stdout: paths, 
 }
 
 # =============================================================================
+# Se uma asserção pós-add falhar (ou o append no owned.tsv), a worktree
+# recém-criada NUNCA foi registrada e ficaria ÓRFÃ — inalcançável pela limpeza,
+# que só aceita alvos do próprio owned.tsv. Limpeza com guarda (F4-07.6): SÓ o
+# que este cmd_new acabou de criar — branch exato sob $BRANCH_NS e path exato
+# sob $CHILD_ROOT. --force porque a asserção que falhou pode ter deixado sujeira.
+cleanup_orphan_new() { # <branch> <path>
+  local br="$1" wt="$2"
+  case "$br" in "$BRANCH_NS"/*) : ;; *) err "AVISO: limpeza recusada (branch fora do namespace): $br"; return 1 ;; esac
+  case "$wt/" in "$CHILD_ROOT"/*) : ;; *) err "AVISO: limpeza recusada (path fora de CHILD_ROOT): $wt"; return 1 ;; esac
+  gwt worktree unlock "$wt" >/dev/null 2>&1
+  if gwt worktree remove --force "$wt" >/dev/null 2>&1; then
+    err "  Limpeza: worktree recém-criada removida ($wt)"
+  else
+    err "  AVISO: não consegui remover a worktree recém-criada $wt — remova manualmente"
+  fi
+  if gwt branch -D "$br" >/dev/null 2>&1; then
+    err "  Limpeza: branch recém-criado apagado ($br)"
+  else
+    err "  AVISO: não consegui apagar o branch recém-criado $br"
+  fi
+}
+
 cmd_new() { # <kind> <nome>
   local kind="${1:?kind}" name="${2:?nome}"
   local br="$BRANCH_NS/$name" wt="$CHILD_ROOT/$name"
@@ -133,12 +206,18 @@ cmd_new() { # <kind> <nome>
   gwt worktree lock --reason "$LOCK_REASON" "$wt" || err "AVISO: não consegui travar $wt"
 
   # Isolamento já falhou em silêncio em produção — asseverar.
-  [ -f "$wt/.git" ] || { err "FALHA: $wt/.git não é arquivo (não é worktree)"; return 1; }
-  [ "$(gch "$wt" rev-parse --show-toplevel)" = "$wt" ] || { err "FALHA: toplevel divergente"; return 1; }
-  [ "$(gch "$wt" symbolic-ref --short HEAD)" = "$br" ] || { err "FALHA: branch errado"; return 1; }
+  [ -f "$wt/.git" ] || { err "FALHA: $wt/.git não é arquivo (não é worktree)"; cleanup_orphan_new "$br" "$wt"; return 1; }
+  [ "$(gch "$wt" rev-parse --show-toplevel)" = "$wt" ] || { err "FALHA: toplevel divergente"; cleanup_orphan_new "$br" "$wt"; return 1; }
+  [ "$(gch "$wt" symbolic-ref --short HEAD)" = "$br" ] || { err "FALHA: branch errado"; cleanup_orphan_new "$br" "$wt"; return 1; }
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t\t\t%s\n' \
-    "$RUN_ID" "$kind" "$name" "$br" "$wt" "$(gwt rev-parse HEAD)" "ACTIVE" >> "$OWNED"
+  owned_lock || { cleanup_orphan_new "$br" "$wt"; return 1; }
+  if ! printf '%s\t%s\t%s\t%s\t%s\t%s\t\t\t%s\n' \
+      "$RUN_ID" "$kind" "$name" "$br" "$wt" "$(gwt rev-parse HEAD)" "ACTIVE" >> "$OWNED"; then
+    owned_unlock
+    cleanup_orphan_new "$br" "$wt"
+    return 1
+  fi
+  owned_unlock
 
   printf 'OK  worktree=%s\n    branch=%s\n' "$wt" "$br"
 }
@@ -150,6 +229,31 @@ cmd_merge() { # <nome> <mensagem>
   br=$(row_get "$name" 4); wt=$(row_get "$name" 5)
   [ -n "$br" ] || { err "RECUSADO: $name não está no owned.tsv"; return 1; }
   gassert || return 1
+
+  # Re-merge após CONFLITO de squash (F4-07.2): um squash-merge falho deixa o
+  # índice com entradas de conflito (UU) SEM gravar MERGE_HEAD — squash nunca
+  # grava — e o guard de índice abaixo recusaria o re-merge com esse resíduo.
+  # O "reset --merge" outrora prescrito não limpa entradas não-mergeadas de
+  # forma confiável. Solução robusta: detectar o estado residual (UU sem
+  # operação do usuário em andamento) e limpá-lo ANTES do guard — os paths em
+  # conflito estavam limpos quando o merge começou (senão o git teria recusado
+  # antes), então restaurá-los do HEAD só remove os marcadores do NOSSO merge.
+  # A resolução do conflito é feita DENTRO da filha (que pode trazer as
+  # mudanças da raiz com `git merge "$BASE_BRANCH"` e resolver lá).
+  local unmerged p
+  unmerged=$(gwt diff --name-only --diff-filter=U 2>/dev/null)
+  if [ -n "$unmerged" ] \
+     && ! [ -f "$(gwt rev-parse --git-path MERGE_HEAD 2>/dev/null)" ] \
+     && ! [ -f "$(gwt rev-parse --git-path CHERRY_PICK_HEAD 2>/dev/null)" ] \
+     && ! [ -f "$(gwt rev-parse --git-path REBASE_HEAD 2>/dev/null)" ]; then
+    err "AVISO: índice com conflito residual de squash-merge ($(printf '%s\n' "$unmerged" | wc -l) path(s)) — limpando antes do re-merge."
+    gwt reset -q || { err "FALHA: não consegui limpar o índice residual"; return 1; }
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      GIT_LITERAL_PATHSPECS=1 gwt checkout -q HEAD -- "$p" \
+        || { err "FALHA: não consegui restaurar '$p' do HEAD"; return 1; }
+    done <<< "$unmerged"
+  fi
 
   # `git commit` após um squash-merge comita o ÍNDICE INTEIRO. Se o usuário
   # deixou algo estagiado na raiz-de-mundo, entraria no commit da sub-tarefa.
@@ -171,9 +275,13 @@ cmd_merge() { # <nome> <mensagem>
 
   gwt merge --squash "$br" || {
     err "CONFLITO no squash-merge de $br."
-    err "  Desfaça com:  git -C \"$BASE_DIR\" reset --merge"
-    err "  (NÃO use 'git merge --abort': squash-merge não grava MERGE_HEAD.)"
-    err "  Resolva DENTRO da filha $wt e re-execute este comando."
+    err "  Fluxo de resolução (F4-07.2):"
+    err "  1) Resolva DENTRO da filha: edite em $wt e commite LÁ."
+    err "     (Se a filha precisar das mudanças da raiz para resolver:"
+    err "      git -C \"$wt\" merge \"$BASE_BRANCH\"  e resolva o conflito na filha.)"
+    err "  2) Re-execute este merge. O índice residual de conflito é limpo"
+    err "     automaticamente no re-merge — não precisa de reset."
+    err "  (Não use 'git merge --abort': squash-merge não grava MERGE_HEAD.)"
     return 1
   }
   gwt diff --cached --quiet && { err "AVISO: $br não trouxe mudança alguma — nada a commitar"; row_set "$name" 9 MERGED; return 0; }
@@ -281,8 +389,13 @@ cmd_drop_branch() { # <nome>
   [ "$br" = "$BASE_BRANCH" ] && { err "RECUSADO: é o branch da raiz-de-mundo"; return 1; }
   case "$st" in
     MERGED|REMOVED) : ;;
-    *) err "RECUSADO: $name está com status=$st — só apago branch de sub-tarefa integrada."
-       err "  (BLOCKED/ORPHANED/ACTIVE preservam o trabalho do sub-agente para inspeção.)"; return 1 ;;
+    *)
+      err "RECUSADO: $name está com status=$st — só apago branch de sub-tarefa integrada."
+      err "  (BLOCKED/ORPHANED/ACTIVE preservam o trabalho do sub-agente para inspeção.)"
+      # F4-07.8: REVERTED (undo aplicado) tem a filha ainda no disco — o fluxo
+      # undo -> remove -> drop-branch fecha o ciclo do revert.
+      err "  REVERTED: rode 'do-wt.sh remove $name' primeiro e repita."
+      return 1 ;;
   esac
   gwt show-ref --verify --quiet "refs/heads/$br" || { echo "OK  $br já não existe"; return 0; }
 
@@ -349,10 +462,15 @@ cmd_verify() { # prova de contenção — rodar ao fim de CADA onda e no COMMIT-
 
   # Config local é COMPARTILHADO entre a raiz-de-mundo, as filhas e o principal.
   # Só as chaves que atravessam a fronteira são violação; o resto é ruído.
+  # Chaves perigosas (F4-07.9): hooks (execução remota), core.worktree
+  # (redireciona o checkout), remote URL (desvia o push), alias (execução
+  # arbitrária), include/includeIf + excludesFile/attributesFile (podem
+  # ESCONDER vazamento do status), filter (rewrite de conteúdo) e sshCommand
+  # (execução arbitrária no lugar do ssh).
   local cfgdiff
   cfgdiff=$(gwt config --list --local 2>/dev/null | diff "$DO_STATE/config-baseline.txt" - | grep '^[<>]' || true)
   if [ -n "$cfgdiff" ]; then
-    if printf '%s' "$cfgdiff" | grep -qE 'core\.hookspath|core\.worktree|remote\..*\.url|alias\.'; then
+    if printf '%s' "$cfgdiff" | grep -qE 'core\.hookspath|core\.worktree|core\.excludesfile|core\.attributesfile|core\.sshcommand|remote\..*\.url|alias\.|include\.path|includeif\..*\.path|filter\.'; then
       echo "VIOLAÇÃO: config compartilhado do repositório mudou em chave que atravessa a fronteira:"
       printf '%s\n' "$cfgdiff" | sed 's/^/  /'; fail=1
     else
@@ -506,7 +624,18 @@ cmd_status() {
   awk -F'\t' 'NR>1 {printf "%-24s %-8s %-10s %s\n", $3, $2, $9, $4}' "$OWNED"
 }
 
-cmd_mark() { row_set "${1:?nome}" 9 "${2:?status}"; echo "OK  $1 -> $2"; }
+cmd_mark() { # <nome> <STATUS> — validação (F4-07.7): nome existe e status ∈
+  # máquina de estados, case exato (um typo não pode corromper a máquina).
+  local name="${1:?nome}" st="${2:?status}"
+  case "$st" in
+    ACTIVE|MERGED|REMOVED|REVERTED|BLOCKED|ORPHANED|gate-pending) : ;;
+    *) err "RECUSADO: status inválido: '$st' — use ACTIVE|MERGED|REMOVED|REVERTED|BLOCKED|ORPHANED|gate-pending (case exato)"
+       return 1 ;;
+  esac
+  [ -n "$(row_get "$name" 9)" ] || { err "RECUSADO: $name não está no owned.tsv"; return 1; }
+  row_set "$name" 9 "$st" || return 1
+  echo "OK  $name -> $st"
+}
 
 # =============================================================================
 case "${1:-}" in

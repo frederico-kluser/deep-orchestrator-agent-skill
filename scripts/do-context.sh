@@ -27,14 +27,16 @@
 #
 # Exit codes:
 #   0 = ok
-#   2 = DO_MAX_PARALLEL inválido (não é inteiro positivo)
+#   2 = DO_MAX_PARALLEL inválido (não é inteiro positivo), ou SKILL_HOME não
+#       resolvido (skill incompleta — do-wt.sh ficaria inalcançável)
 #   3 = cwd não está dentro de um repositório git
 #   4 = HEAD destacado (não há branch de integração)
 #   5 = repositório sem commits
 #   6 = índice sujo (há mudanças estagiadas que não são desta execução)
-#   7 = path com caractere que quebraria o arquivo de estado
+#   7 = path ou BASE_BRANCH com caractere que quebraria o arquivo de estado
+#       (aspa simples, TAB ou newline)
 #   8 = `git rev-parse` respondeu de forma inesperada (git muito antigo/exótico)
-#   9 = colisão de namespace de branch
+#   9 = colisão de namespace de branch (nome completo ou PREFIXO)
 # =============================================================================
 
 set -uo pipefail
@@ -59,7 +61,19 @@ for a in "$@"; do
 done
 
 say() { [ "$QUIET" = 1 ] || printf '%s\n' "$*"; }
-die() { printf 'DO_ABORT %s: %s\n' "$1" "$2" >&2; exit "$1"; }
+die() {
+  # Rollback da FASE 0 (F4-07.11): até o estado ser gravado por completo,
+  # QUALQUER falha remove o run-* — um run sem env é invisível ao reuso (0.2)
+  # e acumula lixo na máquina; um env parcialmente escrito seria reutilizado
+  # corrupto por uma sessão seguinte. Guardas: DO_STATE vazio (falhas ANTES do
+  # mkdir não criaram nada) e DO_STATE forjado fora de DO_HOME.
+  if [ -n "${DO_STATE:-}" ] && [ "$DO_STATE" != "/" ] \
+     && [ "${DO_STATE#${DO_HOME:-}/}" != "$DO_STATE" ]; then
+    rm -rf "$DO_STATE" 2>/dev/null || true
+  fi
+  printf 'DO_ABORT %s: %s\n' "$1" "$2" >&2
+  exit "$1"
+}
 
 # --- (0.1) É um repositório? -------------------------------------------------
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
@@ -73,12 +87,29 @@ cd "$BASE_DIR" || die 3 "não consegui entrar em $BASE_DIR"
 # execução anterior ficariam inalcançáveis pela limpeza (que só aceita alvos
 # registrados) e intocáveis pela regra que proíbe derivar alvos de
 # `git worktree list`. Resultado: worktree + branch + lock vazando na máquina.
+# Escolha entre múltiplas pendentes: o glob run-*/env é varrido em ordem
+# ALFABÉTICA e o RUN_ID é YYYYMMDD-HHMMSS-PID — ordem alfabética = ordem
+# cronológica, então a pendente mais ANTIGA vence.
 if [ "$NEW_RUN" = 0 ]; then
   for prev in "$BASE_DIR"/.deep-orchestrator/run-*/env; do
     [ -f "$prev" ] || continue
     pend=$(awk -F'\t' 'NR>1 && $9!="REMOVED" && $9!="BLOCKED" && $9!="ORPHANED" {c++} END{print c+0}' \
              "$(dirname "$prev")/owned.tsv" 2>/dev/null || echo 0)
     [ "$pend" -gt 0 ] || continue
+    # Revalidação anti-stale (F4-07.12): o env reutilizado só é válido se a
+    # raiz-de-mundo AINDA está no MESMO branch da FASE 0 original. Se o branch
+    # mudou entre sessões (ou o HEAD foi destacado), os merges iriam para o
+    # branch errado — avisa e segue para criar execução nova (--new-run
+    # implícito) em vez de reutilizar o env obsoleto.
+    _reuse_br=$(sed -n "s/^BASE_BRANCH='\([^']*\)'.*/\1/p" "$prev")
+    _cur_br=$(git branch --show-current 2>/dev/null || true)
+    if [ -z "$_cur_br" ] || [ "$_cur_br" != "$_reuse_br" ]; then
+      say "DO_STALE: a execução em andamento pertence ao branch '$_reuse_br' e o HEAD atual"
+      say "          está em '${_cur_br:-<destacado>}' — o env reutilizado seria obsoleto."
+      say "          Criando execução NOVA (equivalente a --new-run)."
+      say ""
+      continue
+    fi
     say "DO_REUSE: execução em andamento encontrada ($pend sub-tarefa(s) pendentes)."
     say "          Reaproveitando o estado dela. Use --new-run para forçar uma nova."
     say ""
@@ -153,17 +184,33 @@ RUN_ID="$(date +%Y%m%d-%H%M%S)-$$"
 BRANCH_NS="do/$BASE_SLUG/$RUN_ID"
 PARENT_DIR=$(cd "$BASE_DIR/.." && pwd -P)
 
-# Aspas simples, TAB ou newline em path quebrariam o arquivo de estado (que usa
-# aspas simples) e o owned.tsv (que é separado por TAB).
-case "$BASE_DIR$PARENT_DIR" in
-  *\'*)               die 7 "path contém aspa simples: $BASE_DIR" ;;
-  *"$(printf '\t')"*) die 7 "path contém TAB: $BASE_DIR" ;;
-esac
+# Aspas simples, TAB ou newline em QUALQUER valor interpolado quebrariam o
+# arquivo de estado (que usa aspas simples) e o owned.tsv (que é separado por
+# TAB). A validação (F4-07.3) cobre TODAS as variáveis interpoladas no ENV_FILE:
+# os paths (BASE_DIR, PARENT_DIR, MAIN_ROOT, COMMON_DIR) e o branch de
+# integração (BASE_BRANCH) — um branch "it's" corrompia o ENV_FILE e a FASE 0
+# morria com exit 8 enganoso em vez de 7. Espaço e acento SÃO permitidos.
+for _v in BASE_DIR PARENT_DIR BASE_BRANCH MAIN_ROOT COMMON_DIR; do
+  _val=${!_v}
+  case "$_val" in
+    *\'*)     die 7 "$_v contém aspa simples: $_val" ;;
+    *"$(printf '\t')"*) die 7 "$_v contém TAB: $_val" ;;
+    *$'\n'*)  die 7 "$_v contém newline: $_val" ;;
+  esac
+done
 
 git check-ref-format --branch "$BRANCH_NS/probe" >/dev/null 2>&1 \
   || die 9 "namespace de branch inválido: $BRANCH_NS"
-git show-ref --verify --quiet "refs/heads/$BRANCH_NS" \
-  && die 9 "já existe um branch com o nome do namespace: $BRANCH_NS"
+# Colisão de PREFIXO do namespace (F4-07.4): validar só o namespace COMPLETO
+# deixa passar um branch "do/wtA" quando o namespace é "do/wtA/<run>/..." — e o
+# cmd_new falharia depois com erro genérico (refs/heads/do/wtA já é um ARQUIVO,
+# não um diretório). Verifica CADA prefixo (do, do/<slug>, do/<slug>/<run>).
+_ns="$BRANCH_NS"
+while [ -n "$_ns" ]; do
+  git show-ref --verify --quiet "refs/heads/$_ns" \
+    && die 9 "colisão de namespace: já existe um branch com o prefixo do namespace: refs/heads/$_ns"
+  case "$_ns" in */*) _ns=${_ns%/*} ;; *) _ns="" ;; esac
+done
 
 # --- (0.7) CHILD_ROOT: onde nascem as worktrees-filhas ----------------------
 # Padrão em MODO CONTIDO: container IRMÃO oculto, ao lado da worktree.
@@ -196,10 +243,17 @@ done
 
 # --- (0.8) SKILL_HOME: a casa da skill (SOMENTE LEITURA/EXECUÇÃO) -----------
 # Resolvido a partir da localização real deste script, não por adivinhação:
-# scripts/ vive na raiz da casa da skill.
-_self=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s' "${BASH_SOURCE[0]}")
-SKILL_HOME=$(cd "$(dirname "$_self")/.." && pwd -P)
+# scripts/ vive na raiz da casa da skill. readlink -f NÃO existe no macOS —
+# fallback portável: dirname + pwd -P.
+_self_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P 2>/dev/null || true)
+SKILL_HOME=""
+[ -n "$_self_dir" ] && SKILL_HOME=$(cd "$_self_dir/.." && pwd -P 2>/dev/null || true)
 [ -d "$SKILL_HOME/scripts" ] || SKILL_HOME=""
+# DO_WT é interpolado no ENV_FILE como $SKILL_HOME/scripts/do-wt.sh — vazio,
+# a FASE 3 ficaria com um DO_WT quebrado e morreria com erro confuso. Falha
+# cedo, com mensagem clara (exit 2).
+[ -n "$SKILL_HOME" ] \
+  || die 2 "não consegui resolver SKILL_HOME — scripts/ não está ao lado de do-context.sh (skill incompleta?)"
 
 # --- (0.9) Estado persistente ------------------------------------------------
 # O shell NÃO persiste entre chamadas Bash do harness. Sem este arquivo, toda
@@ -305,9 +359,11 @@ if [ -n "$MAIN_ROOT" ]; then
 fi
 
 # Inventário de worktrees de TERCEIROS — só para o relatório final. NUNCA vira alvo.
+# grep -vxF (F4-07.13): -vF faria substring — "$BASE_DIR" "main" casaria com um
+# path "main2"; -x exige linha IGUAL ao caminho inteiro.
 gwt worktree list --porcelain -z 2>/dev/null | tr '\0' '\n' \
   | awk '/^worktree /{print substr($0,10)}' \
-  | grep -vF -e "$BASE_DIR" -e "$CHILD_ROOT" > "$DO_STATE/foreign-worktrees.txt" || true
+  | grep -vxF -e "$BASE_DIR" -e "$CHILD_ROOT" > "$DO_STATE/foreign-worktrees.txt" || true
 
 # --- (0.11) Avisos não-bloqueantes ------------------------------------------
 case "$MODE:$BASE_BRANCH" in
@@ -315,7 +371,6 @@ case "$MODE:$BASE_BRANCH" in
     say "DO_WARN: MODE=contido, mas BASE_BRANCH=$BASE_BRANCH. Os squash-commits irão"
     say "         para ESTE branch (o HEAD desta worktree). Registre no relatório." ;;
 esac
-[ -n "$SKILL_HOME" ] || say "DO_WARN: SKILL_HOME não resolvido — siga SEM pesquisa web (não dispare R7)."
 
 say "FASE 0 OK"
 say "  MODE          = $MODE"
