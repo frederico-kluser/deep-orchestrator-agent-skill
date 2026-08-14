@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>deep-orchestrator — Auditoria completa e plano de melhorias</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --background: oklch(0.97 0.005 260);
+  --foreground: oklch(0.18 0.02 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.02 260);
+  --primary: oklch(0.50 0.25 280);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.50 0.18 180);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.92 0.01 260);
+  --muted-foreground: oklch(0.40 0.02 260);
+  --accent: oklch(0.60 0.22 50);
+  --accent-foreground: oklch(0.18 0.02 260);
+  --destructive: oklch(0.50 0.25 25);
+  --destructive-foreground: oklch(1 0 0);
+  --success: oklch(0.45 0.20 150);
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.55 0.18 85);
+  --warning-foreground: oklch(0.18 0.02 260);
+  --border: oklch(0.88 0.01 260);
+  --input: oklch(0.92 0.01 260);
+  --ring: oklch(0.50 0.25 280);
+  --code-bg: oklch(0.92 0.01 260);
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-display: ui-serif, Georgia, 'Times New Roman', serif;
+  --radius: 0.625rem;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  line-height: 1.65;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+.container { max-width: 1080px; margin: 0 auto; padding: 64px 24px; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground);
+}
+header h1 {
+  font-family: var(--font-display); font-size: 2rem; font-weight: 500;
+  margin: 8px 0 24px; line-height: 1.2;
+}
+.prompt-box {
+  background: var(--muted); border: 1.5px solid var(--border);
+  border-radius: var(--radius); padding: 16px 24px;
+}
+.prompt-label {
+  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground);
+  display: block; margin-bottom: 4px;
+}
+.prompt-box p { font-size: 0.92rem; color: var(--muted-foreground); line-height: 1.55; }
+.summary-strip {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px; margin: 32px 0;
+}
+.stat-card {
+  border: 1.5px solid var(--border); border-radius: var(--radius);
+  padding: 16px 24px; text-align: center; background: var(--card);
+}
+.stat-value {
+  font-family: var(--font-display); font-size: 1.8rem; font-weight: 500;
+  display: block; color: var(--foreground);
+}
+.stat-value.crit { color: var(--destructive); }
+.stat-value.ok { color: var(--success); }
+.stat-label {
+  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground);
+  margin-top: 4px; display: block;
+}
+section { margin-top: 64px; }
+.section-header {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 24px; padding-bottom: 8px; border-bottom: 1.5px solid var(--border);
+}
+.section-number { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600; color: var(--primary); }
+.section-header h2 { font-family: var(--font-display); font-size: 1.4rem; font-weight: 500; }
+.section-intro { font-size: 0.95rem; color: var(--muted-foreground); max-width: 65ch; margin-bottom: 24px; }
+.risk-grid { border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.risk-row {
+  display: grid; grid-template-columns: 1.4fr auto 1.6fr;
+  gap: 24px; padding: 16px 24px; align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.risk-row:last-child { border-bottom: none; }
+.risk-name { font-weight: 500; font-size: 0.92rem; }
+.risk-name code { font-family: var(--font-mono); font-size: 0.8rem; color: var(--primary); }
+.risk-mitigation { font-size: 0.88rem; color: var(--muted-foreground); }
+.risk-mitigation code { font-family: var(--font-mono); font-size: 0.78rem; }
+.badge {
+  font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600;
+  padding: 2px 8px; border-radius: calc(var(--radius) - 4px);
+  text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+}
+.badge.high { background: color-mix(in oklab, var(--destructive) 15%, transparent); color: var(--destructive); }
+.badge.med { background: color-mix(in oklab, var(--warning) 15%, transparent); color: var(--warning); }
+.badge.low { background: color-mix(in oklab, var(--success) 15%, transparent); color: var(--success); }
+.callout {
+  border-left: 3px solid var(--primary); padding: 16px 24px; margin: 16px 0;
+  background: var(--card); border-radius: 0 var(--radius) var(--radius) 0;
+}
+.callout h3 { font-family: var(--font-display); font-size: 1.05rem; font-weight: 500; margin-bottom: 4px; }
+.callout p { font-size: 0.9rem; color: var(--muted-foreground); line-height: 1.55; }
+.decide-with {
+  font-family: var(--font-mono); font-size: 0.72rem; color: var(--primary);
+  font-weight: 500; display: block; margin-top: 8px;
+}
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.tag {
+  font-family: var(--font-mono); font-size: 0.68rem; padding: 2px 8px;
+  border-radius: calc(var(--radius) - 4px); background: var(--muted); color: var(--muted-foreground);
+}
+.tag.highlight { background: color-mix(in oklab, var(--primary) 12%, transparent); color: var(--primary); }
+.diagram-panel {
+  border: 1.5px solid var(--border); border-radius: var(--radius);
+  padding: 24px; margin: 24px 0; background: var(--card);
+}
+.diagram-caption {
+  font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted-foreground);
+  display: block; margin-top: 8px; text-align: center;
+}
+.code-panel {
+  background: var(--code-bg); border-radius: var(--radius); padding: 24px;
+  overflow-x: auto; margin: 16px 0; border: 1.5px solid var(--border);
+}
+.code-label {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted-foreground);
+  display: block; margin-bottom: 8px;
+}
+.code-panel pre { margin: 0; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.55; color: var(--foreground); }
+.code-panel .kw { color: var(--primary); }
+.code-panel .fn { color: var(--accent); }
+.code-panel .str { color: var(--success); }
+.code-panel .cm { color: var(--muted-foreground); font-style: italic; }
+.code-panel .num { color: var(--warning); }
+.code-panel .bad { color: var(--destructive); }
+.milestones { display: flex; flex-direction: column; gap: 0; }
+.milestone { display: grid; grid-template-columns: 120px 28px 1fr; gap: 0 18px; }
+.milestone .when { text-align: right; font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted-foreground); padding-top: 4px; }
+.milestone .dot-col { display: flex; flex-direction: column; align-items: center; }
+.milestone .dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--card); border: 3px solid var(--primary); flex-shrink: 0;
+}
+.milestone .line { width: 2px; flex: 1; background: var(--border); margin: 4px 0; }
+.milestone:last-child .line { display: none; }
+.milestone .body { padding-bottom: 36px; }
+.milestone .body h3 { font-family: var(--font-display); font-size: 1.15rem; font-weight: 500; margin-bottom: 4px; }
+.milestone .body p { font-size: 0.88rem; color: var(--muted-foreground); max-width: 620px; margin-bottom: 10px; }
+details { border: 1.5px solid var(--border); border-radius: var(--radius); margin: 16px 0; background: var(--card); }
+summary { font-family: var(--font-sans); font-weight: 500; padding: 16px 24px; cursor: pointer; list-style: none; }
+summary::before { content: '▸'; display: inline-block; margin-right: 8px; transition: transform 0.2s; }
+details[open] summary::before { transform: rotate(90deg); }
+.details-body { padding: 0 24px 24px; }
+.details-body li { font-size: 0.88rem; color: var(--muted-foreground); margin-bottom: 8px; margin-left: 18px; }
+.details-body code { font-family: var(--font-mono); font-size: 0.78rem; color: var(--primary); }
+.ok-list { list-style: none; }
+.ok-list li {
+  font-size: 0.9rem; color: var(--muted-foreground); padding: 10px 0 10px 28px;
+  border-bottom: 1px solid var(--border); position: relative;
+}
+.ok-list li:last-child { border-bottom: none; }
+.ok-list li::before {
+  content: '✓'; position: absolute; left: 4px; color: var(--success); font-weight: 600;
+}
+.ok-list strong { color: var(--foreground); font-weight: 500; }
+.ok-list code { font-family: var(--font-mono); font-size: 0.78rem; color: var(--primary); }
+.sources { font-size: 0.8rem; color: var(--muted-foreground); line-height: 1.9; }
+.sources a { color: var(--primary); text-decoration: none; word-break: break-all; }
+.sources a:hover { text-decoration: underline; }
+footer {
+  margin-top: 80px; padding-top: 24px; border-top: 1.5px solid var(--border);
+  font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted-foreground);
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <span class="eyebrow">Plano de melhorias · deep-orchestrator v3.2.0</span>
+  <h1>Auditoria completa: erros, paralelismo ilusório e o redesenho do fim de onda</h1>
+  <div class="prompt-box">
+    <span class="prompt-label">Brief</span>
+    <p>Analisar o projeto completo e pesquisar a fundo: pontos de melhoria, pontos errados, paralelizar ao máximo, pesquisa web via surf/Brave sempre que necessário, quebra de tarefas em ondas, e — para cada onda terminada — <strong>duas etapas em paralelo: validação de código E criação de testes</strong>, em vez de só testes.</p>
+  </div>
+</header>
+
+<div class="summary-strip">
+  <div class="stat-card"><span class="stat-value crit">6</span><span class="stat-label">Críticos reproduzidos</span></div>
+  <div class="stat-card"><span class="stat-value">15</span><span class="stat-label">Altos</span></div>
+  <div class="stat-card"><span class="stat-value">25+</span><span class="stat-label">Médios / baixos</span></div>
+  <div class="stat-card"><span class="stat-value">8</span><span class="stat-label">Agentes auditores</span></div>
+  <div class="stat-card"><span class="stat-value ok">50/50</span><span class="stat-label">Testes passando</span></div>
+  <div class="stat-card"><span class="stat-value">2</span><span class="stat-label">Pesquisas web ao vivo</span></div>
+</div>
+
+<!-- ============ 01 CRÍTICOS ============ -->
+<section>
+  <div class="section-header"><span class="section-number">01</span><h2>Achados críticos — todos confirmados por reprodução</h2></div>
+  <p class="section-intro">Bugs executados e verificados em fixtures de /tmp, chamadas ao vivo às APIs, ou leitura cruzada direta do SKILL.md. Cada um quebra uma promessa central da skill.</p>
+
+  <div class="risk-grid">
+    <div class="risk-row">
+      <div class="risk-name"><code>git clean -fdXq</code> no COMMIT-FINAL apaga arquivos do usuário</div>
+      <div><span class="badge high">Crítico</span></div>
+      <div class="risk-mitigation"><code>SKILL.md:757-759</code> manda limpar ignorados em <code>$BASE_DIR</code> — a própria R8(d) proíbe (<code>SKILL.md:209-212</code>). Sem baseline de ignorados, <code>-fdX</code> apaga <code>node_modules</code>, <code>.venv</code>, <code>.env.local</code> preexistentes. <strong>Fix:</strong> baseline com <code>--ignored</code> na FASE 0; limpar só ignorados novos.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Testing subwaves "assíncronas" são síncronas — overlap real: zero</div>
+      <div><span class="badge high">Crítico</span></div>
+      <div class="risk-mitigation">A barreira do passo 0 (<code>SKILL.md:463-465</code>) obriga a onda N+1 a esperar os testes da onda N — contradiz <code>SKILL.md:489-491</code> e <code>:673-674</code>. O paralelismo vendido não existe. <strong>Fix:</strong> redesenho da seção 03.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name"><code>search.sh:327</code> quebra o Tier 1 (surf) em toda chamada</div>
+      <div><span class="badge high">Crítico</span></div>
+      <div class="risk-mitigation">Passa <code>--timeout 30</code> (segundos); o surf-search-normal interpreta como <strong>milissegundos</strong> → aborta em ~30ms, sempre. A flag certa é <code>--budget-ms</code>. <strong>Fix:</strong> <code>args+=( --budget-ms "$(( TIMEOUT * 1000 ))" )</code>.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Tier 3 (DuckDuckGo) "sempre funciona" — mas retorna vazio</div>
+      <div><span class="badge high">Crítico</span></div>
+      <div class="risk-mitigation">Verificado ao vivo: HTTP 202 bot-challenge, <code>results: []</code> com exit 0 para queries reais. <code>surf-free-skill</code> (Wikipedia full-text, keyless, já instalado) nunca é chamado. <strong>Fix:</strong> Tier 3 = Wikipedia → DDG → (opcional) Tavily.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name"><code>do-wt.sh undo</code> com <code>reset --hard</code> destrói trabalho do usuário</div>
+      <div><span class="badge high">Crítico</span></div>
+      <div class="risk-mitigation"><code>do-wt.sh:194-204</code>: a guarda só exige "status == baseline", mas o baseline pode conter modificações do usuário. Reproduzido: <code>undo</code> apagou edição não commitada. <strong>Fix:</strong> <code>reset --hard</code> só se o status tiver exclusivamente linhas <code>??</code>; senão, <code>revert</code>.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Template do EXPLAINER tem conteúdo hardcoded de outra execução</div>
+      <div><span class="badge high">Crítico</span></div>
+      <div class="risk-mitigation"><code>templates/html-explainer.html:467-577</code> — seções Antes/Depois, Impacto e Novas capacidades descrevem a execução v3.0 <strong>fora</strong> dos slots. Todo EXPLAINER gerado sai com dados fabricados. <strong>Fix:</strong> mover essas seções para dentro de slots.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 GARGALO ============ -->
+<section>
+  <div class="section-header"><span class="section-number">02</span><h2>O gargalo central: o fim de onda é serial</h2></div>
+  <p class="section-intro">A auditoria de paralelismo convergiu para um único ponto: o passo 0 da onda seguinte. A promessa "testes rodam ENQUANTO a próxima onda executa" é estruturalmente falsa — entre o disparo (passo 10) e a barreira (passo 0) não existe trabalho nenhum.</p>
+
+  <div class="diagram-panel">
+    <svg viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px">
+      <style>
+        .box { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
+        .hot { fill: color-mix(in oklab, var(--destructive) 8%, transparent); stroke: var(--destructive); stroke-width: 1.5; }
+        .bg  { fill: color-mix(in oklab, var(--primary) 8%, transparent); stroke: var(--primary); stroke-width: 1.5; stroke-dasharray: 5 4; }
+        .t { font-family: var(--font-sans); font-size: 12.5px; font-weight: 600; fill: var(--foreground); }
+        .s { font-family: var(--font-mono); font-size: 10px; fill: var(--muted-foreground); }
+        .sd { font-family: var(--font-mono); font-size: 10px; fill: var(--destructive); }
+        .e { stroke: var(--muted-foreground); stroke-width: 1.5; }
+      </style>
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted-foreground)"/>
+        </marker>
+        <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--destructive)"/>
+        </marker>
+      </defs>
+      <rect x="16" y="70" width="130" height="52" rx="10" class="box"/>
+      <text x="81" y="92" text-anchor="middle" class="t">Onda N</text>
+      <text x="81" y="108" text-anchor="middle" class="s">features + merges</text>
+      <line x1="146" y1="96" x2="180" y2="96" class="e" marker-end="url(#a)"/>
+      <rect x="184" y="70" width="150" height="52" rx="10" class="bg"/>
+      <text x="259" y="92" text-anchor="middle" class="t">passo 10</text>
+      <text x="259" y="108" text-anchor="middle" class="s">dispara test-ondaN-*</text>
+      <line x1="334" y1="96" x2="368" y2="96" class="e" marker-end="url(#a)"/>
+      <rect x="372" y="70" width="170" height="52" rx="10" class="hot"/>
+      <text x="457" y="92" text-anchor="middle" class="t">passo 0: BARREIRA</text>
+      <text x="457" y="108" text-anchor="middle" class="sd">aguarda testes da onda N</text>
+      <line x1="542" y1="96" x2="576" y2="96" class="e" marker-end="url(#a)"/>
+      <rect x="580" y="70" width="124" height="52" rx="10" class="box"/>
+      <text x="642" y="92" text-anchor="middle" class="t">Onda N+1</text>
+      <text x="642" y="108" text-anchor="middle" class="s">só então começa</text>
+      <path d="M259,122 C259,160 380,160 440,128" fill="none" stroke="var(--destructive)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ad)"/>
+      <text x="330" y="180" text-anchor="middle" class="sd">overlap real: 0 segundos — a janela "background" são só os instantes entre passo 10 e passo 0</text>
+    </svg>
+    <span class="diagram-caption">HOJE — fluxo efetivo: [onda N] → [testes N] → [onda N+1], sequencial (SKILL.md:463-465 vs. :489-491)</span>
+  </div>
+
+  <div class="code-panel">
+    <span class="code-label">A contradição, lado a lado — SKILL.md</span>
+    <pre><code><span class="cm"># passo 0, substep BARREIRA (linha 463-465)</span>
+<span class="bad">"Aguarde TODOS os sub-agentes de teste da onda anterior terminarem"</span>
+
+<span class="cm"># nota no MESMO passo (linha 489-491)</span>
+<span class="str">"Testing subwaves NUNCA bloqueiam a execução da onda atual"</span>
+
+<span class="cm"># passo 10 (linha 673-674)</span>
+<span class="str">"eles rodarão ENQUANTO a próxima onda executa"</span> <span class="cm">← impossível com a barreira acima</span></code></pre>
+  </div>
+
+  <div class="risk-grid">
+    <div class="risk-row">
+      <div class="risk-name">Gate roda em <code>$BASE_DIR</code> = seção crítica global</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">O merge é segundos; o gate (build+testes) são minutos — e como roda na working tree de <code>$BASE_DIR</code> (<code>SKILL.md:596</code>), nada mais pode acontecer durante ele. O gargalo do "um a um" é o gate, não o merge.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">REPLAN e revisores adversariais disparam em série</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">O REVISOR DE PLANO só depende dos handoffs (já disponíveis na barreira), mas está no caminho crítico (<code>SKILL.md:544</code>); os N revisores do passo 6 não têm <code>run_in_background</code> declarado (<code>SKILL.md:572-573</code>).</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Bugs achados por testes morrem no handoff</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">A seção "Bugs encontrados" (<code>SKILL.md:1053-1055</code>) não é consumida por nenhum passo; o REVISOR DE PLANO é proibido de ver testes (<code>:565-568</code>). Bug real some quando a worktree é destruída. Loop aberto.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Sem teto de concorrência por onda</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">Features não têm limite (só testes: 3/onda). Pesquisa: Claude Code tem cap de ~20 sub-agentes concorrentes; fan-out grande estoura rate limit e o harness <em>derruba agentes no meio do run</em>. Anthropic recomenda 3-5.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 REDESENHO ============ -->
+<section>
+  <div class="section-header"><span class="section-number">03</span><h2>O redesenho: duas subwaves paralelas pós-onda</h2></div>
+  <p class="section-intro">Responde diretamente ao pedido: ao fim de cada onda, <strong>validação de código</strong> e <strong>criação de testes</strong> disparam juntas, em background, e são fechadas no slot ocioso da onda seguinte — enquanto os agentes de feature já estão rodando. Viável <strong>sem mudar código</strong>: <code>do-wt.sh new validation</code> já funciona (kind é coluna livre) e o diff integrado sai do <code>pre_merge_sha</code>, o mesmo mecanismo de <code>wave-files</code>.</p>
+
+  <div class="diagram-panel">
+    <svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px">
+      <style>
+        .box { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
+        .new { fill: color-mix(in oklab, var(--primary) 8%, transparent); stroke: var(--primary); stroke-width: 1.5; }
+        .ok  { fill: color-mix(in oklab, var(--success) 8%, transparent); stroke: var(--success); stroke-width: 1.5; }
+        .t { font-family: var(--font-sans); font-size: 12px; font-weight: 600; fill: var(--foreground); }
+        .s { font-family: var(--font-mono); font-size: 9.5px; fill: var(--muted-foreground); }
+        .sp { font-family: var(--font-mono); font-size: 9.5px; fill: var(--primary); }
+        .sg { font-family: var(--font-mono); font-size: 9.5px; fill: var(--success); }
+        .lane { font-family: var(--font-mono); font-size: 10px; font-weight: 600; fill: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.06em; }
+        .e { stroke: var(--muted-foreground); stroke-width: 1.5; }
+        .ep { stroke: var(--primary); stroke-width: 1.5; stroke-dasharray: 5 4; }
+        .eg { stroke: var(--success); stroke-width: 1.5; stroke-dasharray: 5 4; }
+      </style>
+      <defs>
+        <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted-foreground)"/>
+        </marker>
+        <marker id="bp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--primary)"/>
+        </marker>
+        <marker id="bg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--success)"/>
+        </marker>
+      </defs>
+
+      <text x="16" y="30" class="lane">Caminho crítico (orquestrador)</text>
+      <rect x="16" y="44" width="140" height="50" rx="10" class="box"/>
+      <text x="86" y="65" text-anchor="middle" class="t">Onda N</text>
+      <text x="86" y="81" text-anchor="middle" class="s">merges + gate síncrono</text>
+      <line x1="156" y1="69" x2="186" y2="69" class="e" marker-end="url(#b)"/>
+      <rect x="190" y="44" width="150" height="50" rx="10" class="new"/>
+      <text x="265" y="65" text-anchor="middle" class="t">passo 10 (novo)</text>
+      <text x="265" y="81" text-anchor="middle" class="sp">dispara 3 subwaves em bg</text>
+      <line x1="340" y1="69" x2="370" y2="69" class="e" marker-end="url(#b)"/>
+      <rect x="374" y="44" width="170" height="50" rx="10" class="box"/>
+      <text x="459" y="65" text-anchor="middle" class="t">Onda N+1 dispara</text>
+      <text x="459" y="81" text-anchor="middle" class="s">features SEM esperar N</text>
+      <line x1="544" y1="69" x2="574" y2="69" class="e" marker-end="url(#b)"/>
+      <rect x="578" y="44" width="126" height="50" rx="10" class="ok"/>
+      <text x="641" y="65" text-anchor="middle" class="t">slot ocioso</text>
+      <text x="641" y="81" text-anchor="middle" class="sg">fecha subwaves N</text>
+
+      <text x="16" y="150" class="lane">Background (durante a onda N+1)</text>
+      <rect x="60" y="164" width="180" height="56" rx="10" class="new"/>
+      <text x="150" y="186" text-anchor="middle" class="t">val-ondaN-gate</text>
+      <text x="150" y="202" text-anchor="middle" class="sp">build + lint + typecheck + suite</text>
+      <rect x="270" y="164" width="180" height="56" rx="10" class="new"/>
+      <text x="360" y="186" text-anchor="middle" class="t">revisor do diff integrado</text>
+      <text x="360" y="202" text-anchor="middle" class="sp">sem worktree — falhas de integração</text>
+      <rect x="480" y="164" width="180" height="56" rx="10" class="box"/>
+      <text x="570" y="186" text-anchor="middle" class="t">test-ondaN-* (≤3)</text>
+      <text x="570" y="202" text-anchor="middle" class="s">criação de testes (inalterado)</text>
+
+      <line x1="230" y1="94" x2="160" y2="160" class="ep" marker-end="url(#bp)"/>
+      <line x1="265" y1="94" x2="340" y2="160" class="ep" marker-end="url(#bp)"/>
+      <line x1="300" y1="94" x2="540" y2="160" class="ep" marker-end="url(#bp)"/>
+      <line x1="620" y1="164" x2="648" y2="98" class="eg" marker-end="url(#bg)"/>
+      <line x1="360" y1="220" x2="360" y2="248" class="eg" marker-end="url(#bg)"/>
+      <line x1="360" y1="252" x2="630" y2="252" class="eg"/>
+      <line x1="630" y1="252" x2="630" y2="98" class="eg" marker-end="url(#bg)"/>
+      <text x="495" y="246" text-anchor="middle" class="sg">handoffs de validação + testes → fixes prioritários kind=fix na onda N+1</text>
+    </svg>
+    <span class="diagram-caption">PROPOSTO — subwaves de validação e testes rodam durante a onda N+1; fechamento acontece no slot ocioso, não numa barreira</span>
+  </div>
+
+  <div class="risk-grid">
+    <div class="risk-row">
+      <div class="risk-name">1 · Validation subwave: <code>val-ondaN-gate</code></div>
+      <div><span class="badge low">Novo</span></div>
+      <div class="risk-mitigation">Worktree própria (obrigatória — gate assíncrono em <code>$BASE_DIR</code> colidiria com os merges), <strong>somente-leitura</strong>: build completo, linter, typecheck, suíte existente, com comando + saída real como evidência. Revisor do diff integrado (sem worktree) procura falhas <em>entre</em> sub-agentes — complementar ao passo 6, que só vê diffs individuais.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">2 · Fechamento duplo no slot ocioso</div>
+      <div><span class="badge low">Novo</span></div>
+      <div class="risk-mitigation">O passo 0 move-se para <strong>depois</strong> do disparo dos features da onda atual (entre passos 3-4). VERDE → marca no TASK_PLAN e limpa <code>val-ondaN-gate</code> sem merge. VERMELHO → achados viram <code>ondaN+1-fix-*</code> (kind=fix) prioritários — fecha o loop dos bugs de teste também.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">3 · FIX-FINAL no COMMIT-FINAL</div>
+      <div><span class="badge low">Novo</span></div>
+      <div class="risk-mitigation">Hoje o COMMIT-FINAL não tem remédio para validação reprovada na última onda — commitaria código reprovado. Novo fluxo: <code>fix-final-*</code> → merge + gate → re-valida 1× → se persistir, <code>do-wt.sh undo</code> + degradação documentada no relatório.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">4 · Gate em worktree-snapshot (kind=integration)</div>
+      <div><span class="badge med">Alto impacto</span></div>
+      <div class="risk-mitigation">Após cada merge (segundos), o gate roda numa worktree efêmera no SHA pós-merge, <strong>em background</strong> — o próximo merge não espera. Falha tardia → <code>undo</code> via revert funciona com HEAD avançado (<code>do-wt.sh:184-188</code>). Alternativa simples: gate 2-tier (build+lint entre merges; suite completa no fim da onda).</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">5 · Teto de concorrência + REPLAN/revisores em background</div>
+      <div><span class="badge med">Alto impacto</span></div>
+      <div class="risk-mitigation"><code>MAX_PARALLEL_AGENTS</code> ≈ 5 features/onda, ≤10 agentes in-flight somando subwaves e revisores. REVISOR DE PLANO dispara em background logo após a barreira (só é consumido antes da próxima onda); revisores adversariais todos em paralelo — mudanças de uma frase no SKILL.md.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 BUSCA ============ -->
+<section>
+  <div class="section-header"><span class="section-number">04</span><h2>Busca 3-tier: o que quebrou e a cadeia proposta</h2></div>
+  <p class="section-intro">Verificado ao vivo contra as APIs reais. A arquitetura em camadas está certa (é a prática recomendada para rate limits); a execução tem três furos: o Tier 1 nunca funciona via search.sh (bug do timeout), o Tier 3 responde mas raramente serve, e a Brave mudou de modelo comercial.</p>
+
+  <div class="diagram-panel">
+    <svg viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:720px">
+      <style>
+        .box { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
+        .new { fill: color-mix(in oklab, var(--primary) 8%, transparent); stroke: var(--primary); stroke-width: 1.5; }
+        .t { font-family: var(--font-sans); font-size: 11.5px; font-weight: 600; fill: var(--foreground); }
+        .s { font-family: var(--font-mono); font-size: 9px; fill: var(--muted-foreground); }
+        .sp { font-family: var(--font-mono); font-size: 9px; fill: var(--primary); }
+        .e { stroke: var(--muted-foreground); stroke-width: 1.5; }
+      </style>
+      <defs>
+        <marker id="c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--muted-foreground)"/>
+        </marker>
+      </defs>
+      <rect x="12" y="50" width="126" height="56" rx="10" class="box"/>
+      <text x="75" y="72" text-anchor="middle" class="t">T1 · surf-skill</text>
+      <text x="75" y="88" text-anchor="middle" class="s">fix: --budget-ms</text>
+      <line x1="138" y1="78" x2="150" y2="78" class="e" marker-end="url(#c)"/>
+      <rect x="154" y="50" width="126" height="56" rx="10" class="box"/>
+      <text x="217" y="72" text-anchor="middle" class="t">T2 · Brave API</text>
+      <text x="217" y="88" text-anchor="middle" class="s">metered $5/mês</text>
+      <line x1="280" y1="78" x2="292" y2="78" class="e" marker-end="url(#c)"/>
+      <rect x="296" y="50" width="126" height="56" rx="10" class="new"/>
+      <text x="359" y="72" text-anchor="middle" class="t">T3a · Wikipedia</text>
+      <text x="359" y="88" text-anchor="middle" class="sp">keyless · testada 200</text>
+      <line x1="422" y1="78" x2="434" y2="78" class="e" marker-end="url(#c)"/>
+      <rect x="438" y="50" width="126" height="56" rx="10" class="box"/>
+      <text x="501" y="72" text-anchor="middle" class="t">T3b · DDG</text>
+      <text x="501" y="88" text-anchor="middle" class="s">instant answers só</text>
+      <line x1="564" y1="78" x2="576" y2="78" class="e" marker-end="url(#c)"/>
+      <rect x="580" y="50" width="128" height="56" rx="10" class="new"/>
+      <text x="644" y="72" text-anchor="middle" class="t">T3c · Tavily</text>
+      <text x="644" y="88" text-anchor="middle" class="sp">opcional · 1k/mês free</text>
+    </svg>
+    <span class="diagram-caption">Cadeia de fallback proposta — Tier 3 reforçado com Wikipedia (keyless, verificado ao vivo) e Tavily opcional (skill já existe em ~/.agents/skills/tavily)</span>
+  </div>
+
+  <div class="risk-grid">
+    <div class="risk-row">
+      <div class="risk-name">Brave: fim do free tier → risco de cobrança real</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">Desde fev/2026: planos metered ($5/1K) com $5/mês de créditos e <strong>cartão cobrado ao exceder</strong>. Um loop de retries agora custa dinheiro — o check pré-onda (<code>--fail-fast</code>) vira proteção financeira, não só operacional. Endpoint e headers atuais seguem corretos (testado: HTTP 200).</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name"><code>X-Credit-Remaining</code> não existe na resposta real</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">O que existe: <code>X-RateLimit-{Limit,Remaining,Reset}</code> (par "por segundo, por mês"; 2º valor = quota mensal — hoje 356/2000 nesta conta). O código já faz fallback e sobrevive; comentários e docs descrevem um mecanismo inexistente.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Flags mortas e saída sem schema estável</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation"><code>--max-evolutions</code> é parseada e nunca usada no search.sh; <code>--dev-mode</code> é no-op no Tier 1; saída do Tier 1 flui sem captura (polui stdout, corrompe <code>--json</code>); schema do JSON muda conforme o tier. Normalizar o envelope ou documentar por tier.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Check do Tier 1 é raso; pesquisa sem heurística de fonte</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation"><code>check-search-credits.sh</code> só testa presença do binário (sem keys.json/OpenRouter → falso "ALL SYSTEMS GO"). Pesquisa Anthropic: agentes preferem content farms de SEO — adicionar ao template do sub-agente: "prefira documentação oficial e fontes primárias"; e buscas paralelas (3+ chamadas <code>search.sh</code> no mesmo bloco).</div>
+    </div>
+  </div>
+
+  <div class="code-panel">
+    <span class="code-label">search.sh:327 — o bug de uma linha que desliga o Tier 1</span>
+    <pre><code><span class="cm"># hoje — TIMEOUT=30 (segundos) vira 30 MILISSEGUNDOS no surf</span>
+args+=( <span class="bad">--timeout</span> <span class="str">"$TIMEOUT"</span> )          <span class="cm"># ctx.timeout é em ms → aborta toda request</span>
+
+<span class="cm"># proposto — flag real do surf-search-normal v5.4.0</span>
+args+=( <span class="fn">--budget-ms</span> <span class="str">"$(( TIMEOUT * 1000 ))"</span> )</code></pre>
+  </div>
+</section>
+
+<!-- ============ 05 ALTOS ============ -->
+<section>
+  <div class="section-header"><span class="section-number">05</span><h2>Demais achados altos — SKILL.md, scripts, prompts, docs</h2></div>
+
+  <div class="risk-grid">
+    <div class="risk-row">
+      <div class="risk-name">REPLAN ambíguo + convergência sem teto</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation"><code>SKILL.md:551-560</code>: o ramo "novas sub-tarefas" não diz para onde ir — um executor literal pode pular revisão/merge da onda atual. E "ondas ILIMITADAS" + R3 = loop infinito possível. Fix: "em AMBOS os modos, prossiga ao passo 6" + válvula (teto de ~10 ondas ou 2 REPLANs sem novidades → convergência forçada documentada).</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Gate invocado ~10× e nunca definido</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">"RODE O GATE: build + testes + linter" (<code>SKILL.md:596</code>) depende de inferência ad hoc a cada chamada. Fix: passo novo na FASE 1 detecta os comandos (package.json/Makefile/pyproject) e registra no TASK_PLAN.md — o gate é sempre o trio registrado.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Frontmatter lista ~15 ferramentas inexistentes</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation"><code>allowed-tools</code> (<code>SKILL.md:34-56</code>) cita <code>web_search</code>, <code>ffgrep</code>, <code>project_report</code>… — nenhuma existe no Claude Code (plataforma declarada no README). Harness estrito rejeita a skill; harness leniente torna R1 só prosa. Alinhar às ferramentas reais.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name"><code>stage-delta</code> perde arquivos novos da execução</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation"><code>do-wt.sh:366</code> + <code>do-context.sh:269</code>: sem <code>--untracked-files=all</code>, um diretório <code>?? docs/</code> preexistente colapsa numa linha e arquivos NOVOS criados dentro dele são excluídos do commit — silenciosamente. Fix: baseline e status com <code>-uall</code>.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">README raiz parou na v3.0.0</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">Cita <code>check-brave-credits.sh</code> (deprecated), diz que o surf-skill "foi removido" (foi reintroduzido como Tier 1), omite <code>search.sh</code> da árvore, exige BRAVE_API_KEY (com Tier 3 é opcional). O 3-tier entrou sem bump de versão. Fix: v3.3.0 + seção de novidades + sincronizar com <code>scripts/README.md</code> (que está correto).</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Prompts ECC ensinam padrões proibidos</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">Exemplos usam namespace <code>wt/</code> (abolido pela R6) e base <code>main</code> (proibido pela R8); ainda mandam sub-agentes "disparar surf-research-skill" (substituído por <code>search.sh</code>); clone-and-analyze clona repo dentro da worktree (vira gitlink no squash-merge); memory vault <code>.ecc/</code> vazaria para o histórico do repo-alvo.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Testes derivados do diff = viés de confirmação</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">O test-agent recebe <code>{{WAVE_DIFF}}</code> como fonte primária (<code>SKILL.md:978-982</code>). A literatura (arXiv 2605.25665) manda derivar comportamento do <strong>contrato/tarefa</strong> — o mesmo do implementador. Fix: fonte primária = tarefa + <code>{{FALSIFIABLE_QUESTIONS}}</code>; diff vira referência.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">Lockfile é singleton emergente</div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation">R9 permite que qualquer sub-agente adicione dependência — N agentes na mesma onda = conflito de lockfile não coberto pelo mapa de propriedade. Fix: no máximo 1 agente/onda adiciona deps; demais registram no handoff e a adição entra no COMMIT PREP da onda seguinte.</div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-name">test-contencao.sh: path hardcoded + cobertura zero de <code>undo</code></div>
+      <div><span class="badge med">Alto</span></div>
+      <div class="risk-mitigation"><code>SKILL=/home/ondokai/...</code> (linha 4) só roda na máquina do autor; sem trap, deixa labs órfãos em /tmp; o comando mais destrutivo (<code>undo</code>, onde está o crítico #5) não tem nenhuma asserção — nem conflito de squash nem <code>wave-files</code>.</div>
+    </div>
+  </div>
+
+  <details>
+    <summary>Médios e baixos selecionados (25+ achados nos relatórios completos)</summary>
+    <div class="details-body">
+      <ul>
+        <li><code>check-search-credits.sh:437</code> — regex rejeita HTTP 403 do DDG → exit 2 falso possível; <code>--timeout</code> sem valor quebra com <code>unbound variable</code>.</li>
+        <li><code>check-brave-credits.sh</code> — cache ignora <code>--fail-fast</code>; usage contradiz exit codes reais.</li>
+        <li><code>brave-search.sh:497</code> — glob expansion em <code>words=( $q )</code> (query com <code>*</code> vira arquivos do cwd).</li>
+        <li><code>owned.tsv</code> sem <code>flock</code> — lost update quando marks/merges paralelos chegarem (objetivo declarado de paralelismo).</li>
+        <li>Re-merge após conflito de squash é recusado pela própria guarda de índice — mensagem enganosa.</li>
+        <li>FASE 0: validação de caracteres não cobre newline nem <code>BASE_BRANCH</code>; colisão de prefixo de namespace não detectada; exit 6 omitido da lista diagnóstica.</li>
+        <li>R7 para tudo quando nenhum tier responde — mesmo tarefa puramente local. Condicionar a "a tarefa exige pesquisa".</li>
+        <li>Contradição "script ausente": R7 diz seguir <em>com</em> fallback DDG; FASE 1 passo 8 diz seguir <em>sem</em> pesquisa web.</li>
+        <li><code>search-prompts.md</code> órfão — SKILL.md nunca aponta sub-agentes para ele; documenta só <code>brave-search.sh</code>.</li>
+        <li><code>research/</code> é artefato histórico com pendência não executada (corrigir "~$5/mês" no README); <code>EXPLAINER.html</code> da raiz é stale (macOS, fora do padrão do template).</li>
+        <li>Modelo único para todos os papéis (<code>model: inherit</code>) — pesquisa sugere tiering: revisores/testes em modelo médio, síntese no forte (~70% de economia reportada).</li>
+        <li><code>wave-files</code> quebra se a 1ª filha da onda não foi mergeada — usar a 1ª com status=MERGED.</li>
+      </ul>
+    </div>
+  </details>
+</section>
+
+<!-- ============ 06 CONFIRMADO CERTO ============ -->
+<section>
+  <div class="section-header"><span class="section-number">06</span><h2>O que a pesquisa confirma que já está certo — não mexer</h2></div>
+  <ul class="ok-list">
+    <li><strong>Worktree por sub-agente, criada e nomeada pelo orquestrador</strong> (R4/R6) — padrão recomendado; o bug real de superpowers#2050 (sub-agente commitando em main) valida todo o maquinário de contenção da R8.</li>
+    <li><strong>Squash-merge um a um com gate entre merges</strong> (R5) — equivale a "merge in dependency order + validate integrated tree"; atribuição de culpa por commit é o argumento certo contra merge em árvore.</li>
+    <li><strong>Revisor adversarial com contexto zero</strong> (passo 6) — contexto fresco melhora revisão, prática recomendada pela própria Anthropic.</li>
+    <li><strong>COMMIT PREP com stubs/contratos antes da onda</strong> — "scaffold shared contracts sequentially" + contract-driven verification. Não paralelizar: custo serial é segundos, risco é congelar contrato errado.</li>
+    <li><strong>Prompts de delegação ultra-detalhados + handoff inline</strong> — "teach the orchestrator how to delegate", princípio 2 da Anthropic.</li>
+    <li><strong>Gate final integrado no COMMIT-FINAL</strong> — antídoto ao "false completion".</li>
+    <li><strong>Fallback de busca em camadas</strong> (surf → Brave → keyless) — estratégia recomendada para rate limits de APIs de busca.</li>
+    <li><strong>Limpeza por allowlist (owned.tsv)</strong>, nunca varredura nem <code>git worktree prune</code> — correto sob orquestrações simultâneas.</li>
+  </ul>
+</section>
+
+<!-- ============ 07 ROADMAP ============ -->
+<section>
+  <div class="section-header"><span class="section-number">07</span><h2>Roadmap de correção — 4 fases, sem estimativas de tempo</h2></div>
+  <div class="milestones">
+    <div class="milestone">
+      <div class="when">Fase 1</div>
+      <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+      <div class="body">
+        <h3>Estancar os críticos</h3>
+        <p>Guarda do <code>undo</code> (só <code>??</code>), baseline de ignorados + fim do <code>git clean -fdX</code> genérico, <code>--budget-ms</code> no Tier 1, <code>stage-delta</code> com <code>-uall</code>, template do EXPLAINER sem conteúdo hardcoded, path relativo + trap no test-contencao.sh.</p>
+        <div class="tags"><span class="tag">scripts/do-wt.sh</span><span class="tag">scripts/do-context.sh</span><span class="tag">scripts/search.sh</span><span class="tag">templates/html-explainer.html</span></div>
+      </div>
+    </div>
+    <div class="milestone">
+      <div class="when">Fase 2</div>
+      <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+      <div class="body">
+        <h3>Redesenhar o fim de onda</h3>
+        <p>Passo 10 vira "CRIAR SUBWAVES PÓS-ONDA (VALIDAÇÃO + TESTES)"; passo 0 move-se para o slot ocioso; validation-agent-template novo; FIX-FINAL no COMMIT-FINAL; bugs de teste/validação viram fixes kind=fix; REPLAN e revisores em background; válvula de convergência; REPLAN fecha o ramo ambíguo.</p>
+        <div class="tags"><span class="tag">SKILL.md</span><span class="tag highlight">subwaves paralelas</span><span class="tag highlight">loop de bugs fechado</span></div>
+      </div>
+    </div>
+    <div class="milestone">
+      <div class="when">Fase 3</div>
+      <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+      <div class="body">
+        <h3>Paralelismo estrutural + busca</h3>
+        <p>Gate em worktree-snapshot (ou 2-tier), <code>MAX_PARALLEL_AGENTS</code>, gate registrado na FASE 1, lockfile singleton, Tier 3 Wikipedia → DDG → Tavily, heurística de fonte autoritativa e buscas paralelas no template do sub-agente, testes derivados do contrato.</p>
+        <div class="tags"><span class="tag">SKILL.md</span><span class="tag">scripts/search.sh</span><span class="tag">scripts/check-search-credits.sh</span></div>
+      </div>
+    </div>
+    <div class="milestone">
+      <div class="when">Fase 4</div>
+      <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+      <div class="body">
+        <h3>Docs, prompts e regressão</h3>
+        <p>README v3.3.0 sincronizado com o 3-tier, frontmatter com ferramentas reais, prompts ECC sem <code>wt/</code>/<code>main</code>/surf-research-skill, <code>search-prompts.md</code> linkado no template, novos testes: undo (baseline sujo reproduz o crítico #5), conflito de squash, wave-files, path com espaço/acento como asserção.</p>
+        <div class="tags"><span class="tag">README.md</span><span class="tag">prompts/</span><span class="tag">scripts/test-contencao.sh</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 08 OPEN QUESTIONS ============ -->
+<section>
+  <div class="section-header"><span class="section-number">08</span><h2>Decisões em aberto</h2></div>
+  <div class="callout">
+    <h3>Gate em snapshot ou gate 2-tier?</h3>
+    <p>Snapshot (worktree kind=integration, gate em background) dá o máximo de paralelismo mas duplica builds e exige undo tardio. 2-tier (build+lint entre merges, suite completa no fim da onda) é muito mais simples e perde o "cada commit individual passa na suite".</p>
+    <span class="decide-with">Decidir ao implementar a Fase 3 — começar pelo 2-tier</span>
+  </div>
+  <div class="callout">
+    <h3>Teto de concorrência fixo ou configurável?</h3>
+    <p><code>MAX_PARALLEL_AGENTS=5</code> como constante no PLAN, ou variável de ambiente (<code>DO_MAX_PARALLEL</code>) resolvida na FASE 0 junto ao estado?</p>
+    <span class="decide-with">Decidir ao implementar a Fase 3 — env var com default 5</span>
+  </div>
+  <div class="callout">
+    <h3>Tavily como Tier 3c opcional?</h3>
+    <p>1.000 créditos/mês sem cartão e skill já instalada — mas exige <code>TAVILY_API_KEY</code>. Entra como tier opcional condicionado à chave, ou mantém a cadeia 100% keyless?</p>
+    <span class="decide-with">Decidir ao implementar a Fase 3</span>
+  </div>
+  <div class="callout">
+    <h3>Executar as correções agora?</h3>
+    <p>Este documento é só diagnóstico + plano. As 4 fases de correção são um trabalho multi-arquivo separado — que pode ele mesmo rodar sob o deep-orchestrator (dogfooding) uma vez corrigidos os críticos #1 e #5.</p>
+    <span class="decide-with">Decide with: usuário</span>
+  </div>
+</section>
+
+<!-- ============ FONTES ============ -->
+<section>
+  <div class="section-header"><span class="section-number">09</span><h2>Fontes da pesquisa</h2></div>
+  <p class="sources">
+    Anthropic — multi-agent research system (orchestrator-worker, gargalo síncrono, 3-5 agentes, heurística de fontes): <a href="https://www.anthropic.com/engineering/multi-agent-research-system">anthropic.com/engineering/multi-agent-research-system</a><br>
+    Caps reais do Claude Code (20 concorrentes / 200 por sessão; fan-out derruba agentes): <a href="https://github.com/anthropics/claude-code/issues/80082">claude-code#80082</a> · <a href="https://github.com/anthropics/claude-code/issues/70498">#70498</a><br>
+    Agentes paralelos na prática (serializar deps, revisor read-only, validação integrada): <a href="https://www.aakashx.com/blog/parallel-claude-code-agents/">aakashx.com/blog/parallel-claude-code-agents</a><br>
+    Verificação por contrato / viés de confirmação em testes co-gerados: <a href="https://arxiv.org/html/2605.25665v1">arXiv 2605.25665</a> · <a href="https://arxiv.org/html/2605.01160v1">arXiv 2605.01160</a><br>
+    Brave Search API metered (fim do free tier): <a href="https://www.implicator.ai/brave-drops-free-search-api-tier-puts-all-developers-on-metered-billing/">implicator.ai</a> · doc oficial: <a href="https://api-dashboard.search.brave.com/app/documentation/web-search/get-started">api-dashboard.search.brave.com</a><br>
+    Alternativas de busca para agentes (Tavily, Exa, Parallel, SearXNG): <a href="https://parallel.ai/articles/best-free-web-search-api">parallel.ai/articles/best-free-web-search-api</a><br>
+    Dependency DAG + dispatch-on-ready: <a href="https://github.com/nemori-ai/cc-master/blob/main/CHANGELOG.md">cc-master CHANGELOG</a> · Bug que valida a contenção R8: <a href="https://github.com/obra/superpowers/issues/2050">superpowers#2050</a>
+  </p>
+</section>
+
+<footer>
+  <span>deep-orchestrator · auditoria com 8 subagentes paralelos + 2 pesquisas web ao vivo</span>
+  <span>achados completos com arquivo:linha nos relatórios da sessão</span>
+</footer>
+
+</div>
+</body>
+</html>

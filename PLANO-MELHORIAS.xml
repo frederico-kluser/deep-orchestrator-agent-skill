@@ -1,0 +1,1079 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plano-de-melhorias projeto="deep-orchestrator" versao-atual="3.2.0" versao-alvo="3.3.0"
+                    gerado-em="2026-08-14" idioma="pt-BR" formato="v1">
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       METADADOS — como este plano foi produzido e como ler
+       ════════════════════════════════════════════════════════════════════ -->
+  <metadados>
+    <metodo>
+      Auditoria executada por 8 subagentes em paralelo + 2 pesquisas web ao vivo:
+      (1) SKILL.md linha a linha (1297 linhas) cruzado com scripts e README;
+      (2) scripts de busca (search.sh, brave-search.sh, check-search-credits.sh,
+      check-brave-credits.sh) com bash -n, testes empíricos e chamadas reais às APIs;
+      (3) scripts de orquestração (do-context.sh, do-wt.sh, test-contencao.sh) com
+      reproduções em /tmp — suíte atual passa 50/50;
+      (4) prompts/ e templates/;
+      (5) análise de paralelismo do fluxo EXECUTE-ONDA;
+      (6) design da dupla subwave pós-onda (validação + testes);
+      (7) pesquisa web: orquestração multi-agente 2025-2026 (Anthropic, arXiv, guias);
+      (8) pesquisa web + disco: ecossistema surf/Brave/DuckDuckGo, testado ao vivo.
+      Todos os bugs marcados REPRODUZIDO foram executados e confirmados, não inferidos.
+    </metodo>
+    <estatisticas>
+      <stat nome="achados-criticos" valor="6"/>
+      <stat nome="achados-altos" valor="15"/>
+      <stat nome="achados-medios-baixos" valor="25+"/>
+      <stat nome="itens-de-trabalho-neste-plano" valor="35"/>
+      <stat nome="testes-atuais" valor="50 asserções, 100% passando"/>
+    </estatisticas>
+    <fontes>
+      <fonte url="https://www.anthropic.com/engineering/multi-agent-research-system">Anthropic — multi-agent research system: orchestrator-worker, gargalo da execução síncrona, 3-5 agentes em paralelo como ponto ótimo, heurística de qualidade de fonte, parallel tool calling</fonte>
+      <fonte url="https://github.com/anthropics/claude-code/issues/80082">Claude Code — cap de 20 subagentes concorrentes / 200 por sessão</fonte>
+      <fonte url="https://github.com/anthropics/claude-code/issues/70498">Claude Code — fan-out grande estoura rate limit e o harness derruba agentes no meio do run</fonte>
+      <fonte url="https://www.aakashx.com/blog/parallel-claude-code-agents/">Guia prático de agentes paralelos: serializar dependências, revisor read-only, lockfile como singleton, validação integrada final</fonte>
+      <fonte url="https://arxiv.org/html/2605.25665v1">arXiv 2605.25665 — verificação baseada em contrato (independência implementador/testador) e four-way failure arbiter (bug / spec gap / ruído / ambiguidade)</fonte>
+      <fonte url="https://arxiv.org/html/2605.01160v1">arXiv 2605.01160 — testes co-gerados condicionados ao código espelham a implementação (viés de confirmação)</fonte>
+      <fonte url="https://www.implicator.ai/brave-drops-free-search-api-tier-puts-all-developers-on-metered-billing/">Brave Search API — fim do free tier (fev/2026), planos metered $5/1K com $5/mês de créditos e cobrança real ao exceder</fonte>
+      <fonte url="https://api-dashboard.search.brave.com/app/documentation/web-search/get-started">Brave — doc oficial: endpoint /res/v1/web/search, header X-Subscription-Token, headers X-RateLimit-*; LLM Context endpoint recomendado para agentes</fonte>
+      <fonte url="https://github.com/obra/superpowers/issues/2050">superpowers#2050 — bug real de subagente commitando em main; valida o maquinário de contenção R8</fonte>
+      <fonte url="https://github.com/nemori-ai/cc-master/blob/main/CHANGELOG.md">cc-master — dependency DAG + dispatch-on-ready como evolução de skills de orquestração</fonte>
+      <fonte url="https://hamy.xyz/blog/2026-02_code-reviews-claude-subagents">Revisões paralelas por faceta com subagentes</fonte>
+      <fonte url="https://parallel.ai/articles/best-free-web-search-api">Catálogo de APIs de busca para agentes (referência de mercado; decisão do usuário: apenas Brave)</fonte>
+    </fontes>
+    <como-ler>
+      Cada <![CDATA[<item>]]> é uma unidade de trabalho independente com:
+      titulo — o que é;
+      onde — arquivo:linhas exatos que serão tocados;
+      problema — o que está errado e a evidência;
+      correcao — passo a passo de COMO fazer, com antes/depois quando útil;
+      como-testar — testes que provam a correção (comando + resultado esperado);
+      criterio-de-aceite — condição objetiva de pronto.
+      Severidades: CRITICO (bug/contradição que quebra execução ou destrói dados),
+      ALTO (melhoria importante), MEDIO, BAIXO.
+      Esforços: P (pequeno, &lt;1h), M (médio), G (grande, toca fluxo central).
+      As fases são sequenciais; itens dentro de uma fase podem ser paralelizados
+      (ideal para rodar sob o próprio deep-orchestrator — dogfooding — depois da Fase 1).
+    </como-ler>
+  </metadados>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       DECISÕES JÁ TOMADAS PELO USUÁRIO — valem como requisito fixo
+       ════════════════════════════════════════════════════════════════════ -->
+  <decisoes-do-usuario>
+    <decisao id="D1" pergunta="Gate em snapshot ou gate 2-tier?">
+      Gate em SNAPSHOT: após cada squash-merge (operação rápida, em $BASE_DIR), o gate
+      (build + testes + linter) roda numa worktree efêmera kind=integration criada no
+      SHA pós-merge, EM BACKGROUND — mesmo que isso DUPLIQUE builds (decisão explícita:
+      "mantemos duplicando build"). O próximo merge não espera o gate anterior.
+      Falha tardia é desfeita com do-wt.sh undo (caminho revert funciona com HEAD
+      avançado — scripts/do-wt.sh:184-188).
+    </decisao>
+    <decisao id="D2" pergunta="Teto de concorrência fixo ou configurável?">
+      CONFIGURÁVEL na chamada da skill: o usuário pode passar o limite ao invocar
+      (ex.: /deep-orchestrator max-parallel=8 &lt;tarefa&gt;). Se não passar, o default
+      é 20. Resolvido na FASE 0 e gravado no arquivo de estado como DO_MAX_PARALLEL.
+      A contagem in-flight inclui: agentes de feature da onda + subwaves (teste e
+      validação) da onda anterior + revisores + REVISOR DE PLANO.
+    </decisao>
+    <decisao id="D3" pergunta="Tavily como Tier 3c opcional? / provedores de busca">
+      NÃO adicionar provedores: a cadeia permanece surf-skill (Tier 1) → Brave Search
+      API (Tier 2) → DuckDuckGo keyless (Tier 3, último recurso). Nada de Tavily,
+      Wikipedia ou outros. EM TROCA: pesquisas em PARALELO SEM LIMITE de quantidade —
+      implementado em CÓDIGO (novo script scripts/search-parallel.sh) que a skill
+      chama UMA vez com um lote de queries; o código gerencia todos os processos,
+      deduplica por URL, faz backoff com jitter em HTTP 429 e devolve um relatório
+      único. A skill apenas espera o resultado.
+    </decisao>
+    <decisao id="D4" pergunta="Escopo deste documento">
+      Este XML é o plano de AÇÃO completo (o que fazer, onde, como, como testar).
+      A execução das 4 fases é um trabalho separado, que pode rodar sob o próprio
+      deep-orchestrator (dogfooding) após a Fase 1 estar aplicada.
+    </decisao>
+  </decisoes-do-usuario>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       INVARIANTES — valem para TODO item, em TODAS as fases
+       ════════════════════════════════════════════════════════════════════ -->
+  <invariantes>
+    <invariante id="I1">Nunca violar R8: nada é escrito fora da raiz-de-mundo; limpeza só por nome registrado no owned.tsv; git worktree prune continua PROIBIDO.</invariante>
+    <invariante id="I2">Toda mudança em scripts/*.sh termina com: bash -n limpo + suíte scripts/test-contencao.sh 100% verde (incluindo as asserções NOVAS do item F4-06).</invariante>
+    <invariante id="I3">Toda mudança em SKILL.md mantém coerência com o frontmatter (description, allowed-tools) e com o README.md — os três contam a mesma história.</invariante>
+    <invariante id="I4">Comentários de código e docs que descreviam comportamento antigo são atualizados no mesmo commit da mudança.</invariante>
+    <invariante id="I5">Nenhum provedor de busca novo entra na cadeia (decisão D3). Nenhum teste automatizado consome quota real da Brave — usa-se binário/curl mockado; testes ao vivo são manuais e pontuais.</invariante>
+  </invariantes>
+
+  <fases>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       FASE 1 — ESTANCAR OS CRÍTICOS (bugs que destroem dados ou quebram
+       promessas centrais). Tudo aqui é scripts + template, sem redesenho.
+       ════════════════════════════════════════════════════════════════════ -->
+  <fase n="1" nome="Estancar os críticos" objetivo="Eliminar os 6 bugs críticos reproduzidos e deixar a suíte verde com novas asserções de regressão.">
+
+    <item id="F1-01" severidade="CRITICO" esforco="P" origem="agente-2/C1">
+      <titulo>do-wt.sh undo: reset --hard só com working tree exclusivamente untracked</titulo>
+      <onde>
+        <arquivo path="scripts/do-wt.sh" linhas="190-206"/>
+        <arquivo path="SKILL.md" linhas="481-484 (texto que documenta a guarda)"/>
+      </onde>
+      <problema>
+        REPRODUZIDO. A guarda atual só exige que o status atual seja igual ao baseline
+        da FASE 0: <![CDATA[if [ "$(gstatus)" != "$(cat "$baseline" ...)" ]]]>. Mas o
+        baseline pode conter modificações tracked do usuário (ex.: " M root.txt") — a
+        FASE 0 recusa ÍNDICE sujo (do-context.sh:143), não working tree suja. Nesse
+        cenário a comparação passa e o `gwt reset --hard "$pre"` APAGA a edição não
+        commitada do usuário, silenciosamente.
+      </problema>
+      <correcao>
+        <passo n="1">Em cmd_undo, antes do caminho reset --hard, trocar a condição: em vez de "status == baseline", exigir que o status atual contenha EXCLUSIVAMENTE linhas untracked (prefixo "??"), que reset --hard não toca.</passo>
+        <passo n="2">Qualquer linha tracked ( M, M , MM, A, D...) → cair no caminho revert existente, com a mensagem de erro explicando o motivo.</passo>
+        <antes><![CDATA[local baseline="$DO_STATE/dirty-baseline.txt"
+if [ "$(gstatus)" != "$(cat "$baseline" 2>/dev/null)" ]; then
+  err "A worktree tem mudanças além do baseline da FASE 0 — reset --hard PROIBIDO."
+  err "Usando revert (preserva o working tree)."
+  gwt revert --no-edit "$post" || return 1
+  row_set "$name" 9 REVERTED; echo "OK  revert de $post"; return 0
+fi]]></antes>
+        <depois><![CDATA[# reset --hard só é seguro se NÃO houver nenhuma modificação
+# tracked no working tree — nem do usuário (baseline), nem da execução.
+# Linhas "??" (untracked) são aceitas: reset --hard não as toca.
+if gstatus | grep -qv '^??'; then
+  err "Há modificações tracked no working tree — reset --hard PROIBIDO."
+  err "Usando revert (preserva o working tree e o histórico)."
+  gwt revert --no-edit "$post" || return 1
+  row_set "$name" 9 REVERTED; echo "OK  revert de $post"; return 0
+fi]]></depois>
+        <passo n="3">Atualizar o comentário do bloco (linhas 190-192) e o texto de SKILL.md:481-484: a guarda agora é "working tree sem nenhuma modificação tracked", não "idêntico ao baseline".</passo>
+      </correcao>
+      <como-testar>
+        <teste>bash -n scripts/do-wt.sh → limpo.</teste>
+        <teste>Nova asserção A22a em test-contencao.sh: fixture com root.txt MODIFICADO ( M, não estagiado) no baseline → merge de filha → undo → root.txt preserva a edição do usuário E o squash foi desfeito via revert (git log mostra commit de revert).</teste>
+        <teste>Nova asserção A22b: baseline limpo → merge → undo → reset --hard ocorre e HEAD volta ao pre_merge_sha; ref de arquivo refs/do-archive/$RUN_ID/undo-* existe.</teste>
+      </como-testar>
+      <criterio-de-aceite>undo nunca mais apaga modificação tracked do usuário; as duas asserções novas passam; as 50 atuais continuam verdes.</criterio-de-aceite>
+    </item>
+
+    <item id="F1-02" severidade="CRITICO" esforco="M" origem="agente-0/C1">
+      <titulo>Baseline de ignorados na FASE 0 + fim do `git clean -fdXq` genérico no COMMIT-FINAL</titulo>
+      <onde>
+        <arquivo path="scripts/do-context.sh" linhas="263-271 (bloco de baselines)"/>
+        <arquivo path="SKILL.md" linhas="757-760 (passo 7 do COMMIT-FINAL)"/>
+        <arquivo path="SKILL.md" linhas="209-212 (R8(d) — manter, é ela que está certa)"/>
+      </onde>
+      <problema>
+        CONTRADIÇÃO INTERNA COM BLAST RADIUS. R8(d) PROÍBE `git clean` em BASE_DIR
+        ("apaga os arquivos não rastreados do usuário, sem desfazer"), mas o passo 7 do
+        COMMIT-FINAL manda rodar `gwt clean -fdXq` para remover dependências instaladas
+        pelo gate. Como o dirty-baseline usa porcelain SEM --ignored, o -fdX apaga TODOS
+        os ignorados de $BASE_DIR — incluindo node_modules, .venv e .env.local que o
+        usuário já tinha ANTES da execução. O verify protege $MAIN_ROOT, não $BASE_DIR.
+      </problema>
+      <correcao>
+        <passo n="1">FASE 0 (do-context.sh, após linha 269): gravar também o baseline de ignorados: <![CDATA[gwt status --porcelain --ignored -z > "$DO_STATE/ignored-baseline.nul"]]> e a versão legível .txt.</passo>
+        <passo n="2">Reescrever SKILL.md:757-760: a limpeza final de dependências passa a ser "apague apenas os ignorados NOVOS" — computar o delta entre `gwt status --porcelain --ignored` atual e o ignored-baseline, e remover apenas paths ignorados que NÃO constam no baseline. Comando sugerido encapsulado num subcomando novo do do-wt.sh (ver passo 3), nunca git clean às cegas.</passo>
+        <passo n="3">Adicionar subcomando `clean-ignored-delta` ao do-wt.sh: lê ignored-baseline.nul, lista ignorados atuais com -z, faz diff exato de paths (mesmo padrão de comparação do stage-delta, do-wt.sh:361-364), e remove somente os novos, um a um, com echo do que foi removido. Recusa rodar se o baseline não existir.</passo>
+        <passo n="4">R8(d) ganha a exceção formal: "permitido: do-wt.sh clean-ignored-delta (delta contra o baseline de ignorados da FASE 0)".</passo>
+      </correcao>
+      <como-testar>
+        <teste>Nova asserção A26a: fixture com node_modules/ PREEXISTENTE (ignorado, no baseline) → clean-ignored-delta → node_modules do usuário INTACTO.</teste>
+        <teste>A26b: execução cria .venv/ novo (ignorado, ausente do baseline) → clean-ignored-delta remove .venv e preserva o node_modules preexistente.</teste>
+        <teste>A26c: clean-ignored-delta sem baseline → recusa com código de erro não-zero.</teste>
+        <teste>grep -n "clean -fdX" SKILL.md → zero ocorrências fora do histórico de regras.</teste>
+      </como-testar>
+      <criterio-de-aceite>COMMIT-FINAL incapaz de apagar ignorados preexistentes; R8(d) e o passo 7 deixam de se contradizer; asserções novas verdes.</criterio-de-aceite>
+    </item>
+
+    <item id="F1-03" severidade="CRITICO" esforco="P" origem="agente-1/C1 + agente-7/1">
+      <titulo>search.sh Tier 1: `--timeout` (segundos) vira milissegundos no surf — trocar para `--budget-ms`</titulo>
+      <onde>
+        <arquivo path="scripts/search.sh" linhas="324 (—dev-mode) e 327 (—timeout)"/>
+        <arquivo path="SKILL.md" linhas="829-845 (regra 2 do subagent-prompt-template — documentar o efeito real)"/>
+      </onde>
+      <problema>
+        REPRODUZIDO (análise estática do binário real surf-search-normal v5.4.0):
+        `args+=( --timeout "$TIMEOUT" )` passa 30 (segundos) e o surf interpreta como
+        MILISSEGUNDOS (src/lib/dispatch.mjs:278-279 → ctx.timeout; default 45000ms).
+        Resultado: toda chamada HTTP do Tier 1 aborta em ~30ms → Tier 1 NUNCA funciona
+        via search.sh, e a cadeia sempre cai para Tier 2/3. A flag correta do binário é
+        --budget-ms. Agravante: --dev-mode (linha 324) NÃO EXISTE no surf — o parser
+        genérico a ignora em silêncio; é no-op documentado como se funcionasse.
+      </problema>
+      <correcao>
+        <passo n="1">search.sh:327: <![CDATA[args+=( --budget-ms "$(( TIMEOUT * 1000 ))" )]]></passo>
+        <passo n="2">search.sh:324: remover `(( DEV_MODE )) &amp;&amp; args+=( --dev-mode )` da chamada do Tier 1; manter a flag apenas no Tier 2 (brave-search.sh:524-525, onde tem efeito) e ajustar o help de search.sh:81 e SKILL.md:834 para dizer "--dev-mode afeta apenas o Tier 2".</passo>
+        <passo n="3">Comentário no código citando a fonte da verdade: "surf-search-normal consome --budget-ms em MILISSEGUNDOS (dispatch.mjs); TIMEOUT do search.sh é em segundos".</passo>
+      </correcao>
+      <como-testar>
+        <teste>Novo scripts/test-search.sh, caso T1: criar binário FAKE `surf-search-normal` num PATH temporário que grava "$@" num arquivo e sai 0 → rodar search.sh --timeout 30 → assert que o argv gravado contém "--budget-ms 30000" e NÃO contém "--timeout" nem "--dev-mode".</teste>
+        <teste>Teste manual ao vivo (1x, gasta quota mínima do OpenRouter): search.sh "claude code subagents" completa pelo Tier 1 em segundos, não em 30ms com fallback.</teste>
+      </como-testar>
+      <criterio-de-aceite>Tier 1 volta a funcionar de fato; flags fantasmas fora da chamada; teste automatizado com binário mockado verde.</criterio-de-aceite>
+    </item>
+
+    <item id="F1-04" severidade="CRITICO" esforco="P" origem="agente-2/A1">
+      <titulo>stage-delta perde arquivos novos dentro de diretórios untracked preexistentes — usar -uall dos dois lados</titulo>
+      <onde>
+        <arquivo path="scripts/do-context.sh" linhas="269 (dirty-baseline.nul)"/>
+        <arquivo path="scripts/do-wt.sh" linhas="357 e 366 (stage-delta)"/>
+      </onde>
+      <problema>
+        REPRODUZIDO. Sem --untracked-files=all, o git status colapsa um diretório
+        untracked como uma única linha "?? docs/". Se docs/ já estava no baseline, a
+        comparação exata (do-wt.sh:363) exclui o diretório INTEIRO — inclusive arquivos
+        NOVOS que a execução criou dentro dele. Resultado: trabalho da execução some do
+        commit final sem nenhum aviso ("Nada novo a estagiar").
+      </problema>
+      <correcao>
+        <passo n="1">do-context.sh:269: <![CDATA[gstatus -z --untracked-files=all > "$DO_STATE/dirty-baseline.nul"]]> (o helper gstatus já repassa flags: do-context.sh:252).</passo>
+        <passo n="2">do-wt.sh:366: <![CDATA[done < <(gstatus -z --untracked-files=all | status_paths)]]></passo>
+        <passo n="3">Atualizar o comentário de do-context.sh:266-268 explicando que -uall é obrigatório para o diff de paths ser por arquivo, não por diretório. ATENÇÃO: os dois lados precisam mudar JUNTOS — baseline e leitura têm que usar o mesmo modo, senão a comparação exata quebra para todo diretório untracked.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Nova asserção A25: fixture com "?? docs/" no baseline → execução cria docs/gerado-pela-skill.md → stage-delta → assert que docs/gerado-pela-skill.md entra no índice e o arquivo preexistente do usuário em docs/ NÃO entra.</teste>
+        <teste>Re-rodar A10/A14 (sujeira do usuário em arquivos) — continuam verdes com -uall.</teste>
+      </como-testar>
+      <criterio-de-aceite>Arquivos novos da execução dentro de dirs untracked do usuário entram no commit; sujeira preexistente continua fora; suíte verde.</criterio-de-aceite>
+    </item>
+
+    <item id="F1-05" severidade="CRITICO" esforco="M" origem="agente-3/C1+C2">
+      <titulo>Template do EXPLAINER: conteúdo hardcoded de uma execução passada FORA dos slots de substituição</titulo>
+      <onde>
+        <arquivo path="templates/html-explainer.html" linhas="467-494 (cards Antes/Depois), 501-528 (Impacto), 530-577 (Novas capacidades), e notas 'Exemplo demonstrativo' em 364, 436, 458, 611, 653"/>
+      </onde>
+      <problema>
+        CONFIRMADO por leitura direta. As seções Antes/Depois, Impacto e Novas
+        capacidades descrevem a execução que criou scripts/prompts/templates
+        ("Busca Brave integrada", "ECC prompts", "Ondas ilimitadas") e estão FORA dos
+        pares de marcadores — o slot {{BEFORE_AFTER}} (496-499) só ADICIONA seções.
+        Todo EXPLAINER.html gerado para qualquer outra tarefa sai com conteúdo
+        fabricado de uma execução alheia. Adicional: as notas "Exemplo demonstrativo —
+        substituídos na geração" estão fora dos pares begin/end e sobrevivem no
+        documento final, rotulando dados REAIS como exemplo.
+      </problema>
+      <correcao>
+        <passo n="1">Mover as três seções (467-494, 501-528, 530-577) para DENTRO do par <!-- {{BEFORE_AFTER}} begin/end --> — ou criar slots novos {{IMPACT}} e {{CAPABILITIES}} se a separação for mantida. Fora dos marcadores fica apenas a moldura genérica (títulos de aba, navegação, estrutura vazia).</passo>
+        <passo n="2">Mover cada nota "Exemplo demonstrativo" para dentro do par de marcadores do slot correspondente.</passo>
+        <passo n="3">Rever os 7 tokens e 6 slots (tabela em templates/html-explainer.html:300-313) e garantir 1:1 — nenhum slot sem conteúdo default sensato, nenhum conteúdo específico fora de slot.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Teste de geração: preencher o template com conteúdo sintético mínimo via sed/awk → grep -c "brave-search\|ECC prompts\|Ondas ilimitadas" no resultado deve ser 0.</teste>
+        <teste>Grep no resultado por "Exemplo demonstrativo" → 0 ocorrências quando os slots são preenchidos.</teste>
+        <teste>Abrir o HTML gerado e conferir as 6 abas renderizam com o conteúdo sintético (smoke visual).</teste>
+      </como-testar>
+      <criterio-de-aceite>Nenhum texto da execução v3.0 aparece em EXPLAINER gerado para outra tarefa; notas de exemplo não sobrevivem à geração.</criterio-de-aceite>
+    </item>
+
+    <item id="F1-06" severidade="ALTO" esforco="P" origem="agente-2/A2+M4+B7">
+      <titulo>test-contencao.sh: path hardcoded da máquina do autor, labs órfãos em /tmp, grep -oP não portátil</titulo>
+      <onde>
+        <arquivo path="scripts/test-contencao.sh" linhas="4 (SKILL=...), 13 (LAB=...), 27+ (grep -oP)"/>
+      </onde>
+      <problema>
+        Linha 4: SKILL=/home/ondokai/Projects/deep-orchestrator — em qualquer outro
+        clone/máquina o teste roda contra o path errado ou falha. Linha 13: sem trap nem
+        rm -rf final, e o sufixo $$ muda a cada run → labs /tmp/do-accept-* órfãos se
+        acumulam (encontrado um real). grep -oP não existe no BSD/macOS.
+      </problema>
+      <correcao>
+        <passo n="1">Linha 4: <![CDATA[SKILL=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P")]]></passo>
+        <passo n="2">Após criar o LAB: <![CDATA[trap 'rm -rf "$LAB"' EXIT]]> — cobre sucesso e falha.</passo>
+        <passo n="3">Substituir todos os grep -oP por equivalentes sed/awk portáteis.</passo>
+        <passo n="4">Atualizar cabeçalho (linha 2) e scripts/README.md:29: o teste vai até A20 (50 asserções), não "A1..A11" — e depois das fases seguintes, até A30.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Clonar o repo em /tmp/clone-teste e rodar scripts/test-contencao.sh de lá → 50/50 PASS.</teste>
+        <teste>Após a run: ls -d /tmp/do-accept-* → nenhum órfão novo.</teste>
+        <teste>grep -n "grep -oP" scripts/test-contencao.sh → 0 ocorrências.</teste>
+      </como-testar>
+      <criterio-de-aceite>Suíte roda em qualquer clone, não deixa lixo em /tmp, sem dependência de GNU grep -P.</criterio-de-aceite>
+    </item>
+
+  </fase>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       FASE 2 — REDESENHAR O FIM DE ONDA (SKILL.md). O coração do pedido:
+       duas subwaves paralelas (validação + testes) com overlap REAL, loop
+       de bugs fechado e REPLAN fora do caminho crítico.
+       ════════════════════════════════════════════════════════════════════ -->
+  <fase n="2" nome="Redesenhar o fim de onda" objetivo="Transformar as subwaves em paralelismo real: validação + testes rodam em background durante a onda seguinte; achados viram fixes; convergência tem válvula de escape.">
+
+    <item id="F2-01" severidade="CRITICO" esforco="G" origem="agente-0/C2 + agente-4/achado-1">
+      <titulo>Mover o fechamento das subwaves do passo 0 para o slot ocioso (depois do disparo dos features da onda atual)</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="456-491 (passo 0 atual), 519-543 (passos 3-4: disparo e barreira), 646-683 (passo 10), 1266-1273 (exemplo ex1)"/>
+      </onde>
+      <problema>
+        CONTRADIÇÃO CENTRAL. O fluxo manda: fim da onda N → passo 10 dispara testes
+        "em background" → repeat volta ao passo 0 → passo 0 AGUARDA TODOS os testes
+        (SKILL.md:463-465) → só então a onda N+1 começa. Entre disparo e barreira não
+        há trabalho nenhum: o overlap real é ZERO segundos. O texto afirma o oposto em
+        três lugares ("NUNCA bloqueiam" :489-491; "rodarão ENQUANTO a próxima onda
+        executa" :673-674; exemplo runs-during="Onda 2" :1266-1272). Também errado: o
+        exemplo diz delivered-at="Fechamento da Onda 2 (passo 0)", mas o passo 0 ocorre
+        no INÍCIO do processamento da onda 2. A especificação atual equivale a testes
+        síncronos — só que mais confusa.
+      </problema>
+      <correcao>
+        <passo n="1">Reordenar a EXECUTE-ONDA: o antigo passo 0 (PROCESSAR SUBWAVES PENDENTES) sai do início da onda e vira o passo 3.5 — DEPOIS do disparo dos agentes de feature da onda atual (passo 3) e ANTES/DURANTE a barreira deles (passo 4). Enquanto os features da onda N+1 trabalham (o passo 4 é só espera), o orquestrador processa as subwaves da onda N: barreira, revisão, merges, gates, limpeza.</passo>
+        <passo n="2">Novo texto do passo 3.5: "PROCESSAR SUBWAVES PENDENTES (TESTES + VALIDAÇÃO da onda N-1): VERIFICAR no TASK_PLAN.md as seções PENDENTE; BARREIRA nos agentes de subwave (mesmo mecanismo do passo 4: notificações de conclusão do harness ou TaskOutput com wait — e checagens NÃO-bloqueantes periódicas enquanto o passo 4 aguarda); processar conforme F2-02/F2-04."</passo>
+        <passo n="3">O antigo passo 0 vira NO-OP documentado ("as subwaves são processadas no passo 3.5") ou é removido e os passos renumerados — preferir remover e renumerar para não sobrar armadilha.</passo>
+        <passo n="4">Corrigir o exemplo ex1 (1266-1273): runs-during="Onda 2" passa a ser verdade; delivered-at="Onda 2, passo 3.5 (slot ocioso, após disparo dos features)".</passo>
+        <passo n="5">A nota "NUNCA bloqueiam" (:489-491) é reescrita com qualificação dupla: subwaves não bloqueiam o DISPARO da onda seguinte; E validation subwave reprovada não bloqueia a onda em curso, MAS seus fixes têm prioridade na onda seguinte e o COMMIT-FINAL não fecha com validação VERMELHA sem degradação documentada.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Revisão adversarial do novo texto: pedir a um subagente fresco que trace o fluxo de 2 ondas e aponte onde as subwaves são esperadas — a resposta correta é "no passo 3.5, enquanto os features da onda atual rodam".</teste>
+        <teste>Grep de coerência: nenhuma ocorrência de "passo 0" referindo-se a barreira de subwave no início da onda; exemplo ex1 e o corpo do passo 10 contam a mesma história.</teste>
+      </como-testar>
+      <criterio-de-aceite>O fluxo especificado produz overlap real: features da onda N+1 e subwaves da onda N executam simultaneamente; zero contradições internas sobre isso.</criterio-de-aceite>
+    </item>
+
+    <item id="F2-02" severidade="CRITICO" esforco="G" origem="agente-5 (desenho completo) + agente-4/achado-9">
+      <titulo>Passo 10 vira "CRIAR SUBWAVES PÓS-ONDA (VALIDAÇÃO + TESTES, ASSÍNCRONAS)" — nasce a validation subwave</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="646-683 (passo 10), 927-947 (adversarial-review-template — reutilizado), 949-1064 (test-agent-template — modelo para o novo template), 158-159 (R6 exceção b), 442-444 (objective da fase 3), 9-11 (description do frontmatter)"/>
+        <arquivo path="scripts/do-wt.sh" linhas="25 (doc de kinds)"/>
+      </onde>
+      <problema>
+        Hoje só existe a testing subwave. O pedido do usuário: DUAS etapas em paralelo
+        por onda terminada — validação de código E criação de testes. A auditoria
+        confirmou que TODA a infraestrutura já existe e NENHUMA mudança de código em
+        do-wt.sh é necessária: kind é coluna livre no owned.tsv (do-wt.sh:129), a
+        limpeza sem merge funciona via remove→REMOVED→drop-branch (do-wt.sh:214-227,
+        253-257), e o diff integrado da onda sai do pre_merge_sha (coluna 7) pelo mesmo
+        mecanismo determinístico de wave-files (do-wt.sh:377-384).
+      </problema>
+      <correcao>
+        <passo n="1">Passo 10 renomeado e reescrito com DOIS blocos de substeps, ambos disparados juntos, todos run_in_background=true:
+          BLOCO A — VALIDATION SUBWAVE:
+          (a) CRIAR worktree `val-ondaN-gate`: `"$DO_WT" new validation val-ondaN-gate` — mesmo CHILD_ROOT/BRANCH_NS, kind=validation. OBRIGATÓRIA: gate assíncrono NUNCA roda em $BASE_DIR (colidiria com os merges da onda seguinte — git index lock, COMMIT PREP, artefatos de build).
+          (b) DISPARAR agente validador nessa worktree, SOMENTE-LEITURA: roda build completo + linter + typecheck + suíte de testes existente no estado integrado do fim da onda N, instalando deps congeladas na própria worktree se necessário (R9, HUSKY=0). PROIBIDO modificar qualquer arquivo: reporta veredito por etapa com comando + saída real.
+          (c) DISPARAR revisor adversarial do DIFF INTEGRADO (sem worktree — precedente do REPLAN, SKILL.md:544-548): recebe `gwt diff "$pre..HEAD"` (pre = pre_merge_sha da 1ª filha MERGED da onda) + prompt original + handoffs. Missão: REFUTAR a integração — contratos combinam entre sub-agentes? B usou a interface que A entregou? dead code/duplicação cruzada? golden masters intactos? Complementar ao passo 6, que só vê diffs individuais pré-merge.
+          BLOCO B — TESTING SUBWAVE: fluxo atual inalterado (test-ondaN-&lt;foco&gt;, máx 3 worktrees).</passo>
+        <passo n="2">Criar o validation-agent-template (CDATA novo, clone estrutural do test-agent-template) com as diferenças: "VOCÊ NÃO MODIFICA NADA — nem testes nem produção"; formato de handoff: veredito por etapa (build/lint/typecheck/testes) + comando + saída real + arquivo:linha de cada falha.</passo>
+        <passo n="3">Uma frase no passo 6 encerrando a sobreposição conceitual: "esta revisão é INDIVIDUAL e pré-merge; a revisão do diff INTEGRADO acontece na validation subwave e procura falhas de INTEGRAÇÃO entre sub-agentes".</passo>
+        <passo n="4">R6 exceção (b): "worktrees kind=test (test-ondaN-*)" → "kind=test (test-ondaN-*) e kind=validation (val-ondaN-*), que sobrevivem por UMA onda por construção". Objective da fase 3 (442-444) idem. Textos do sweep (616-618, 623): "uma testing ou validation subwave em voo".</passo>
+        <passo n="5">Description do frontmatter (9-11): incluir "VALIDATION SUBWAVES (val-ondaN-*) e TESTING SUBWAVES (test-ondaN-*) assíncronas, disparadas em paralelo após cada onda". do-wt.sh:25: doc de kinds ganha "validation".</passo>
+        <passo n="6">Mapa de propriedade anti-colisão: arquivos de teste cobertos pela subwave da onda N entram em {{FORBIDDEN_FILES}} dos agentes da onda N+1 (campo já existe, SKILL.md:804) — porque agora subwave e features rodam ao mesmo tempo.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Teste estrutural: `"$DO_WT" new validation val-onda1-gate` num fixture → kind=validation registrado no owned.tsv; remove → REMOVED → drop-branch aceita (já funciona — só documentar e cobrir com asserção A31).</teste>
+        <teste>Revisão do novo template: um subagente fresco lendo APENAS o validation-agent-template deve conseguir declarar o que faria, sem ambiguidade sobre "posso editar?" (resposta: não).</teste>
+        <teste>Grep: description, R6, objective, sweep, ex1 e passo 10 todos mencionam as duas subwaves de forma coerente.</teste>
+      </como-testar>
+      <criterio-de-aceite>Cada onda terminada dispara validação E testes em paralelo, em background; a validação não toca $BASE_DIR nem escreve código; a documentação inteira conta a mesma história.</criterio-de-aceite>
+    </item>
+
+    <item id="F2-03" severidade="CRITICO" esforco="M" origem="agente-5/C1+C3">
+      <titulo>COMMIT-FINAL: processar a última validation subwave + novo fluxo FIX-FINAL</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="693-711 (passo 0 do COMMIT-FINAL), 722-723 (gate completo final), 705-707 (precedente de revert)"/>
+      </onde>
+      <problema>
+        LACUNA: hoje o passo 0 do COMMIT-FINAL só processa testing subwave e seu único
+        remédio é REVERTAR commits de teste. Se a validation subwave da última onda
+        encontrar bug de produção/integração, não existe NENHUM caminho prescrito — o
+        orquestrador ou improvisa ou commita código reprovado em silêncio.
+      </problema>
+      <correcao>
+        <passo n="1">Passo 0 do COMMIT-FINAL processa as DUAS subwaves pendentes antes do passo 3 (gate completo final): testing subwave pelo fluxo atual; validation subwave com barreira nos 2 agentes (gate + revisor do diff integrado) e limpeza SEM merge da val-ondaN-gate (remove → drop-branch).</passo>
+        <passo n="2">Novo fluxo FIX-FINAL para validação VERMELHA: cada achado vira sub-agente `fix-final-&lt;foco&gt;` (kind=fix, precedente SKILL.md:1141-1145) → squash-merge + gate + limpeza pelo fluxo normal → RE-RODA a validação UMA vez → se persistir, `do-wt.sh undo` do squash problemático e degradação documentada no relatório final.</passo>
+        <passo n="3">Regra anti-loop: fix-final que toca produção NÃO dispara nova testing/validation subwave; o débito de cobertura vai para "Arquivos sem cobertura" no relatório (SKILL.md:1084-1085).</passo>
+        <passo n="4">Distinção ambiente-vs-código (espelho de R9, SKILL.md:273-274): se a validação falhou por ambiente (deps ausentes na worktree de validação), NÃO gerar fix de produção — re-instalar deps e re-rodar.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Walkthrough forçado: subagente fresco recebe o novo texto e um cenário "validation VERMELHA na última onda" — deve produzir exatamente a sequência fix-final → merge → gate → re-validação → (undo + degradação) sem improvisar.</teste>
+        <teste>Grep: COMMIT-FINAL menciona as duas subwaves; nenhuma referência a "última testing subwave" sozinha.</teste>
+      </como-testar>
+      <criterio-de-aceite>COMMIT-FINAL nunca commita sobre validação reprovada sem fix ou degradação documentada; loop de fix é finito por construção.</criterio-de-aceite>
+    </item>
+
+    <item id="F2-04" severidade="ALTO" esforco="M" origem="agente-4/achado-2 + agente-5/C2">
+      <titulo>Fechar o loop: bugs encontrados por testes e validação viram sub-tarefas de fix</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="1053-1055 (seção 'Bugs encontrados' do handoff), 565-568 (subwaves excluídas do REPLAN), 456-491 (passo 0 → novo passo 3.5), 1066-1114 (final-report-template)"/>
+      </onde>
+      <problema>
+        LOOP ABERTO: o agente de teste é proibido de corrigir produção; o REVISOR DE
+        PLANO nunca vê resultados de testes; nenhum passo instrui o orquestrador a
+        converter bugs em sub-tarefas. Um bug real descoberto fica registrado numa
+        worktree que será destruída — some silenciosamente. A regra "subwaves são
+        excluídas do REPLAN" (:565-568) precisa ser dividida: subwaves nunca são
+        PROPOSTAS nem CONTAM como ondas de feature, MAS seus achados alimentam a onda
+        seguinte como fixes, fora do ciclo REPLAN.
+      </problema>
+      <correcao>
+        <passo n="1">No novo passo 3.5 (F2-01), substep novo: "Se algum handoff de teste ou validação reporta bugs, crie sub-tarefas de fix com PRIORIDADE na onda atual: worktree ondaN-fix-&lt;foco&gt; (kind=fix), integrada pelo fluxo normal (merge → gate → limpeza). Máx 2 tentativas de fix por achado, espelhando a regra dos testes (SKILL.md:479)."</passo>
+        <passo n="2">Reescrever SKILL.md:565-568 em duas cláusulas separadas: (i) subwaves (teste e validação) nunca são propostas pelo REVISOR DE PLANO nem contam como ondas de feature; (ii) os ACHADOS das subwaves entram no passo 3.5 como sub-tarefas kind=fix prioritárias, fora do ciclo REPLAN.</passo>
+        <passo n="3">final-report-template (SKILL.md:1066): adicionar seção "Bugs encontrados" (origem: teste/validação, descrição, fix aplicado ou débito) e tabela "Validação de Código (Validation Subwaves)" com colunas: Subwave | Veredito gate (build/lint/typecheck/testes) | Achados adversariais | Fixes gerados | Status.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Revisão de fluxo: cenário "test-onda1-cache reporta 2 bugs" → o novo passo 3.5 deve gerar onda2-fix-* correspondentes; verificar que o texto prescreve isso sem ambiguidade.</teste>
+        <teste>Grep: final-report-template contém as duas seções novas.</teste>
+      </como-testar>
+      <criterio-de-aceite>Nenhum bug reportado por subwave morre no handoff; relatório final mostra bugs e validação por padrão.</criterio-de-aceite>
+    </item>
+
+    <item id="F2-05" severidade="ALTO" esforco="M" origem="agente-0/A1+M4+M5 + agente-4/achados-5,7">
+      <titulo>REPLAN: fechar ramo ambíguo, disparar em background, reaplicar FASE 2 às novas sub-tarefas</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="544-571 (passo 5 inteiro), 572-573 (disparo dos revisores), 408-426 (passos 4-7 da FASE 2 — referência)"/>
+      </onde>
+      <problema>
+        Três defeitos: (1) AMBIGUIDADE FATAL: só o ramo CONVERGÊNCIA diz "Prossiga ao
+        passo 6" — o ramo NOVAS SUB-TAREFAS termina em "elas viram a(s) próxima(s)
+        onda(s)"; um executor literal pode pular revisão/merge/limpeza da onda ATUAL.
+        (2) SERIAL SEM NECESSIDADE: o REVISOR DE PLANO só consome handoffs + TASK_PLAN
+        + prompt original — todos disponíveis na barreira (passo 4) — mas está no
+        caminho crítico entre barreira e revisão; os revisores adversariais do passo 6
+        também não têm paralelismo declarado. (3) REPLAN roda sobre trabalho AINDA NÃO
+        VALIDADO (antes do gate): se a onda falhar e for desfeita, o plano foi
+        recalculado sobre handoffs inválidos. E as novas sub-tarefas propostas não
+        passam por batismo/mapa de propriedade/prompts.
+      </problema>
+      <correcao>
+        <passo n="1">Fechar o passo 5 com: "Em AMBOS os modos (CONVERGÊNCIA ou NOVAS SUB-TAREFAS), prossiga ao passo 6; as novas sub-tarefas só entram na próxima iteração do repeat."</passo>
+        <passo n="2">Disparo: REVISOR DE PLANO sai do caminho crítico — dispara em BACKGROUND ao fim da barreira (passo 4), concorrente com a revisão adversarial (passo 6) e o loop de merges (passo 7); o resultado é consumido antes do passo 10/repeat. Revisores adversariais: "dispare TODOS com run_in_background=true e aguarde a barreira de revisão; fixes em worktrees distintas também rodam em paralelo, pois os mapas de arquivos são disjuntos".</passo>
+        <passo n="3">Validade: o REPLAN marca cada proposta como "condicionada ao gate verde da onda"; se a revisão adversarial gerou fixes materiais, o orquestrador re-dispara o REPLAN (custo de 1 sub-agente) ou passa um delta dos fixes.</passo>
+        <passo n="4">Novas sub-tarefas aceitas passam pelos passos 4-7 da FASE 2 (mapa de propriedade, batismo R6, escrita de prompts) antes de virar onda.</passo>
+        <passo n="5">Esclarecer SKILL.md:537 ("run_in_background se >1 sub-agente"): "com 1 sub-agente, foreground é equivalente à barreira; revisores e REVISOR DE PLANO seguem a regra de background independentemente".</passo>
+      </correcao>
+      <como-testar>
+        <teste>Revisão adversarial do texto: subagente fresco traça os dois ramos do REPLAN e aponta o próximo passo de cada um — ambos devem terminar no passo 6.</teste>
+        <teste>Grep: passos 5 e 6 declaram run_in_background explicitamente.</teste>
+      </como-testar>
+      <criterio-de-aceite>REPLAN fora do caminho crítico, sem ramo ambíguo, com propostas condicionadas ao gate e novas sub-tarefas passando pelo pipeline completo da FASE 2.</criterio-de-aceite>
+    </item>
+
+    <item id="F2-06" severidade="ALTO" esforco="P" origem="agente-0/A2">
+      <titulo>Válvula de escape para a convergência — fim do loop infinito de ondas</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="405-407, 450-454, 562-563 (e R3 em 109-113 — interação)"/>
+      </onde>
+      <problema>
+        "Ondas são ILIMITADAS... nunca por um número fixo" + R3 "NUNCA entregue
+        trabalho parcial": um REVISOR DE PLANO que sempre propõe refinamentos gera
+        ondas eternas queimando tokens (e agora, com a Brave metered — decisão D3 —
+        também dinheiro real em buscas).
+      </problema>
+      <correcao>
+        <passo n="1">Adicionar ao passo 5: teto duro de 10 ondas por execução; E "2 REPLANs consecutivos sem novas sub-tarefas ACEITAS → convergência forçada".</passo>
+        <passo n="2">Convergência forçada é DOCUMENTADA no relatório final: "convergência por válvula de escape (motivo: teto de ondas | REPLANs estagnados), propostas não executadas listadas aqui" — o usuário decide se quer uma nova execução para os refinamentos.</passo>
+        <passo n="3">Manter a redação "ondas ilimitadas por design" mas com a válvula nomeada como parte do design, não como falha.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Revisão de texto: simular 2 REPLANs vazios consecutivos → o texto prescreve convergência forçada + documentação, sem exceção.</teste>
+      </como-testar>
+      <criterio-de-aceite>Nenhuma execução pode iterar para sempre; toda convergência forçada deixa rastro no relatório.</criterio-de-aceite>
+    </item>
+
+    <item id="F2-07" severidade="ALTO" esforco="M" origem="agente-0/M1,M2,M3,B1-B15 + agente-5/M1,M2,B1,B2,B4">
+      <titulo>Pacote de coerência do SKILL.md — 15 micro-correções de texto alinhadas ao redesenho</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="dispersas — ver cada passo"/>
+      </onde>
+      <problema>Contradições e ambiguidades pontuais que induzem o executor a erro. Cada passo abaixo é independente e cirúrgico.</problema>
+      <correcao>
+        <passo n="1">FASE 0 omite o exit 6 da lista diagnóstica (327-331): incluir "6 = índice sujo (mudanças estagiadas de terceiros)" — do-context.sh:144 tem die 6 e R2(c)/R8(f) citam índice sujo.</passo>
+        <passo n="2">Contradição "script ausente": R7 (185-187) diz prosseguir COM fallback (Tier 3 automático); FASE 1 passo 8 (390-392) e passo 0.5 (500) dizem "siga SEM pesquisa web". Uniformizar nos três lugares: script ausente ≠ sem busca — sub-agentes continuam usando search.sh (Tier 3 automático).</passo>
+        <passo n="3">R7 para tudo mesmo sem necessidade de pesquisa (180-184, 1294): condicionar o bloqueio a "a tarefa ou alguma sub-tarefa planejada exige pesquisa" — espelhando o condicional de R2(a).</passo>
+        <passo n="4">"Segunda exceção" que é a terceira (332): trocar para "exceção (c) da R2".</passo>
+        <passo n="5">"Tier 3 sempre funciona" (172-173, 1289-1291) vs. exit 2 existir: reescrever para "não requer chave; disponível enquanto houver rede — mas é Instant Answer, cobertura limitada" (ver também F3-06n).</passo>
+        <passo n="6">Ambiguidade N vs N-1 no processamento de subwaves (459-461 vs 473-476): definir no início do passo: "N = onda atual; a subwave pendente é a da onda N-1, nomeada test-onda(N-1)-* / val-onda(N-1)-*".</passo>
+        <passo n="7">COMMIT-FINAL diz "REVERTA o squash-commit" sem citar undo (705-706): citar `do-wt.sh undo` explicitamente, como a fase 3 faz (481-487).</passo>
+        <passo n="8">"nunca é rastreado pelo git" é impreciso (431-433): .deep-orchestrator/ NÃO é gitignored — o que o protege é a exclusão explícita em gstatus/stage-delta (do-context.sh:252, do-wt.sh:364). Reescrever a justificativa.</passo>
+        <passo n="9">Justificativa do `;` no sweep (613-618): hoje diz "inclusive uma testing subwave em voo", mas com F2-01 o sweep roda quando pode haver subwave em voo, sim — manter a regra do `;` e corrigir a justificativa para "ACTIVE = merge pendente ou subwave legitamente em voo".</passo>
+        <passo n="10">Template com {{MAIN_ROOT}} vazio em modo normal (874-876): tornar o bloco condicional no próprio template ("se MAIN_ROOT = &lt;nenhum&gt;, use git -C {{BASE_DIR}}").</passo>
+        <passo n="11">Mecanismo de barreira depende de harness (540-543): adicionar "ou o mecanismo de espera equivalente do SEU harness".</passo>
+        <passo n="12">Sub-agente não sabe qual tier de busca está ativo (844-845): novo placeholder {{SEARCH_TIER}} preenchido pelo orquestrador, para o sub-agente calibrar a expectativa de qualidade em modo degradado.</passo>
+        <passo n="13">Escopo da testing subwave ignora arquivos do COMMIT PREP (651-656, wave-files difia do SHA pré-merge pós-PREP): incluir os paths do PREP no escopo quando o PREP criou stubs/contratos reais.</passo>
+        <passo n="14">Verificações redundantes na FASE 1: passo 7 (printenv BRAVE_API_KEY, 378-385) é redundante com o passo 8 (o checker já reporta Tier 2 NOT_CONFIGURED, check-search-credits.sh:56) e com o passo 0.5 da primeira onda (493-500). Manter UM ponto de verificação + o condicional R2(a).</passo>
+        <passo n="15">Definição de onda topológica restritiva demais (403-405): "Onda 2 = depende só da Onda 1" → "onda K depende apenas de ondas &lt; K".</passo>
+      </correcao>
+      <como-testar>
+        <teste>Para cada passo: grep da redação antiga → 0 ocorrências; grep da nova → presente.</teste>
+        <teste>Leitura cruzada R7/R2/FASE 1/passo 0.5 por subagente fresco: as três exceções e o comportamento "script ausente" devem ser narrados de forma idêntica nos quatro pontos.</teste>
+      </como-testar>
+      <criterio-de-aceite>Zero contradições internas conhecidas restantes no SKILL.md.</criterio-de-aceite>
+    </item>
+
+    <item id="F2-08" severidade="MEDIO" esforco="P" origem="agente-5/M4">
+      <titulo>Degradation: novo caso validation-subwave-failure</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="1216-1235 (degradation cases existentes)"/>
+      </onde>
+      <problema>Há casos para test-subwave-failure e test-coverage-insufficient, nada para validação.</problema>
+      <correcao>
+        <passo n="1">Novo &lt;case id="validation-subwave-failure"&gt; espelhando test-subwave-failure: re-disparo na mesma worktree, máx 3 tentativas, depois BLOQUEIO documentado no relatório.</passo>
+        <passo n="2">Critério explícito "gate vermelho por ambiente": re-instalar deps congeladas na worktree de validação e re-rodar — nunca gerar fix de produção por falha de ambiente.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Grep: case presente e referenciado no passo 3.5 e no COMMIT-FINAL.</teste>
+      </como-testar>
+      <criterio-de-aceite>Toda falha de subwave tem protocolo prescrito; ambiente e código nunca são confundidos.</criterio-de-aceite>
+    </item>
+
+    <item id="F2-09" severidade="MEDIO" esforco="P" origem="agente-4/achado-12">
+      <titulo>wave-files quebra se a primeira filha da onda não foi mergeada</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="653-654"/>
+        <arquivo path="scripts/do-wt.sh" linhas="377-384 (cmd_wave_files)"/>
+      </onde>
+      <problema>Se a 1ª sub-tarefa da onda falhou (BLOCKED/ORPHANED), ela não tem pre_merge_sha e o passo 10 não computa o escopo de testes/validação — falha silenciosa exatamente nos cenários já degradados.</problema>
+      <correcao>
+        <passo n="1">SKILL.md:653: "a 1ª filha com status=MERGED desta onda".</passo>
+        <passo n="2">cmd_wave_files (opcional, robustez): aceitar o MENOR pre_merge_sha entre as filhas MERGED da onda, em vez de exigir um nome específico.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Nova asserção A32: onda com 1ª filha BLOCKED e 2ª MERGED → wave-files usando a MERGED retorna o diff esperado.</teste>
+      </como-testar>
+      <criterio-de-aceite>Escopo de subwave computável mesmo com bloqueios parciais na onda.</criterio-de-aceite>
+    </item>
+
+  </fase>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       FASE 3 — PARALELISMO ESTRUTURAL + BUSCA. Gate fora do caminho crítico
+       (decisão D1), teto configurável (D2), pesquisas paralelas gerenciadas
+       por código (D3), e o pacote completo de correções dos scripts de busca.
+       ════════════════════════════════════════════════════════════════════ -->
+  <fase n="3" nome="Paralelismo estrutural + busca" objetivo="Tirar o gate da seção crítica dos merges, limitar e configurar a concorrência, paralelizar pesquisas sem teto via código, e corrigir todos os bugs dos scripts de busca.">
+
+    <item id="F3-01" severidade="ALTO" esforco="G" origem="agente-4/achado-3 + decisão D1">
+      <titulo>Gate em worktree-snapshot kind=integration — builds duplicados por decisão, merges fora da espera</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="126-138 (R5), 582-612 (passo 7), 266-274 (R9 — deps do gate), 608-610 ('NUNCA squash-mergeie o próximo sem o gate')"/>
+        <arquivo path="scripts/do-wt.sh" linhas="25 (kinds), 109-132 (cmd_new — já aceita kind livre), 184-188 (undo via revert com HEAD avançado — a rede de segurança)"/>
+      </onde>
+      <problema>
+        O squash-merge em si é atômico e rápido (segundos); o GARGALO real é o gate
+        (build+testes = minutos), e como ele roda NA working tree de $BASE_DIR
+        (SKILL.md:596), nenhum outro merge pode acontecer durante ele — merge+gate
+        viram UMA seção crítica global de N × (merge + gate). Decisão D1 do usuário:
+        resolver com snapshot, aceitando builds duplicados.
+      </problema>
+      <correcao>
+        <passo n="1">Novo fluxo do passo 7: (a) squash-merge rápido em $BASE_DIR (como hoje); (b) IMEDIATAMENTE criar worktree efêmera `int-ondaN-&lt;nome&gt;` (kind=integration) no SHA pós-merge — já registrado no owned.tsv coluna 8; (c) rodar o gate LÁ, em background; (d) seguir para o próximo merge SEM esperar.</passo>
+        <passo n="2">A regra "só limpo a worktree-filha com gate verde" (SKILL.md:600-607) se mantém — a LIMPEZA (remove + drop-branch) passa a ser a única operação que aguarda o gate do snapshot. A frase "NUNCA squash-mergeie o próximo sem o gate do anterior" (:608-610) é substituída por: "merges seguem em sequência; limpeza de cada filha e o fim da onda aguardam o respectivo gate de snapshot".</passo>
+        <passo n="3">Falha tardia: se o gate do merge N falhar, `do-wt.sh undo &lt;nome&gt;` — o caminho revert funciona com HEAD avançado (do-wt.sh:184-188) e desfaz só aquele squash; gates posteriores que já passaram são re-rodados só se o revert tocar seus arquivos (checar sobreposição de paths; na dúvida, re-rodar).</passo>
+        <passo n="4">R5 atualizada: o um-a-um continua (atribuição de culpa por commit), mas o gate sai da seção crítica. R9: a worktree de integração instala deps congeladas como qualquer filha (documentar o custo: builds duplicados são ESPERADOS — decisão D1).</passo>
+        <passo n="5">Registro de gate-pendente: marcar na linha do owned.tsv (coluna status ou nota) "gate-pending" até o snapshot reportar verde — o sweep e o fim de onda verificam que não há gate-pending.</passo>
+        <passo n="6">Aplicar o mesmo padrão aos merges de TESTE do processamento de subwave (hoje até 3 merges + 3 gates seriais, SKILL.md:472-476): como testes só ADICIONAM arquivos, permitir gate único combinado após os ≤3 merges de teste; re-run individual apenas no caminho de falha.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Nova asserção A33 (fixture): 2 filhas mergeadas em sequência; gate do snapshot da 1ª forçado a FALHAR (script de teste fake) → undo reverte exatamente o squash da 1ª, HEAD avançado é preservado, commit da 2ª intacto.</teste>
+        <teste>A34: owned.tsv reflete gate-pending → gate-ok transição; sweep recusa fim de onda com gate-pending.</teste>
+        <teste>Revisão de texto: R5/passo 7/R9 contam a mesma história; nenhuma referência restante a "gate em $BASE_DIR síncrono entre merges".</teste>
+      </como-testar>
+      <criterio-de-aceite>Merges de uma onda não se serializam pelo gate; falha tardia é reversível cirurgicamente; builds duplicados documentados como trade-off aceito.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-02" severidade="ALTO" esforco="M" origem="agente-6/rec-1 + agente-4/achado-6 + decisão D2">
+      <titulo>DO_MAX_PARALLEL — teto de concorrência configurável na chamada da skill, default 20</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="28 (argument-hint), 403-407 (PLAN: organização em ondas), 519-537 (disparo), 662 (único teto atual: 3 worktrees de teste)"/>
+        <arquivo path="scripts/do-context.sh" linhas="217-247 (ENV_FILE — onde a var é gravada)"/>
+        <arquivo path="README.md" linhas="129-156 (Uso)"/>
+      </onde>
+      <problema>
+        Não há limite de sub-agentes de feature por onda: uma onda com 10 sub-tarefas
+        dispara 10 agentes + 10 revisores + 1 revisor de plano, concorrentes com até 3
+        agentes de teste — sem freio. A pesquisa mostrou cap real do Claude Code
+        (~20 concorrentes/200 por sessão) e harness derrubando agentes no meio do run
+        com fan-out grande. Decisão D2: configurável na chamada, default 20.
+      </problema>
+      <correcao>
+        <passo n="1">Interface: `/deep-orchestrator max-parallel=N &lt;tarefa&gt;` — o orquestrador parseia o prefixo, exporta DO_MAX_PARALLEL=N antes da FASE 0. Se ausente: default 20.</passo>
+        <passo n="2">do-context.sh: gravar DO_MAX_PARALLEL no ENV_FILE (<![CDATA[DO_MAX_PARALLEL="${DO_MAX_PARALLEL:-20}"]]>), com validação de inteiro positivo.</passo>
+        <passo n="3">PLAN (403-407): nova regra de orçamento — "features por onda ≤ DO_MAX_PARALLEL; in-flight total (features da onda + subwaves da onda anterior + revisores + REVISOR DE PLANO) ≤ 2×DO_MAX_PARALLEL; ondas maiores viram batches sequenciais dentro da mesma onda, cada batch com sua barreira, compartilhando o mesmo passo 7".</passo>
+        <passo n="4">Dispatches escalonados com alguns segundos de intervalo (mitiga rate limit 429 — Brave por segundo é 1 req/s nesta conta, verificado ao vivo via X-RateLimit-Limit).</passo>
+        <passo n="5">Docs: argument-hint do frontmatter, README (Uso + exemplo), e nota no PLAN de que 3-5 é o ponto ótimo recomendado pela Anthropic — o default 20 é o CAP protetor, não o alvo.</passo>
+      </correcao>
+      <como-testar>
+        <teste>do-context.sh com DO_MAX_PARALLEL=3 exportado → ENV_FILE contém 3; sem a var → 20; com "abc" → erro de validação.</teste>
+        <teste>Revisão de texto: PLAN prescreve fatiamento quando sub-tarefas > DO_MAX_PARALLEL.</teste>
+      </como-testar>
+      <criterio-de-aceite>Nenhuma execução dispara mais agentes que o teto configurado; default 20 protege quem não configura.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-03" severidade="ALTO" esforco="P" origem="agente-0/A5">
+      <titulo>Gate é invocado ~10 vezes e nunca definido — detectar e registrar na FASE 1</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="596 (e todas as outras invocações: 475, 596-599, 722-723...), FASE 1 (novo passo)"/>
+      </onde>
+      <problema>"RODE O GATE: build + testes + linter" depende de inferência ad hoc do orquestrador a cada uma das ~10 invocações — cada uma pode decidir algo diferente.</problema>
+      <correcao>
+        <passo n="1">Novo passo na FASE 1: "Detecte os comandos do gate do projeto-alvo (package.json scripts / Makefile / pyproject.toml / Cargo.toml / go.mod...) e registre o trio exato no TASK_PLAN.md: GATE_BUILD, GATE_TEST, GATE_LINT. Ausente algum deles, registre 'sem &lt;etapa&gt;' explicitamente — nunca invente na hora."</passo>
+        <passo n="2">Todas as invocações de gate passam a dizer: "o gate é SEMPRE o trio registrado no TASK_PLAN.md (GATE_BUILD/GATE_TEST/GATE_LINT), com cwd conforme o contexto (snapshot de integração, worktree de validação, ou $BASE_DIR no gate final)".</passo>
+      </correcao>
+      <como-testar>
+        <teste>Grep: toda ocorrência de "RODE O GATE" referencia o registro; FASE 1 contém o passo novo.</teste>
+        <teste>Subagente fresco lendo a FASE 1 sabe dizer quais comandos rodaria num repo fixture com package.json.</teste>
+      </como-testar>
+      <criterio-de-aceite>Gate definido uma única vez, por execução, de forma determinística.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-04" severidade="ALTO" esforco="P" origem="agente-6/rec-4">
+      <titulo>Lockfile como SINGLETON — no máximo 1 agente por onda adiciona dependências</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="235-281 (R9), 408-422 (PLAN: mapa de propriedade + COMMIT PREP), 896-897 (template do sub-agente)"/>
+      </onde>
+      <problema>R9 permite que qualquer sub-agente adicione dependência e commite o lockfile no seu branch. O mapa de propriedade sequencia arquivos compartilhados PLANEJADOS, mas a necessidade de dependência EMERGE durante o trabalho — N agentes na mesma onda = conflito de lockfile real ("package manager chaos" documentado na pesquisa).</problema>
+      <correcao>
+        <passo n="1">PLAN: manifesto + lockfile entram no mapa de propriedade como recurso SINGLETON explícito: "no máximo 1 agente por onda pode adicionar dependências; os demais registram a necessidade no handoff ('deps pendentes: &lt;pacote@versão&gt;') e a adição acontece via COMMIT PREP da onda seguinte".</passo>
+        <passo n="2">Template do sub-agente (896-897): "Se precisar de dependência nova e NÃO for o agente designado para deps nesta onda: registre no handoff e prossiga sem ela (ou com implementação que não dependa dela)."</passo>
+        <passo n="3">COMMIT PREP da onda seguinte consolida as deps pendentes dos handoffs num único commit de prep.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Grep: PLAN, template e R9 contam a mesma regra; cenário de revisão com 2 agentes precisando de deps → exatamente 1 adiciona.</teste>
+      </como-testar>
+      <criterio-de-aceite>Conflito de lockfile entre agentes da mesma onda é impossível por construção.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-05" severidade="ALTO" esforco="M" origem="decisão D3 + agente-6/rec-9 + agente-7/13">
+      <titulo>scripts/search-parallel.sh — pesquisas em paralelo SEM LIMITE, gerenciadas por código; a skill só espera</titulo>
+      <onde>
+        <arquivo path="scripts/search-parallel.sh" linhas="NOVO ARQUIVO"/>
+        <arquivo path="SKILL.md" linhas="829-845 (regra 2 do subagent-prompt-template)"/>
+        <arquivo path="scripts/README.md" linhas="16-23 (tabela de busca)"/>
+      </onde>
+      <problema>
+        Decisão D3: nenhum provedor novo (só Brave, via a cadeia existente), MAS
+        pesquisas em paralelo sem limite de quantidade. Hoje cada chamada a search.sh é
+        serial; o sub-agente precisaria disparar N chamadas e gerenciar N resultados.
+        A solução é em CÓDIGO: um script que recebe o lote de queries, gerencia TODOS
+        os processos (sem teto fixo), deduplica, trata 429 com backoff exponencial +
+        jitter, e devolve UM relatório. A skill chama uma vez e espera.
+      </problema>
+      <correcao>
+        <passo n="1">Novo scripts/search-parallel.sh:
+          - Entrada: arquivo de lote (--batch queries.txt, uma query por linha) OU queries como argumentos posicionais múltiplos; flags do search.sh repassadas (--task/--goal/--insights/--deliverable/--json/--count).
+          - Execução: dispara uma chamada search.sh por query EM PARALELO (background jobs + wait), SEM teto de quantidade — o gerenciamento é do código: cada job grava seu resultado num arquivo próprio sob $DO_STATE/parallel-search/ (ou mktemp -d fora de execução de orquestração).
+          - Rate limit: Brave por segundo é baixa (1 req/s observada); o código agenda os disparos com jitter (ex.: sleep aleatório 0-2s por job) e, em HTTP 429, backoff exponencial com jitter (1s, 2s, 4s + jitter) — hoje brave-search.sh:327-341 faz apenas 1 retry.
+          - Agregação: junta todos os resultados num relatório único, DEDUPLICADO por URL, marcando a fonte (query → tier que respondeu → URLs). Com --json: envelope único { queries: [...], results: [...], failures: [...] }.
+          - Cache por run: queries idênticas na mesma execução reutilizam o resultado (dedup por hash da query antes de disparar).
+          - Exit codes: 0 = pelo menos 1 query com resultado; 1 = todas falharam/vazias (alinhado ao fix F3-06e); 2 = erro de uso.</passo>
+        <passo n="2">Regra 2 do subagent-prompt-template (SKILL.md:829-845): "Para múltiplas buscas, NUNCA chame search.sh em loop — monte o lote e chame {{SKILL_HOME}}/scripts/search-parallel.sh UMA vez; o resultado agregado e deduplicado volta em um único relatório."</passo>
+        <passo n="3">scripts/README.md: documentar o script na tabela de busca + diagrama do fluxo paralelo.</passo>
+        <passo n="4">Heurística de fonte autoritativa entra no mesmo template (pesquisa Anthropic: agentes preferem content farms de SEO): "prefira documentação oficial e fontes primárias; desconfie de listicles".</passo>
+      </correcao>
+      <como-testar>
+        <teste>test-search.sh: lote de 20 queries com search.sh MOCKADO (script fake que dorme 0.1s e emite JSON fixo) → assert: (a) todas as 20 rodaram; (b) tempo total ≈ tempo de 1-2 jobs, não 20× (prova paralelismo); (c) relatório agregado deduplica URLs repetidas.</teste>
+        <teste>Mock que retorna 429 na 1ª tentativa e sucesso na 2ª → assert backoff funcionou e resultado final presente.</teste>
+        <teste>2 queries idênticas no lote → apenas 1 chamada real ao mock (cache por run).</teste>
+        <teste>bash -n limpo; help documentado.</teste>
+      </como-testar>
+      <criterio-de-aceite>Sub-agente faz N pesquisas com 1 chamada; paralelismo ilimitado gerenciado pelo código; 429 não mata o lote; saída única e estável.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-06" severidade="ALTO" esforco="M" origem="agente-1 (todos os médios/baixos) + agente-7/3,4,7,10">
+      <titulo>Pacote de correções dos scripts de busca — 16 ajustes em search.sh, brave-search.sh, check-search-credits.sh, check-brave-credits.sh</titulo>
+      <onde>
+        <arquivo path="scripts/search.sh" linhas="140,146,179-182,318-319,330-334,379,394-397,405,427,435,479,515-518,525,546"/>
+        <arquivo path="scripts/brave-search.sh" linhas="60,152,158,170,217 (check-brave),312,478-485,497"/>
+        <arquivo path="scripts/check-search-credits.sh" linhas="73,88-91,155-200,249,353,412,437,568"/>
+        <arquivo path="scripts/check-brave-credits.sh" linhas="60,90,158-172,217,260-266,379"/>
+      </onde>
+      <problema>Conjunto de defeitos verificados (vários REPRODUZIDOS) na cadeia de busca. Cada passo é independente.</problema>
+      <correcao>
+        <passo n="1">search.sh:330-334 — saída do Tier 1 flui direto para stdout sem captura: se o surf imprime parcial e falha, os tiers seguintes concatenam e o --json sai inválido. Capturar em var/arquivo e emitir SÓ se rc=0.</passo>
+        <passo n="2">Envelope --json muda conforme o tier (Tier 1 = envelope do surf; Tiers 2/3 = json_report do search.sh:269-293). Normalizar: reembrulhar a saída do Tier 1 no envelope do search.sh (campo answer + results extraídos de sources), ou documentar explicitamente os dois formatos no --help e no SKILL.md.</passo>
+        <passo n="3">--max-evolutions é flag MORTA no search.sh (parseada :123,136, validada :179-182, documentada :80 e SKILL.md:834 — nunca usada): implementar o loop de evolução no Tier 2 reutilizando classify_feedback/evolve_query (já sourceadas de brave-search.sh) ou REMOVER a flag e as menções.</passo>
+        <passo n="4">Dependências verificadas UMA vez no início (curl, jq, python3) com exit 2 coerente — hoje: search.sh:427 chama curl no Tier 3 sem checar; :479 cai no fallback python3 sem checar; check-search-credits.sh:568 usa jq fora do path que o verificou; search.sh:146/brave-search.sh:158 usam jq no --brief-file antes de qualquer verificação (mensagem de erro errada).</passo>
+        <passo n="5">search.sh sai 0 com zero resultados em TODA a cadeia (:515-518 força results=[] e retorna 0 — verificado empiricamente): sair 1 (ou código dedicado) quando todos os tiers falharem/vierem vazios, para o orquestrador distinguir "sem matches" de "tudo falhou".</passo>
+        <passo n="6">check-search-credits.sh:437 — comentário diz que HTTP 403 conta como "servidor respondendo", mas o regex ^[23][0-9][0-9]$ rejeita 403 → exit 2 falso possível. Corrigir regex para ^(2..|3..|403)$ ou corrigir o comentário.</passo>
+        <passo n="7">check-brave-credits.sh:260-266 — cache-hit ignora --fail-fast (CREDITS_LOW/UNKNOWN cacheados saem 0; sem cache sairiam 1): aplicar a lógica de FAIL_FAST também no ramo do cache. E :60 vs :379 — o usage contradiz os exit codes reais (SUBSCRIPTION_ACTIVE/RATE_LIMITED saem 0 mesmo com --fail-fast): alinhar o texto.</passo>
+        <passo n="8">brave-search.sh:497 — glob expansion em `words=( $q )`: query com * expande para os arquivos do cwd (reproduzido). Corrigir com `set -f` local ou `read -ra words &lt;&lt;&lt; "$q"`.</passo>
+        <passo n="9">Positionais múltiplos e `--`: search.sh:146/brave-search.sh:158 — último posicional sobrescreve QUERY em silêncio; `--` descarta o que vem depois (search.sh --json -- "query" perde a query). Tratar pós-`--` como posicionais e rejeitar >1 posicional.</passo>
+        <passo n="10">--timeout sem valor quebra com "$2: unbound variable" em check-search-credits.sh:73 e check-brave-credits.sh:90 (reproduzido): adotar o helper flag_val() usado em search.sh/brave-search.sh.</passo>
+        <passo n="11">check-search-credits.sh — verificação do Tier 1 é rasa (:155-200): basta binário + --version; sem keys.json/OpenRouter reporta "ALL SYSTEMS GO" falso. Tier 1 AVAILABLE só se ~/.config/surf/keys.json existir e for não-vazio (ou busca mínima real); senão DEGRADED com detalhe.</passo>
+        <passo n="12">trap 'rm -f ...' RETURN com vars locais (check-search-credits.sh:249,353,412): permanece instalado após o retorno; se main terminar normalmente, dispara com vars fora de escopo → unbound variable e exit code corrompido (reproduzido). `trap - RETURN` ao fim de cada função.</passo>
+        <passo n="13">search.sh:435 — exit 1 dentro de try_ddg_keyless quebra o contrato "funções retornam, main decide": trocar por return 1.</passo>
+        <passo n="14">Docs dos mecanismos reais da Brave: X-Credit-Remaining NÃO existe na resposta real (verificado ao vivo 14/08/2026 — só X-RateLimit-{Limit,Remaining,Reset}, par "por segundo, por mês"; 2º valor = quota mensal). Reescrever comentários de check-brave-credits.sh:5-7 e scripts/README.md:23; billing-status (brave-search.sh:312, check-search-credits.sh:277) sai sempre vazio — remover ou marcar opcional. Manter o parsing de 429 (:329-330), que está correto.</passo>
+        <passo n="15">Honestidade sobre o Tier 3 (DDG): verificado ao vivo — HTTP 202, retorna vazio para queries genéricas (é Instant Answer, não full-text search). Reescrever "ALWAYS WORKS" (search.sh:10), "sempre funciona" (SKILL.md:172-173, 838-839) e scripts/README.md:46-48 para "conectividade garantida, cobertura limitada a instant answers". surf-free-skill existe no PATH mas NÃO entra na cadeia — decisão D3 (apenas Brave como provedor real; documentar que o Tier 3 é último recurso de conectividade).</passo>
+        <passo n="16">Código morto e arestas: maxq=6 inalcançável (search.sh:318-319); ACTIVE_PROVIDER atribuída e nunca lida (:54,405,525); checagem dupla de surf-search-normal (:546 vs :300); trap EXIT do brave-search.sh:60 vaza para o processo do search.sh via source (hoje no-op — isolar); classify_feedback com --count 1 classifica tudo lowq (:478-485); billing em path fixo /tmp/brave-real-billing.txt sem lock (check-brave-credits.sh:217 — script deprecated; avaliar REMOVER check-brave-credits.sh de vez junto com F4-01, pois scripts/README.md:23 já o marca DEPRECATED).</passo>
+      </correcao>
+      <como-testar>
+        <teste>Novo scripts/test-search.sh com bins mockados cobrindo: T1-captura (stdout limpo em falha parcial), envelope estável, evolução (ou flag removida), deps ausentes → exit 2 com mensagem correta, cadeia vazia → exit 1, regex 403, cache+fail-fast, query com `*` não expande, >1 posicional → erro, --timeout sem valor → erro limpo, trap RETURN não corrompe exit code.</teste>
+        <teste>bash -n nos 4 scripts; shellcheck se disponível.</teste>
+        <teste>Teste manual ao vivo (1 query): search.sh "teste" → Tier 1 ou 2 responde com resultados reais; env -u BRAVE_API_KEY → Tier 3 responde (mesmo que vazio) com mensagem honesta.</teste>
+      </como-testar>
+      <criterio-de-aceite>Cadeia de busca previsível: schemas estáveis, exit codes significativos, zero flags mortas documentadas, docs alinhadas ao comportamento real das APIs.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-07" severidade="MEDIO" esforco="P" origem="agente-6/rec-5,10 + agente-0/B6">
+      <titulo>Testes derivados do CONTRATO, não do diff + produtor definido para FALSIFIABLE_QUESTIONS</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="949-1064 (test-agent-template), 978-982 (WAVE_DIFF/WAVE_HANDOFFS como contexto principal), 939-940 (placeholder), 577-580 (exemplos no passo 6), 423-426 (PLAN: escrita de prompts)"/>
+      </onde>
+      <problema>O test-agent recebe o diff da implementação como fonte primária — a literatura chama isso de validação circular/viés de confirmação: testes condicionados à implementação espelham o código. E {{FALSIFIABLE_QUESTIONS}} não tem produtor definido.</problema>
+      <correcao>
+        <passo n="1">Reordenar o test-agent-template: fonte primária = descrição original da tarefa + critérios de aceitação + as FALSIFIABLE_QUESTIONS da sub-tarefa; diff/handoffs viram "referência do que existe". Adicionar: "derive o comportamento esperado da TAREFA; se o código contradiz a tarefa, reporte como bug".</passo>
+        <passo n="2">PLAN (passo 7 da FASE 2): "o orquestrador formula 3-5 perguntas falsificáveis por sub-tarefa a partir do contrato" — preenche {{FALSIFIABLE_QUESTIONS}}; as MESMAS perguntas alimentam a revisão adversarial (passo 6) E os testes (subwave).</passo>
+        <passo n="3">Classificação 4-vias de falhas no degradation (SKILL.md:1116-1236): ao gate VERMELHO ou refutação, classificar antes de agir — bug → fix agent; spec gap → REPLAN/nova sub-tarefa; ruído → ambiente (R9); ambiguidade de contrato → atualizar o contrato no TASK_PLAN.md, nunca retentar às cegas.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Revisão de template: subagente fresco declara qual é sua fonte primária — deve responder "a tarefa/contrato".</teste>
+        <teste>Grep: placeholder {{FALSIFIABLE_QUESTIONS}} tem produtor nomeado no PLAN.</teste>
+      </como-testar>
+      <criterio-de-aceite>Testes independentes da implementação; falhas classificadas antes de qualquer re-dispatch.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-08" severidade="MEDIO" esforco="P" origem="agente-6/rec-3">
+      <titulo>Revisor adversarial: acesso read-only ao repo + verificação de achados antes de criar fix</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="572-581 (passo 6), 466-471 (revisão de testes), 927-947 (adversarial-review-template)"/>
+      </onde>
+      <problema>O revisor recebe APENAS o diff colado — revisão só-por-diff perde falhas de integração fora do diff, e findings de subagentes chegam com falsos positivos; a literatura manda tratar todo finding como lead não verificado.</problema>
+      <correcao>
+        <passo n="1">Template: o revisor ganha permissão explícita de LEITURA ao repositório completo (somente-leitura) para verificar contexto fora do diff.</passo>
+        <passo n="2">Novo passo antes de criar sub-agente de fix: "confirme cada achado com evidência arquivo:linha reproduzível; descarte findings sem evidência".</passo>
+      </correcao>
+      <como-testar>
+        <teste>Revisão do template: veredito exige evidência por achado; texto proíbe fix sem evidência.</teste>
+      </como-testar>
+      <criterio-de-aceite>Zero fixes disparados por findings não verificados.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-09" severidade="MEDIO" esforco="P" origem="agente-6/rec-6,8">
+      <titulo>Tiering de modelos por papel + regra de escala no PLAN</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="57 (model: inherit), 536 (todo sub-agente general-purpose), 400-407 (PLAN: dimensionamento)"/>
+      </onde>
+      <problema>Todo sub-agente roda no modelo mais caro (inherit); e o sistema cria ondas/worktrees mesmo para decomposições mínimas. Multi-agente queima ~15× mais tokens que chat — a própria Anthropic recomenda regras de escala embutidas no prompt e modelos por papel (~70% de economia reportada em guias).</problema>
+      <correcao>
+        <passo n="1">Especificar modelo por papel no disparo: agentes de teste e revisores adversariais em modelo MÉDIO; REVISOR DE PLANO e síntese final no modelo FORTE; features no modelo padrão. Redigir de forma agnóstica de harness ("se o harness permite escolher modelo por sub-agente...").</passo>
+        <passo n="2">PLAN: "≤2 sub-tarefas independentes e pequenas → execute sem fan-out extra; crie sub-agente apenas quando o isolamento se justificar; registre a justificativa de fan-out no TASK_PLAN.md".</passo>
+      </correcao>
+      <como-testar>
+        <teste>Grep: disparo declara modelo por papel; PLAN contém a regra de escala.</teste>
+      </como-testar>
+      <criterio-de-aceite>Custo de tokens por execução cai sem perda de qualidade nos papéis críticos.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-10" severidade="BAIXO" esforco="P" origem="agente-4/achados-10,13,14,15">
+      <titulo>Micro-otimizações de ordem e espera no fluxo de onda</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="493-500 (passo 0.5), 537, 693-731 (COMMIT-FINAL)"/>
+      </onde>
+      <problema>Pequenos pontos seriais sem necessidade.</problema>
+      <correcao>
+        <passo n="1">Passo 0.5 (check-search-credits) pode rodar concorrente com o processamento de subwaves ou durante a espera do passo 4 da onda anterior — OPCIONAL, manter serial é defensável; documentar a escolha.</passo>
+        <passo n="2">COMMIT-FINAL: enquanto aguarda a última subwave, adiantar gate parcial do estado sem os testes e o rascunho do EXPLAINER; gate final + EXPLAINER final após o merge dos testes.</passo>
+        <passo n="3">Frase explicando o run_in_background condicional a ">1 sub-agente" (já coberto no passo 5 de F2-05).</passo>
+      </correcao>
+      <como-testar>
+        <teste>Revisão de texto: ordens novas coerentes com F2-01.</teste>
+      </como-testar>
+      <criterio-de-aceite>Esperas do orquestrador preenchidas com trabalho útil sempre que seguro.</criterio-de-aceite>
+    </item>
+
+    <item id="F3-11" severidade="BAIXO" esforco="G" origem="agente-4/achado-4 + agente-6/rec-7">
+      <titulo>(FASE POSTERIOR — registrar) Dispatch-on-ready: disparo antecipado por dependência, sem barreira de onda estrita</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="401-407 (grafo de dependências), 450-454 (loop), 540-543 (barreira)"/>
+      </onde>
+      <problema>A onda é barreira global, mas as dependências reais são por sub-tarefa: uma sub-tarefa da onda N+1 cujas dependências já mergearam poderia disparar enquanto o resto da onda N roda. É a mudança MAIS complexa da lista (handoff deixa de ser por onda; REPLAN assume fronteiras limpas; mapa de propriedade precisa ser checado contra o conjunto ativo). Não fazer agora.</problema>
+      <correcao>
+        <passo n="1">Apenas REGISTRAR no SKILL.md como evolução futura conhecida, com o pré-requisito explícito: exige F2-01, F3-01 e F3-02 estáveis em produção antes de ser tentada.</passo>
+      </correcao>
+      <como-testar>
+        <teste>Nota presente no SKILL.md, sem alterar o fluxo atual.</teste>
+      </como-testar>
+      <criterio-de-aceite>Decisão de adiar documentada, não esquecida.</criterio-de-aceite>
+    </item>
+
+  </fase>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       FASE 4 — DOCS, PROMPTS E REGRESSÃO. README/frontmatter sincronizados,
+       prompts ECC alinhados às regras atuais, suíte de testes expandida
+       cobrindo cada bug que motivou este plano.
+       ════════════════════════════════════════════════════════════════════ -->
+  <fase n="4" nome="Docs, prompts e regressão" objetivo="Documentação contando a história verdadeira (3-tier, subwaves duplas, v3.3.0) e cada bug corrigido coberto por asserção automatizada.">
+
+    <item id="F4-01" severidade="ALTO" esforco="M" origem="agente-0/A6 + agente-1/README + agente-7/14 + agente-3/M1">
+      <titulo>README v3.3.0 — sincronizar com o sistema 3-tier e com tudo que mudou nas Fases 1-3</titulo>
+      <onde>
+        <arquivo path="README.md" linhas="5, 42-43, 61, 69, 74, 84-89, 102, 166, 168-174 (Versão)"/>
+        <arquivo path="SKILL.md" linhas="60-62 (metadata version/updated)"/>
+        <arquivo path="research/RESEARCH_ANSWER.md" linhas="39 (pendência registrada e nunca executada)"/>
+      </onde>
+      <problema>
+        O README parou na v3.0.0: diz "verifica créditos Brave antes de cada onda"
+        (agora é 3-tier); diz que o brave-search.sh "substitui o surf-search-normal,
+        não depende mais do surf-research-skill" — CONTRADIZ a reintrodução do
+        surf-skill como Tier 1 (SKILL.md:168-169); FASE 1 cita check-brave-credits.sh
+        --fail-fast (script DEPRECATED, scripts/README.md:23); exceções da R2 citam
+        "créditos Brave esgotados" (R2 atual: exit 2 = TODOS os tiers fora); a árvore
+        omite search.sh e check-search-credits.sh; Brave API key consta como
+        "Requisito" (com Tier 3 keyless é opcional); "um commit por testing subwave"
+        (na prática: um squash por worktree de teste, até 3). Causa raiz: os commits
+        do 3-tier não bumparam versão. A pendência registrada em RESEARCH_ANSWER.md:39
+        (corrigir "~$5/mês grátis") nunca foi executada — e ficou mais errada: desde
+        fev/2026 a Brave é metered com cobrança real ao exceder.
+      </problema>
+      <correcao>
+        <passo n="1">Bump: frontmatter version 3.3.0 + updated; nova seção "Novidades na v3.3.0" no README: busca 3-tier (search.sh/check-search-credits.sh), validation subwaves paralelas (F2-02), gate em snapshot (F3-01), DO_MAX_PARALLEL (F3-02), search-parallel.sh (F3-05), correções críticas (F1-*).</passo>
+        <passo n="2">Reescrever as linhas desatualizadas: tagline (5) com 3-tier; nota histórica da v3.0.0 marcada como SUPERADA ("o surf-skill voltou como Tier 1 na v3.3.0"); FASE 1 e regras 2/7 citando check-search-credits.sh e exit codes 0/1/2; árvore de diretórios completa incluindo search.sh, check-search-credits.sh, search-parallel.sh e test-search.sh.</passo>
+        <passo n="3">Requisitos: Brave API key como OPCIONAL (Tier 3 keyless existe, cobertura limitada); surf-search-normal como OPCIONAL (habilita Tier 1, melhor qualidade); nota sobre o modelo metered da Brave (créditos mensais + cobrança ao exceder — o check pré-onda é proteção financeira).</passo>
+        <passo n="4">"um commit por testing subwave" → "um squash commit por worktree de teste (até 3 por subwave) + fixes das validation subwaves".</passo>
+      </correcao>
+      <como-testar>
+        <teste>Diff README vs scripts/README.md: mesmos scripts, mesmos exit codes, mesma cadeia de tiers.</teste>
+        <teste>Grep README por "check-brave-credits\|créditos Brave esgotados\|~\$5/mês" → apenas em notas históricas marcadas como superadas.</teste>
+      </como-testar>
+      <criterio-de-aceite>README, SKILL.md e scripts/README.md contam a mesma história na v3.3.0; pendência do RESEARCH_ANSWER.md:39 finalmente executada.</criterio-de-aceite>
+    </item>
+
+    <item id="F4-02" severidade="ALTO" esforco="P" origem="agente-0/A4+B8">
+      <titulo>Frontmatter: allowed-tools com ferramentas inexistentes + skill-home hardcoded</titulo>
+      <onde>
+        <arquivo path="SKILL.md" linhas="34-56 (allowed-tools), 63 (metadata.skill-home)"/>
+      </onde>
+      <problema>
+        A whitelist lista ~15 ferramentas que NÃO existem no Claude Code (plataforma
+        declarada no README): web_search, fetch_content, source_check,
+        get_search_content, ffgrep, fffind, project_report, module_report,
+        read_symbol, read_enclosing, lsp_diagnostics, lens_diagnostics... e mistura
+        Agent + Task (nomes de harnesses diferentes). Harness que valida estritamente
+        REJEITA a skill; harness que ignora torna a whitelist inócua (R1 vira só
+        prosa). Incoerência de desenho: o orquestrador não pesquisa (sub-agentes usam
+        search.sh via Bash), mas a whitelist inclui 4 ferramentas de busca web.
+        E metadata.skill-home aponta ~/Projects/deep-orchestrator — path da máquina
+        do autor; a FASE 0 resolve dinamicamente.
+      </problema>
+      <correcao>
+        <passo n="1">Reescrever allowed-tools com as ferramentas REAIS do harness-alvo (Claude Code: Bash, Read, Grep, Glob, Agent/Task conforme o harness, Skill, WebFetch/WebSearch se de fato usados — o orquestrador não pesquisa, então provavelmente fora). Mover LSP/relatórios para nota "se disponíveis via MCP" (FASE 1 passo 2 já trata project_report como opcional, SKILL.md:348-349).</passo>
+        <passo n="2">Manter disallowed-tools: Write/Edit (coerente com R1 — as 3 exceções são via Bash/echo, permitido).</passo>
+        <passo n="3">metadata.skill-home: remover ou marcar como exemplo (a resolução real é dinâmica na FASE 0).</passo>
+      </correcao>
+      <como-testar>
+        <teste>Carregar a skill no harness-alvo → sem erro de validação de ferramentas.</teste>
+        <teste>Revisão: cada ferramenta listada é usada em pelo menos um ponto do SKILL.md.</teste>
+      </como-testar>
+      <criterio-de-aceite>Whitelist real e mínima; R1 com enforcement de verdade no harness.</criterio-de-aceite>
+    </item>
+
+    <item id="F4-03" severidade="ALTO" esforco="M" origem="agente-3/C3,A2,A3,A4,A5,A6,A7,M3,B1,B2,B3 + agente-1/search-prompts">
+      <titulo>Prompts ECC e search-prompts: alinhar com as regras atuais (R6/R8/search.sh)</titulo>
+      <onde>
+        <arquivo path="prompts/ecc-prompts.md" linhas="20, 113, 188, 254, 260, 296, 371, 392"/>
+        <arquivo path="prompts/ecc-skills.md" linhas="3, 53, 141, 158, 168, 182, 191, 244, 291"/>
+        <arquivo path="prompts/search-prompts.md" linhas="5-8, 37, 222, 383-384, 443, 459, 473, 487-488, 496-497, 613-665"/>
+        <arquivo path="SKILL.md" linhas="829-845 (regra 2 do subagent-template — linkar search-prompts.md)"/>
+      </onde>
+      <problema>
+        Sub-agentes copiam exemplos verbatim, e os exemplos VIOLAM as regras atuais:
+        namespace wt/ (ABOLIDO pela R6) e base main (PROIBIDO pela R8) em 4 lugares;
+        "dispare surf-research-skill" em 8 lugares (assimilado/substituído por
+        search.sh); search-prompts.md é ÓRFÃO (SKILL.md nunca o referencia) e
+        documenta só brave-search.sh; clone-and-analyze clona repo DENTRO da worktree
+        (o git add -A final vira gitlink embutido no squash-merge); memory vault .ecc/
+        vazaria para o histórico do repo-alvo (só .deep-orchestrator é excluído);
+        ecc-prompts #1 autoriza SUBSTITUIR o template do SKILL.md (perdendo fronteira
+        de contenção, project-router e regra de busca); JSON do Query Evolver com
+        comentários // (regra 9 exige JSON válido); placeholders acentuados
+        ({{FUNÇÃO_OU_CLASSE}}) frágeis para substituição automatizada; vereditos
+        divergentes entre revisores (APPROVE/WARNING/BLOCK vs "Nada a refutar").
+      </problema>
+      <correcao>
+        <passo n="1">Reescrever os 4 exemplos com $BRANCH_NS/&lt;nome&gt; e {{BASE_BRANCH}} (alinhar {{BASE_REF}} → {{BASE_BRANCH}}, nome usado no adversarial-review-template, SKILL.md:936).</passo>
+        <passo n="2">Trocar TODAS as referências a surf-research-skill por "{{SKILL_HOME}}/scripts/search.sh"; onde houver estratégia de query, apontar prompts/search-prompts.md.</passo>
+        <passo n="3">Regra 2 do subagent-template: adicionar "para formular/evoluir queries, consulte {{SKILL_HOME}}/prompts/search-prompts.md (somente leitura)". E atualizar search-prompts.md: cabeçalho e seção 4 passam a declarar interface primária = search.sh (brave-search.sh = implementação do Tier 2); nota de precedência corrigida; documentar o efeito do fallback 3-tier na semântica de "empty".</passo>
+        <passo n="4">clone-and-analyze: instruir `rm -rf repo-alvo/.git` após o clone (vendoring como arquivos simples) ou apagar o clone antes do commit final.</passo>
+        <passo n="5">Memory vault: gravar sob .deep-orchestrator/ (já excluído) ou adicionar exclusão de .ecc/ no pathspec do commit final (SKILL.md:795).</passo>
+        <passo n="6">ecc-prompts #1: "PREFIXA/enriquece, NUNCA substitui as seções de fronteira, project-router e busca"; alinhar {{TASK}} → {{TASK_DESCRIPTION}} (SKILL.md:772).</passo>
+        <passo n="7">search-prompts.md: remover comentários // dos blocos JSON (459, 473, 487-488) ou marcá-los como anotações a remover; padronizar placeholders ASCII ({{FUNCAO_OU_CLASSE}}, {{VERSAO}}, {{DOMINIO}}).</passo>
+        <passo n="8">Veredito canônico: uma linha declarando o formato oficial (sugestão: APPROVE/WARNING/BLOCK do ecc-prompts #3, que é mais informativo) e que o adversarial-review-template do SKILL.md adota o mesmo.</passo>
+        <passo n="9">Índice consolidado de placeholders por template no cabeçalho de ecc-prompts.md (modelo: tabela do html-explainer, templates/html-explainer.html:300-313).</passo>
+      </correcao>
+      <como-testar>
+        <teste>Grep: zero ocorrências de "wt/onda\|diff main\.\|surf-research-skill" em prompts/.</teste>
+        <teste>Extrair os blocos JSON do Query Evolver e validar com jq → todos parseiam.</teste>
+        <teste>Grep SKILL.md: regra 2 referencia prompts/search-prompts.md.</teste>
+      </como-testar>
+      <criterio-de-aceite>Nenhum exemplo ensina padrão proibido; camada de estratégia de busca chega ao sub-agente; templates JSON válidos.</criterio-de-aceite>
+    </item>
+
+    <item id="F4-04" severidade="MEDIO" esforco="P" origem="agente-3/A1">
+      <titulo>templates/html-explainer.html documenta um gerador que não existe: scripts/generate-explainer.sh</titulo>
+      <onde>
+        <arquivo path="templates/html-explainer.html" linhas="28 e 288"/>
+        <arquivo path="scripts/generate-explainer.sh" linhas="NÃO EXISTE"/>
+      </onde>
+      <problema>O template diz "gere com ./scripts/generate-explainer.sh > EXPLAINER.html" — o script não existe e o fluxo oficial (SKILL.md:724-731) preenche o template manualmente via Bash.</problema>
+      <correcao>
+        <passo n="1">OPÇÃO RECOMENDADA: criar scripts/generate-explainer.sh — sed dos 7 tokens + awk dos 6 slots (a tabela tokens/slots já existe em templates/html-explainer.html:300-313). Simples, testável, e elimina preenchimento manual propenso a erro (que causou F1-05).</passo>
+        <passo n="2">Alternativa mínima: substituir as duas referências pela instrução manual de preenchimento.</passo>
+        <passo n="3">Se criado: SKILL.md:724-731 passa a mandar usar o script; teste cobre substituição completa (grep por "{{" no output = 0).</passo>
+      </correcao>
+      <como-testar>
+        <teste>Se script criado: rodar com entrada sintética → output sem nenhum {{TOKEN}} residual; bash -n limpo.</teste>
+      </como-testar>
+      <criterio-de-aceite>Documentação e realidade voltam a coincidir; geração do EXPLAINER é reproduzível.</criterio-de-aceite>
+    </item>
+
+    <item id="F4-05" severidade="MEDIO" esforco="P" origem="agente-3/M1+M2">
+      <titulo>Artefatos históricos: research/ e o EXPLAINER.html stale da raiz</titulo>
+      <onde>
+        <arquivo path="research/RESEARCH_PLAN.md" linhas="(inteiro, 67 linhas)"/>
+        <arquivo path="research/RESEARCH_ANSWER.md" linhas="(inteiro, 148 linhas)"/>
+        <arquivo path="EXPLAINER.html" linhas="(inteiro, 107 linhas — gerado em outra máquina, macOS, fora do padrão do template)"/>
+      </onde>
+      <problema>
+        research/ documenta 7 decisões para "v3.2" — o v3.2.0 real implementou
+        arquitetura DIFERENTE da D2 (3-tier, não Adapter+RRF+Tavily/Exa); nada no repo
+        os referencia; a pendência de RESEARCH_ANSWER.md:39 nunca foi executada.
+        EXPLAINER.html da raiz é stale: gerado em 2026-08-06 em macOS
+        (/Volumes/Ext2TB/...), com estilo próprio (sem Bootstrap, sem abas, sem slots),
+        apesar de SKILL.md:724-731 mandar gerar do template.
+      </problema>
+      <correcao>
+        <passo n="1">research/ → mover para docs/decisions/ com status por decisão (implementada/parcial/superada pela v3.2 real) OU apagar. Recomendado: mover — preserva o raciocínio.</passo>
+        <passo n="2">EXPLAINER.html: decidir a política — se é artefato de execução, entra no .gitignore; se é vitrine do repo, regenerar com o template real (após F1-05 e F4-04).</passo>
+      </correcao>
+      <como-testar>
+        <teste>Estrutura final bate com a árvore do README atualizado (F4-01).</teste>
+      </como-testar>
+      <criterio-de-aceite>Repo sem artefatos contraditórios ou stale na raiz.</criterio-de-aceite>
+    </item>
+
+    <item id="F4-06" severidade="ALTO" esforco="G" origem="agente-2/A3 (cobertura) + todos os itens anteriores">
+      <titulo>Suíte de regressão expandida — cada bug deste plano vira asserção automatizada</titulo>
+      <onde>
+        <arquivo path="scripts/test-contencao.sh" linhas="(estender — hoje 50 asserções A1..A20)"/>
+        <arquivo path="scripts/test-search.sh" linhas="NOVO ARQUIVO"/>
+      </onde>
+      <problema>
+        Cobertura atual: detecção de MODE, fronteira, terceiros, sujeira do usuário em
+        arquivos, acento/espaço em nome de arquivo, índice sujo no merge — tudo verde.
+        Mas os comandos mais perigosos NÃO são testados: undo (onde estava o crítico
+        F1-01), conflito de squash, wave-files, stage-delta com dir untracked, e nada
+        da busca. Lacunas adicionais: exit 6/7/9 da FASE 0, --force-nested, path da
+        WORKTREE com espaço/acento (verificado manualmente: funciona — vale virar
+        asserção), modo normal com onda completa, submódulo --force, GIT_DIR injetada,
+        concorrência real no owned.tsv.
+      </problema>
+      <correcao>
+        <passo n="1">test-contencao.sh — novas asserções:
+          A21 undo via revert com HEAD avançado (commit posterior ao squash);
+          A22a/A22b undo reset --hard (baseline sujo → revert; baseline limpo → reset) — cobre F1-01;
+          A23 merge com conflito → recusa → reset --merge → re-merge bem-sucedido (cobre M3: mensagem deve instruir o fluxo, não acusar "mudanças de terceiros");
+          A24 wave-files após 2 squashes (escopo correto);
+          A25 stage-delta com dir untracked preexistente — cobre F1-04;
+          A26a/b/c clean-ignored-delta — cobre F1-02;
+          A27 path da worktree com espaço+acento de ponta a ponta;
+          A28 exits 6/7/9 da FASE 0 com as fixtures correspondentes (inclui branch com aspa simples → exit 7 com mensagem certa, path com newline → exit 7);
+          A29 colisão de PREFIXO de namespace (branch do/wtA existente → FASE 0 recusa com mensagem clara, não falha genérica no cmd_new);
+          A30 dois marks paralelos no owned.tsv com flock → nenhum lost update (cobre F4-07/flock);
+          A31 worktree kind=validation: ciclo completo new → remove → drop-branch — cobre F2-02;
+          A32 wave-files com 1ª filha BLOCKED — cobre F2-09;
+          A33/A34 gate em snapshot: falha tardia → undo reverte squash certo com HEAD avançado; gate-pending bloqueia fim de onda — cobre F3-01.</passo>
+        <passo n="2">test-search.sh (novo) — bins mockados em PATH temporário (surf-search-normal fake, curl fake):
+          argv do Tier 1 contém --budget-ms e não --timeout/--dev-mode — cobre F1-03;
+          stdout do Tier 1 capturado (falha parcial não polui saída);
+          cadeia toda vazia → exit 1; regex 403; cache honra --fail-fast; query com * não expande; >1 posicional rejeitado; --timeout sem valor → erro limpo; trap RETURN não corrompe exit code; deps ausentes → exit 2 com mensagem correta;
+          search-parallel.sh: paralelismo real (tempo total), dedup por URL, backoff em 429, cache por run — cobre F3-05.</passo>
+        <passo n="3">Atualizar cabeçalho do teste e scripts/README.md com o novo intervalo de asserções e o novo script.</passo>
+      </correcao>
+      <como-testar>
+        <teste>scripts/test-contencao.sh → 100% PASS com as novas asserções; scripts/test-search.sh → 100% PASS.</teste>
+        <teste>Reintroduzir propositalmente cada bug crítico (git stash da correção) e confirmar que a asserção correspondente FALHA — prova de que o teste caça o bug.</teste>
+      </como-testar>
+      <criterio-de-aceite>Nenhum dos 6 críticos pode regredir sem a suíte gritar; busca com cobertura automatizada pela primeira vez.</criterio-de-aceite>
+    </item>
+
+    <item id="F4-07" severidade="MEDIO" esforco="M" origem="agente-2/M1,M2,M3,M5,M6,B2,B3,B4,B5,B6,B8,B9">
+      <titulo>Pacote de robustez dos scripts de orquestração (do-wt.sh / do-context.sh)</titulo>
+      <onde>
+        <arquivo path="scripts/do-wt.sh" linhas="39-43, 62-66, 120-129, 144-149, 160-166, 250-257, 276, 283-291, 309, 391"/>
+        <arquivo path="scripts/do-context.sh" linhas="76-86, 150, 155-165, 199-201, 212+, 236, 283-285, 293"/>
+      </onde>
+      <problema>Robustez e edge cases verificados (vários reproduzidos). Cada passo independente.</problema>
+      <correcao>
+        <passo n="1">owned.tsv sem flock (do-wt.sh:62-66, 128-129): row_set é read-modify-write + mv; dois marks/merges simultâneos → lost update. Com o paralelismo das Fases 2-3 isso vira risco real. Adicionar `flock "$OWNED.lock"` em torno de row_set/cmd_new/cmd_merge; documentar que merges são seriais.</passo>
+        <passo n="2">Re-merge após conflito é recusado pela própria guarda de índice (do-wt.sh:144-149 vs 160-166 — reproduzido): na saída de conflito, instruir explicitamente "1) git reset --merge 2) resolva na filha 3) re-execute"; ou detectar conflito-de-squash (sem MERGE_HEAD) e auto-resetar.</passo>
+        <passo n="3">Validação de caracteres proibidos incompleta (do-context.sh:155-160): o case só testa aspa e TAB sobre $BASE_DIR$PARENT_DIR. Incluir $BASE_BRANCH$MAIN_ROOT$COMMON_DIR e newline no case de die 7. Reproduzido: branch "it's" → morre com exit 8 enganoso; path com newline → exit 9 enganoso.</passo>
+        <passo n="4">Colisão de prefixo de namespace (do-context.sh:164-165): show-ref --verify só pega o namespace completo; branch do/wtA (prefixo) passa e cmd_new falha depois (reproduzido). Iterar os prefixos de $BRANCH_NS com show-ref --verify, ou git for-each-ref "refs/heads/do/$BASE_SLUG" + checar que nenhum prefixo é branch.</passo>
+        <passo n="5">SKILL_HOME não resolvido gera DO_WT='/scripts/do-wt.sh' quebrado (do-context.sh:199-201,236,293): resolver _self ANTES do cd (linha 68); readlink -f não existe no macOS (usar fallback portável); e dar die (ou degradar explicitamente) se SKILL_HOME ficar vazio — o aviso atual fala só de pesquisa, mas o DO_WT quebrado inviabiliza a FASE 3 inteira.</passo>
+        <passo n="6">cmd_new deixa worktree órfã inalcançável se as asserções pós-add falharem (do-wt.sh:120-126): registrar no owned.tsv ANTES das asserções, ou worktree remove --force + branch -D no caminho de falha.</passo>
+        <passo n="7">cmd_mark sem validação (do-wt.sh:391): aceita nome inexistente ("OK" sem efeito) e status arbitrário (typo corrompe a máquina de estados). Validar ambos contra o owned.tsv e a lista ACTIVE|MERGED|REMOVED|REVERTED|BLOCKED|ORPHANED.</passo>
+        <passo n="8">Status REVERTED órfão: sweep só remove MERGED (do-wt.sh:276) e drop-branch só aceita MERGED|REMOVED (:253-257) → worktree+branch REVERTED vazam sem orientação. Permitir drop de REVERTED (já está arquivado em refs/do-archive/) ou documentar o destino.</passo>
+        <passo n="9">cmd_verify: lista de chaves perigosas de config incompleta (do-wt.sh:309): adicionar include.path, includeIf.*.path, core.excludesFile (pode ESCONDER vazamento do status), core.attributesFile, filter.*, core.sshCommand.</passo>
+        <passo n="10">Validação de ENV incompleta em do-wt.sh:39-43: adicionar `: "${BASE_BRANCH:?}"` e `: "${DO_STATE:?}"` — com BASE_BRANCH vazio + HEAD destacado, o gassert passa indevidamente.</passo>
+        <passo n="11">FASE 0 sem cleanup em falha pós-mkdir (do-context.sh:212+): die 8 deixa run-*/ com env possivelmente corrompido; runs sem env são invisíveis ao reuso (:76). Trap de rollback até o sucesso.</passo>
+        <passo n="12">Reuso pega a run pendente mais antiga e não revalida (do-context.sh:76-86): se BASE_BRANCH/HEAD mudaram entre sessões, o env reutilizado é stale — revalidar no reuso (gassert já pega depois, mas tarde); documentar a escolha alfabética entre múltiplas pendentes.</passo>
+        <passo n="13">foreign-worktrees usa grep -vF (substring) — do-context.sh:283-285: trocar por grep -vxF (linha exata).</passo>
+      </correcao>
+      <como-testar>
+        <teste>Asserções A28-A30 de F4-06 cobrem os passos 1, 3, 4; demais passos: bash -n + exercício manual na fixture do teste (ou novas asserções onde barato).</teste>
+      </como-testar>
+      <criterio-de-aceite>Edge cases deixam de falhar com mensagem errada ou estado órfão; owned.tsv seguro sob concorrência.</criterio-de-aceite>
+    </item>
+
+    <item id="F4-08" severidade="BAIXO" esforco="P" origem="agente-7/2">
+      <titulo>(Ambiente do usuário — fora do repo) Symlinks das skills surf quebrados</titulo>
+      <onde>
+        <arquivo path="~/.agents/skills/surf-free-skill, surf-plan-skill, surf-research-skill e ~/.claude/skills/*surf*" linhas="symlinks apontando para /tmp/claude-1000/... (alvo inexistente)"/>
+      </onde>
+      <problema>Os symlinks apontam para um /tmp já limpo — a skill como documentação de agente está inacessível e o help do CLI aponta para caminho morto. Não afeta o Tier 1 (que usa o binário do npm link), mas qualquer agente que tente LER a skill falha.</problema>
+      <correcao>
+        <passo n="1">Repontar manualmente (ação do usuário, fora de qualquer execução da skill): ln -sfn /home/ondokai/Projects/surf-skill/skills/surf-research-skill ~/.agents/skills/surf-research-skill (e idem para surf-plan-skill, surf-free-skill, e os dois em ~/.claude/skills/).</passo>
+      </correcao>
+      <como-testar>
+        <teste>readlink -f ~/.agents/skills/surf-research-skill/SKILL.md → resolve e o arquivo lê.</teste>
+      </como-testar>
+      <criterio-de-aceite>Documentação das skills surf acessível aos agentes.</criterio-de-aceite>
+    </item>
+
+    <item id="F4-09" severidade="BAIXO" esforco="P" origem="agente-7/9">
+      <titulo>(Roadmap futuro — registrar) Brave LLM Context endpoint como evolução do Tier 2</titulo>
+      <onde>
+        <arquivo path="scripts/README.md" linhas="(nova seção roadmap)"/>
+      </onde>
+      <problema>A doc oficial da Brave recomenda o endpoint LLM Context (resposta token-eficiente para máquinas, ~$5/1K) no lugar do Web Search para uso por agentes. Fora do escopo de correção — registrar para não esquecer.</problema>
+      <correcao>
+        <passo n="1">Adicionar seção "Roadmap" em scripts/README.md citando o endpoint LLM Context como evolução candidata do Tier 2 (continua sendo Brave — compatível com a decisão D3).</passo>
+      </correcao>
+      <como-testar>
+        <teste>Nota presente no README de scripts.</teste>
+      </como-testar>
+      <criterio-de-aceite>Evolução registrada sem comprometer o escopo atual.</criterio-de-aceite>
+    </item>
+
+  </fase>
+  </fases>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       GRAFO DE DEPENDÊNCIAS entre itens (ordem obrigatória além das fases)
+       ════════════════════════════════════════════════════════════════════ -->
+  <dependencias>
+    <dep from="F2-01" to="F1-*">O redesenho do fim de onda assume os scripts já corrigidos (undo seguro, stage-delta íntegro).</dep>
+    <dep from="F2-02" to="F2-01">A validation subwave dispara no passo 10 e é fechada no passo 3.5 — os dois textos são um só redesenho.</dep>
+    <dep from="F2-03" to="F2-02">FIX-FINAL só existe se a validation subwave existe.</dep>
+    <dep from="F2-04" to="F2-01">O loop de bugs fecha no novo passo 3.5.</dep>
+    <dep from="F3-01" to="F1-01">Gate em snapshot depende do undo seguro (rede de segurança para falha tardia).</dep>
+    <dep from="F3-05" to="F3-06">O paralelizador herda os contratos corrigidos do search.sh (exit codes, envelope estável).</dep>
+    <dep from="F4-01" to="F2-*,F3-*">README v3.3.0 documenta o resultado final das Fases 2-3.</dep>
+    <dep from="F4-03" to="F3-05">search-prompts.md atualizado menciona o search-parallel.sh.</dep>
+    <dep from="F4-04" to="F1-05">O gerador só é útil com o template já saneado.</dep>
+    <dep from="F4-06" to="F1-*,F2-*,F3-*">Cada asserção nova cobre um item já implementado.</dep>
+    <dep nota="Dogfooding: a partir do fim da Fase 1, as Fases 2-4 podem ser executadas pelo PRÓPRIO deep-orchestrator corrigido — cada item vira uma sub-tarefa, os mapas de propriedade são disjuntos por arquivo na maioria dos itens."/>
+  </dependencias>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       VERIFICAÇÃO GLOBAL — o que prova que o plano inteiro foi executado
+       ════════════════════════════════════════════════════════════════════ -->
+  <verificacao-global>
+    <verificacao>bash -n limpo em todos os scripts/*.sh (incluindo os 2 novos: search-parallel.sh, test-search.sh).</verificacao>
+    <verificacao>scripts/test-contencao.sh: 100% PASS incluindo A21-A34; sem órfãos em /tmp após a run.</verificacao>
+    <verificacao>scripts/test-search.sh: 100% PASS com bins mockados; zero consumo de quota real em automatizados.</verificacao>
+    <verificacao>Teste manual ao vivo (1x): search.sh completa pelo Tier 1 ou 2 com resultados reais; check-search-credits.sh --fail-fast sai 0; quota mensal verificada via X-RateLimit-Remaining.</verificacao>
+    <verificacao>Reintrodução proposital de cada um dos 6 críticos → a asserção correspondente falha (prova de regressão real).</verificacao>
+    <verificacao>Revisão adversarial final do SKILL.md por subagente fresco: zero contradições internas; fluxo de 2 ondas traçado sem ambiguidade; description/frontmatter/README/scripts contam a mesma história v3.3.0.</verificacao>
+    <verificacao>Version bump aplicado: SKILL.md metadata version=3.3.0 + updated; README com seção "Novidades na v3.3.0".</verificacao>
+    <verificacao>Decisões D1-D4 respeitadas: gate em snapshot (builds duplicados aceitos), DO_MAX_PARALLEL default 20 configurável, nenhum provedor de busca além de Brave na cadeia, pesquisas paralelas ilimitadas via search-parallel.sh.</verificacao>
+  </verificacao-global>
+
+</plano-de-melhorias>
