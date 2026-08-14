@@ -6,9 +6,11 @@ description: >-
   worktrees isoladas (uma por sub-agente), aplica revisão
   adversarial, integra via squash-merge um a um com gate entre merges, remove
   worktree + branch + commits intermediários ao fim de cada onda, e commita tudo
-  ao final sem perguntar nada ao usuário. Inclui TESTING SUBWAVES assíncronas
-  (test-ondaN-*) que rodam em background após cada onda e têm seus resultados
-  integrados na onda seguinte (ou no COMMIT-FINAL para a última onda). Pesquisa web via sistema de busca 3-tier INTERNO
+  ao final sem perguntar nada ao usuário. Inclui SUBWAVES assíncronas em
+  paralelo após cada onda: TESTING (test-ondaN-*) e VALIDATION (val-ondaN-*) —
+  validação de código (gate completo + revisão adversarial do diff integrado)
+  e testes, com resultados integrados na onda seguinte (ou no COMMIT-FINAL).
+  Pesquisa web via sistema de busca 3-tier INTERNO
   (scripts/search.sh: surf-skill → Brave Search API → DuckDuckGo keyless), com verificação de tiers antes de cada onda
   (scripts/check-search-credits.sh) e templates de prompt avançados ECC
   (prompts/ecc-prompts.md) — todos resolvidos a partir de $SKILL_HOME, a casa da
@@ -57,9 +59,9 @@ allowed-tools:
 model: inherit
 effort: xhigh
 metadata:
-  version: "3.2.0"
+  version: "3.3.0"
   created: "2026-08-02"
-  updated: "2026-08-06"
+  updated: "2026-08-14"
   skill-home: "~/Projects/deep-orchestrator"   # casa da skill (scripts/, prompts/, templates/) — NÃO é o projeto-alvo
   based-on: "playbook-modernizar-legado-agentes-paralelos"
 ---
@@ -155,9 +157,10 @@ metadata:
         ela contém APENAS os squash commits.
         Nenhuma worktree sobrevive ao fim da própria onda. DUAS exceções:
         (a) sub-tarefa BLOQUEADA/ORPHANED, mantida para diagnóstico e registrada
-        no TASK_PLAN.md; (b) worktrees kind=test (test-ondaN-*), que sobrevivem
-        por UMA onda por construção — rodam em background durante a onda
-        seguinte e são fechadas no passo 0 dela (ou no COMMIT-FINAL). NUNCA limpe antes do gate verde — até lá, a branch é
+        no TASK_PLAN.md; (b) worktrees kind=test (test-ondaN-*) e
+        kind=validation (val-ondaN-*), que sobrevivem por UMA onda por
+        construção — rodam em background durante a onda seguinte e são
+        fechadas no passo 3.5 dela (ou no COMMIT-FINAL). NUNCA limpe antes do gate verde — até lá, a branch é
         seu backup para investigação e re-merge.</body>
     </rule>
     <rule id="R7" severity="FATAL">
@@ -443,8 +446,9 @@ metadata:
     <phase id="3" name="EXECUTE-ONDA">
       <objective>Executar UMA onda de cada vez, com barreira, e terminá-la LIMPA
         (zero worktrees e zero branches de FEATURE desta execução remanescentes;
-        as worktrees kind=test da subonda em voo sobrevivem por design até a onda
-        seguinte, e as de terceiros permanecem sempre intactas)</objective>
+        as worktrees kind=test/kind=validation das subondas em voo sobrevivem
+        por design até a onda seguinte, e as de terceiros permanecem sempre
+        intactas)</objective>
       <preamble>NENHUM comando desta fase ou da seguinte é válido sem
         <cmd>. '&lt;ENV_FILE&gt;'</cmd> na frente — é ele que define BASE_DIR,
         BRANCH_NS, $DO_WT e os helpers gwt/gch/gstatus/gassert. Se um comando
@@ -452,49 +456,14 @@ metadata:
         reexecute a FASE 0 por isso.</preamble>
       <repeat>Para cada onda, em ordem (1, 2, 3...), enquanto houver sub-tarefas
         pendentes — o plano inicial não limita: após CADA onda, o REVISOR DE PLANO
-        recalcula o plano e novas sub-tarefas viram novas ondas. Continua até que
-        um sub-agente REVISOR DE PLANO declare CONVERGÊNCIA (não há mais
-        sub-tarefas pendentes)</repeat>
+        recalcula o plano e novas sub-tarefas viram novas ondas. Ondas são
+        ILIMITADAS por design, com válvula de escape nomeada: MÁXIMO 10 ONDAS
+        por execução; e 2 REPLANs consecutivos sem novas sub-tarefas ACEITAS →
+        convergência forçada. Continua até que um sub-agente REVISOR DE PLANO
+        declare CONVERGÊNCIA (não há mais sub-tarefas pendentes) ou uma válvula
+        de escape force a convergência</repeat>
       <steps>
-        <step order="0"><strong>PROCESSAR TESTING SUBWAVE PENDENTE
-          (da onda anterior):</strong>
-          <substeps>
-            <substep><strong>VERIFICAR:</strong> Consulte o TASK_PLAN.md. Se NÃO existe
-              a seção "Testing Subwave Onda N-1 — PENDENTE", este passo é NO-OP
-              (é a primeira onda, ou a onda anterior não gerou testing subwave).
-              Se EXISTE, prossiga.</substep>
-            <substep><strong>BARREIRA:</strong> Aguarde TODOS os sub-agentes de teste
-              da onda anterior terminarem (foram disparados em background ao fim
-              da onda anterior).</substep>
-            <substep><strong>REVISÃO DE TESTES:</strong> Para cada agente de teste,
-              dispare um revisor adversarial FRESCO que recebe APENAS o diff do
-              agente de teste + o handoff da onda original. O revisor avalia:
-              Os testes cobrem os comportamentos descritos? Os testes PASSAM de
-              fato (evidência real)? Há falsos positivos (testes que passam sem
-              exercitar o código)? Há gaps (edge cases não testados)?</substep>
-            <substep><strong>SQUASH-MERGE + GATE + LIMPEZA (testes):</strong>
-              Mesmo fluxo do passo 7: para cada agente de teste,
-              <cmd>do-wt.sh merge test-ondaN-&lt;foco&gt; "test-ondaN-&lt;foco&gt;: adiciona testes para &lt;desc&gt;"</cmd>,
-              gate (build + testes + linter), e SÓ com gate verde a limpeza
-              (<cmd>do-wt.sh remove</cmd> + <cmd>do-wt.sh drop-branch</cmd>).</substep>
-            <substep><strong>ATUALIZAR TASK_PLAN.md:</strong> Marque a seção como
-              "Testing Subwave Onda N-1 — CONCLUÍDA". Se algum agente de teste
-              falhou (gate vermelho persistente após 2 fix attempts), desfaça o
-              squash-commit problemático com
-              <cmd>do-wt.sh undo test-ondaN-&lt;foco&gt;</cmd> — que usa o SHA
-              registrado, prefere <cmd>revert</cmd> e só aceita
-              <cmd>reset --hard</cmd> quando o working tree não tem NENHUMA
-              modificação tracked (linhas untracked "??" são toleradas — o
-              reset não as toca). NUNCA use <cmd>git reset --hard HEAD~1</cmd>:
-              numa testing subwave assíncrona, HEAD~1 pode ser o COMMIT PREP da
-              onda seguinte ou o squash de outra sub-tarefa. Depois limpe a
-              worktree/branch e registre os arquivos não cobertos.</substep>
-          </substeps>
-          <note>Testing subwaves NUNCA bloqueiam a execução da onda atual.
-            Se uma testing subwave inteira falhar, registre no TASK_PLAN.md
-            e prossiga com a onda normalmente.</note></step>
-
-        <step order="0.5"><strong>SISTEMA DE BUSCA (R7) — antes de criar qualquer
+        <step order="0"><strong>SISTEMA DE BUSCA (R7) — antes de criar qualquer
           worktree desta onda:</strong>
           <cmd>. '&lt;ENV_FILE&gt;'; if [ -x "$SKILL_HOME/scripts/check-search-credits.sh" ]; then "$SKILL_HOME/scripts/check-search-credits.sh" --fail-fast; case $? in 0) ;; 1) echo "AVISO: apenas Tier 3 (DDG keyless) — qualidade reduzida";; 2) echo "R7: busca indisponivel";; esac; else echo "AVISO: script ausente — prosseguir com fallback direto (search.sh usará Tier 3 DDG keyless automaticamente)"; fi</cmd>
           Exit 0: Tier 1 ou 2 disponível — OK, prosseguir.
@@ -539,39 +508,125 @@ metadata:
           <field name="description">Resumo de 3-5 palavras</field>
           <field name="subagent_type">general-purpose</field>
           <field name="run_in_background" if="mais de 1 sub-agente na onda">true</field>
+          (com 1 sub-agente, foreground é equivalente à barreira — a espera é
+          imediata; revisores e REVISOR DE PLANO seguem a regra de background
+          independentemente)
           NÃO use isolation: "worktree" — a worktree JÁ EXISTE e tem o SEU nome;
           o sub-agente trabalha dentro dela via WORKTREE_PATH</step>
+        <step order="3.5"><strong>PROCESSAR SUBWAVES PENDENTES (TESTES +
+          VALIDAÇÃO da onda N-1):</strong> Enquanto os features desta onda já
+          foram DISPARADOS (passo 3), as subwaves da onda anterior rodam em
+          background — processe-as AGORA, em paralelo com o passo 4:
+          <substeps>
+            <substep><strong>VERIFICAR:</strong> Consulte o TASK_PLAN.md. Se NÃO
+              existe a seção "Testing Subwave Onda N-1 — PENDENTE" nem a seção
+              "Validation Subwave Onda N-1 — PENDENTE", este passo é NO-OP
+              (é a primeira onda, ou a onda anterior não gerou subwaves).
+              Se EXISTE, prossiga.</substep>
+            <substep><strong>BARREIRA:</strong> Aguarde TODOS os sub-agentes das
+              subwaves da onda anterior terminarem (notificações de conclusão
+              do harness, ou o mecanismo de espera disponível — ex.:
+              TaskOutput com wait: true — MESMO mecanismo do passo 4). Enquanto
+              o passo 4 aguarda os features, o orquestrador faz CHECAGENS
+              NÃO-BLOQUEANTES periódicas nas subwaves; o processamento completo
+              acontece nos substeps abaixo (conforme F2-02/F2-04).</substep>
+            <substep><strong>REVISÃO DE TESTES:</strong> Para cada agente de teste,
+              dispare um revisor adversarial FRESCO que recebe APENAS o diff do
+              agente de teste + o handoff da onda original. O revisor avalia:
+              Os testes cobrem os comportamentos descritos? Os testes PASSAM de
+              fato (evidência real)? Há falsos positivos (testes que passam sem
+              exercitar o código)? Há gaps (edge cases não testados)?</substep>
+            <substep><strong>SQUASH-MERGE + GATE + LIMPEZA (testes):</strong>
+              Mesmo fluxo do passo 7: para cada agente de teste,
+              <cmd>do-wt.sh merge test-ondaN-&lt;foco&gt; "test-ondaN-&lt;foco&gt;: adiciona testes para &lt;desc&gt;"</cmd>,
+              gate (build + testes + linter), e SÓ com gate verde a limpeza
+              (<cmd>do-wt.sh remove</cmd> + <cmd>do-wt.sh drop-branch</cmd>).</substep>
+            <substep><strong>VALIDAÇÃO: VEREDITO + LIMPEZA SEM MERGE:</strong>
+              Avalie o veredito do validador (por etapa:
+              build/lint/typecheck/testes) e os achados do revisor adversarial
+              do diff integrado. A worktree val-ondaN-gate NUNCA é mergeada —
+              o gate de validação é assíncrono e somente-leitura. Encerre com
+              <cmd>"$DO_WT" remove val-ondaN-gate</cmd> +
+              <cmd>"$DO_WT" drop-branch val-ondaN-gate</cmd>. Falha por
+              AMBIENTE (deps ausentes na worktree de validação): re-instalar
+              deps congeladas e re-rodar — NUNCA gerar fix de produção por
+              falha de ambiente (espelho de R9). Falhas de código viram
+              sub-tarefas de fix (substep "BUGS DOS HANDOFFS" abaixo).</substep>
+            <substep><strong>ATUALIZAR TASK_PLAN.md:</strong> Marque as seções
+              de subwave da onda anterior como CONCLUÍDA ("Testing Subwave Onda
+              N-1 — CONCLUÍDA" e/ou "Validation Subwave Onda N-1 — CONCLUÍDA").
+              Se algum agente de teste
+              falhou (gate vermelho persistente após 2 fix attempts), desfaça o
+              squash-commit problemático com
+              <cmd>do-wt.sh undo test-ondaN-&lt;foco&gt;</cmd> — que usa o SHA
+              registrado, prefere <cmd>revert</cmd> e só aceita
+              <cmd>reset --hard</cmd> quando o working tree não tem NENHUMA
+              modificação tracked (linhas untracked "??" são toleradas — o
+              reset não as toca). NUNCA use <cmd>git reset --hard HEAD~1</cmd>:
+              numa subwave assíncrona, HEAD~1 pode ser o COMMIT PREP da
+              onda seguinte ou o squash de outra sub-tarefa. Depois limpe a
+              worktree/branch e registre os arquivos não cobertos.</substep>
+            <substep><strong>BUGS DOS HANDOFFS VIRAM SUB-TAREFAS DE FIX:</strong>
+              Se algum handoff de teste ou validação reporta BUGS, crie
+              sub-tarefas de fix com PRIORIDADE na onda atual: worktree
+              ondaN-fix-&lt;foco&gt; (kind=fix,
+              <cmd>"$DO_WT" new fix ondaN-fix-&lt;foco&gt;</cmd>), integrada
+              pelo fluxo normal (merge → gate → limpeza). Máx 2 tentativas de
+              fix por achado.</substep>
+          </substeps>
+          <note>Subwaves NUNCA bloqueiam o DISPARO da onda atual — elas rodam
+            em background e são processadas AQUI, depois que os features já
+            foram disparados — e, por construção, subwaves não bloqueiam o
+            DISPARO da onda seguinte. Uma validation subwave reprovada não
+            bloqueia a onda em curso, MAS seus fixes têm prioridade na onda
+            seguinte e o COMMIT-FINAL não fecha com validação VERMELHA sem
+            degradação documentada.</note></step>
         <step order="4"><strong>BARREIRA:</strong> Aguarde TODOS os sub-agentes
           desta onda terminarem (notificações de conclusão do harness, ou o
           mecanismo de espera disponível — ex.: get_subagent_result/TaskOutput
           com wait: true). NUNCA prossiga antes de TODOS terminarem</step>
-        <step order="5"><strong>RECÁLCULO DINÂMICO (REPLAN):</strong> Antes da
-          revisão adversarial, dispare um sub-agente REVISOR DE PLANO (contexto
-          fresco; NÃO trabalha em worktree — é apenas análise) que recebe: os
-          handoffs completos desta onda (cole INLINE, como o {{HANDOFF}}) + o
-          conteúdo atual de <path>$PLAN_FILE</path>
-          (cole inline) + o prompt original da tarefa. Ele analisa o que foi
-          descoberto e responde em UM destes dois modos:
+        <step order="5"><strong>RECÁLCULO DINÂMICO (REPLAN):</strong> Ao fim da
+          barreira do passo 4, dispare em BACKGROUND
+          (<field name="run_in_background">true</field>) um sub-agente REVISOR
+          DE PLANO (contexto fresco; NÃO trabalha em worktree — é apenas
+          análise) que recebe: os handoffs completos desta onda (cole INLINE,
+          como o {{HANDOFF}}) + o conteúdo atual de <path>$PLAN_FILE</path>
+          (cole inline) + o prompt original da tarefa. Ele sai do caminho
+          crítico: roda CONCORRENTE com a revisão adversarial (passo 6) e o
+          loop de merges (passo 7); o resultado é consumido antes do passo
+          10/repeat. Ele analisa o que foi descoberto e responde em UM destes
+          dois modos:
           <substeps>
             <substep><strong>NOVAS SUB-TAREFAS:</strong> propõe novas sub-tarefas
               (com dependências e arquivos afetados), remoção de sub-tarefas que
               se tornaram desnecessárias e ajustes no plano (prioridades,
               sequência, mapa de propriedade de arquivo). VOCÊ atualiza o
               TASK_PLAN.md com as propostas — elas viram a(s) próxima(s) onda(s),
-              executadas nas próximas iterações deste repeat</substep>
+              executadas nas próximas iterações deste repeat, e passam pelos
+              passos 4-7 da FASE 2/PLAN (mapa de propriedade de arquivo,
+              batismo R6, escrita de prompts) antes de virar onda</substep>
             <substep><strong>CONVERGÊNCIA:</strong> declara que não há mais
-              sub-tarefas pendentes — o plano está completo. Prossiga ao passo 6
-              (REVISÃO ADVERSARIAL); ao fim desta onda o repeat termina</substep>
+              sub-tarefas pendentes — o plano está completo; ao fim desta onda
+              o repeat termina</substep>
           </substeps>
-          Ondas são ILIMITADAS: o ciclo só termina por CONVERGÊNCIA declarada
-          pelo REVISOR DE PLANO, nunca por um número fixo de ondas.
+          Em AMBOS os modos (CONVERGÊNCIA ou NOVAS SUB-TAREFAS), PROSSIGA ao
+          passo 6; as novas sub-tarefas só entram na próxima iteração do
+          repeat. Cada proposta do REPLAN é marcada como "condicionada ao gate
+          verde da onda": se a revisão adversarial gerou fixes MATERIAIS,
+          re-dispare o REPLAN (custo de 1 sub-agente) ou passe um delta dos
+          fixes.
 
-          <strong>TESTING SUBWAVES SÃO EXCLUÍDAS DO REPLAN:</strong> O REVISOR DE
-          PLANO NUNCA propõe testing subwaves — elas são geradas automaticamente
-          pelo orquestrador (passo 10) e NÃO contam como ondas de feature.
-          Testing subwaves não disparam novas ondas no ciclo REPLAN.
+          Ondas são ILIMITADAS por design, com válvula de escape nomeada:
+          MÁXIMO 10 ONDAS por execução; e 2 REPLANs consecutivos sem novas
+          sub-tarefas ACEITAS → convergência forçada (ver relatório final).
+
+          <strong>SUBWAVES SÃO EXCLUÍDAS DO REPLAN:</strong> O REVISOR DE
+          PLANO NUNCA propõe subwaves — nem testing nem validation — elas são
+          geradas automaticamente pelo orquestrador (passo 10) e NÃO contam
+          como ondas de feature. Os ACHADOS das subwaves entram no passo 3.5
+          como sub-tarefas kind=fix prioritárias, FORA do ciclo REPLAN.
           Quando o REVISOR DE PLANO declara CONVERGÊNCIA, ele DEVE incluir a
-          nota: "Testing subwave pendente para esta onda será processada no
+          nota: "Subwaves pendentes para esta onda serão processadas no
           COMMIT-FINAL."</step>
         <step order="6"><strong>REVISÃO ADVERSARIAL:</strong> Para cada sub-agente
           concluído, dispare um sub-agente FRESCO (contexto zero, sem histórico)
@@ -582,7 +637,13 @@ metadata:
           "o smoke passaria com uma página em branco?", "existe caminho em que
           o requisito não é satisfeito?", "algum golden master quebrou?".
           Se o revisor encontrar problemas, corrija com um sub-agente de fix
-          NA MESMA worktree antes de prosseguir</step>
+          NA MESMA worktree antes de prosseguir. Dispare TODOS os revisores
+          com run_in_background=true e aguarde a barreira de revisão; fixes
+          em worktrees distintas também rodam em paralelo — os mapas de
+          arquivos são disjuntos por construção.
+          Esta revisão é INDIVIDUAL e pré-merge; a revisão do diff INTEGRADO
+          acontece na validation subwave (passo 10) e procura falhas de
+          INTEGRAÇÃO entre sub-agentes.</step>
         <step order="7"><strong>SQUASH-MERGE UM A UM + GATE + LIMPEZA:</strong>
           Para cada sub-agente (na ordem declarada no plano, infra/gateway
           primeiro, quem muda o gate por último):
@@ -618,14 +679,15 @@ metadata:
           <cmd>. '&lt;ENV_FILE&gt;'; "$DO_WT" sweep; "$DO_WT" verify</cmd>
           (separados por <code>;</code>, NUNCA por <code>&amp;&amp;</code>: o
           <code>sweep</code> sai != 0 sempre que há sub-tarefa ACTIVE — inclusive
-          uma testing subwave em voo, que é normal — e a prova de contenção
-          importa MAIS quando a limpeza não fechou)
+          uma testing ou validation subwave em voo, que é normal — e a prova de
+          contenção importa MAIS quando a limpeza não fechou)
           <substeps>
             <substep><code>sweep</code> fecha o que JÁ FOI INTEGRADO: remove as filhas
               com status=MERGED e apaga os branches delas (arquivando antes).
               Sub-tarefas ACTIVE NÃO são tocadas — ou o merge ainda não
-              aconteceu, ou é uma testing subwave rodando em background; as duas
-              guardam trabalho. Elas são apenas listadas, para você decidir.</substep>
+              aconteceu, ou é uma testing ou validation subwave rodando em
+              background; as duas guardam trabalho. Elas são apenas listadas,
+              para você decidir.</substep>
             <substep><code>verify</code> é a prova de contenção: HEAD ainda em
               $BASE_BRANCH, config local do repositório inalterado, e — se
               existir $MAIN_ROOT — HEAD e status do checkout principal idênticos
@@ -647,44 +709,88 @@ metadata:
           {{HANDOFF}} dos prompts — sub-agentes nunca leem o TASK_PLAN.md
           (ele vive em $DO_STATE, dentro da raiz-de-mundo mas fora das
           worktrees-filhas)</step>
-        <step order="10"><strong>CRIAR TESTING SUBWAVE PARA ESTA ONDA (ASSÍNCRONA):</strong>
-          Ao fim da execução da onda N, crie uma SUB-ONDA DE TESTES que rodará
-          em BACKGROUND — seus resultados serão integrados na PRÓXIMA onda
-          (ou no COMMIT-FINAL, se esta for a última onda).
+        <step order="10"><strong>CRIAR SUBWAVES PÓS-ONDA (VALIDAÇÃO + TESTES,
+          ASSÍNCRONAS):</strong> Ao fim da execução da onda N, crie DUAS
+          SUB-ONDAS, DISPARADAS JUNTAS, que rodarão em BACKGROUND — seus
+          resultados serão integrados na PRÓXIMA onda, no passo 3.5 (ou no
+          COMMIT-FINAL, se esta for a última onda). TODOS os agentes com
+          <field name="run_in_background">true</field> — eles rodarão ENQUANTO
+          a próxima onda executa.
+          MAPA ANTI-COLISÃO: os arquivos de teste cobertos pela subwave da
+          onda N entram em {{FORBIDDEN_FILES}} dos agentes da onda N+1 — a
+          subwave roda ao MESMO TEMPO que os features.
           <substeps>
-            <substep><strong>DETERMINAR ESCOPO:</strong> Colete a lista de TODOS os
-              arquivos de produção modificados nesta onda. Fonte: handoffs dos
-              sub-agentes + <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$DO_WT" wave-files &lt;nome-da-1a-filha-da-onda&gt;</cmd>,
-              que difia a partir do SHA pré-merge registrado — determinístico e
-              imune ao COMMIT PREP, ao contrário de <code>HEAD~N</code>, que
-              conta commits às cegas. Agrupe por
-              módulo/subsistema. Exclua arquivos puramente de documentação,
-              templates HTML ou configuração declarativa — estes são "isentos
-              de teste".</substep>
-            <substep><strong>PLANEJAR AGENTES DE TESTE:</strong> Divida os arquivos
-              em subconjuntos disjuntos (mapa de propriedade de arquivo de teste).
-              Máximo 3 worktrees de teste por onda — agrupe arquivos relacionados
-              no mesmo agente. Batize cada worktree com o prefixo
-              <code>test-ondaN-</code> (ex.: test-onda1-cache-coverage,
-              test-onda1-schema-tests).</substep>
-            <substep><strong>CRIAR WORKTREES DE TESTE:</strong>
-              <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$DO_WT" new test test-ondaN-&lt;foco&gt;</cmd>
-              — mesmo CHILD_ROOT, mesmo BRANCH_NS, kind=test no owned.tsv.
-              Confirme com <cmd>"$DO_WT" status</cmd>.</substep>
-            <substep><strong>DISPARAR AGENTES DE TESTE EM BACKGROUND:</strong>
-              Para cada worktree de teste, dispare um sub-agente usando o
-              TEMPLATE DE AGENTE DE TESTE (abaixo). Use
-              <field name="run_in_background">true</field> para TODOS —
-              eles rodarão ENQUANTO a próxima onda executa.</substep>
-            <substep><strong>REGISTRAR NO TASK_PLAN.md:</strong> Crie a seção
-              "Testing Subwave Onda N — PENDENTE" contendo: worktrees criadas,
-              agentes disparados, escopo de cada um, e o status PENDENTE.
-              Esta seção será consumida pelo passo 0 da próxima iteração
-              do repeat (ou pelo COMMIT-FINAL).</substep>
+            <substep><strong>BLOCO A — VALIDATION SUBWAVE (gate + revisão do
+              diff integrado):</strong>
+              <substeps>
+                <substep><strong>CRIAR WORKTREE DE VALIDAÇÃO:</strong>
+                  <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$DO_WT" new validation val-ondaN-gate</cmd>
+                  — mesmo CHILD_ROOT, mesmo BRANCH_NS, kind=validation no
+                  owned.tsv. OBRIGATÓRIO: o gate assíncrono NUNCA roda em
+                  $BASE_DIR (colidiria com os merges da onda seguinte — git
+                  index lock, COMMIT PREP, artefatos de build).</substep>
+                <substep><strong>DISPARAR AGENTE VALIDADOR (somente-leitura):</strong>
+                  na worktree val-ondaN-gate, dispare um sub-agente usando o
+                  TEMPLATE DE AGENTE DE VALIDAÇÃO (abaixo): roda build completo
+                  + linter + typecheck + a suíte de testes existente no estado
+                  integrado do fim da onda N, instalando deps congeladas NA
+                  PRÓPRIA WORKTREE se necessário (R9, HUSKY=0). É PROIBIDO
+                  modificar qualquer arquivo — reporta veredito por etapa com
+                  comando + saída real.</substep>
+                <substep><strong>DISPARAR REVISOR ADVERSARIAL DO DIFF
+                  INTEGRADO (sem worktree):</strong> dispare um sub-agente
+                  FRESCO (contexto zero; precedente do REVISOR DE PLANO,
+                  passo 5) que recebe
+                  <cmd>gwt diff "$pre..HEAD"</cmd> — pre = pre_merge_sha da 1ª
+                  filha com status=MERGED desta onda (ver F2-09) — + o prompt
+                  original + os handoffs. Missão: REFUTAR A INTEGRAÇÃO — os
+                  contratos combinam entre sub-agentes? B usou a interface que
+                  A entregou? dead code/duplicação cruzada? golden masters
+                  intactos? Complementa o passo 6 (que só vê diffs individuais
+                  pré-merge).</substep>
+                <substep><strong>REGISTRAR NO TASK_PLAN.md:</strong> Crie a
+                  seção "Validation Subwave Onda N — PENDENTE" contendo:
+                  worktrees criadas, agentes disparados, escopo de cada um,
+                  e o status PENDENTE.</substep>
+              </substeps></substep>
+            <substep><strong>BLOCO B — TESTING SUBWAVE (fluxo atual):</strong>
+              <substeps>
+                <substep><strong>DETERMINAR ESCOPO:</strong> Colete a lista de TODOS os
+                  arquivos de produção modificados nesta onda. Fonte: handoffs dos
+                  sub-agentes + <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$DO_WT" wave-files &lt;nome-da-1a-filha-da-onda&gt;</cmd>,
+                  que difia a partir do SHA pré-merge registrado — determinístico e
+                  imune ao COMMIT PREP, ao contrário de <code>HEAD~N</code>, que
+                  conta commits às cegas. Agrupe por
+                  módulo/subsistema. Exclua arquivos puramente de documentação,
+                  templates HTML ou configuração declarativa — estes são "isentos
+                  de teste".</substep>
+                <substep><strong>PLANEJAR AGENTES DE TESTE:</strong> Divida os arquivos
+                  em subconjuntos disjuntos (mapa de propriedade de arquivo de teste).
+                  Máximo 3 worktrees de teste por onda — agrupe arquivos relacionados
+                  no mesmo agente. Batize cada worktree com o prefixo
+                  <code>test-ondaN-</code> (ex.: test-onda1-cache-coverage,
+                  test-onda1-schema-tests).</substep>
+                <substep><strong>CRIAR WORKTREES DE TESTE:</strong>
+                  <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$DO_WT" new test test-ondaN-&lt;foco&gt;</cmd>
+                  — mesmo CHILD_ROOT, mesmo BRANCH_NS, kind=test no owned.tsv.
+                  Confirme com <cmd>"$DO_WT" status</cmd>.</substep>
+                <substep><strong>DISPARAR AGENTES DE TESTE EM BACKGROUND:</strong>
+                  Para cada worktree de teste, dispare um sub-agente usando o
+                  TEMPLATE DE AGENTE DE TESTE (abaixo). Use
+                  <field name="run_in_background">true</field> para TODOS —
+                  eles rodarão ENQUANTO a próxima onda executa.</substep>
+                <substep><strong>REGISTRAR NO TASK_PLAN.md:</strong> Crie a seção
+                  "Testing Subwave Onda N — PENDENTE" contendo: worktrees criadas,
+                  agentes disparados, escopo de cada um, e o status PENDENTE.
+                  Esta seção será consumida pelo passo 3.5 da próxima iteração
+                  do repeat (ou pelo COMMIT-FINAL).</substep>
+              </substeps></substep>
           </substeps>
           <note>Se a onda NÃO modificou arquivos de produção (apenas docs ou
-            configs), este passo é NO-OP — registre "Onda N: nada a testar
-            (apenas docs/configs)" no TASK_PLAN.md e pule.</note></step>
+            configs), a testing subwave é NO-OP — registre "Onda N: nada a
+            testar (apenas docs/configs)" no TASK_PLAN.md e pule o BLOCO B.
+            A validation subwave roda SEMPRE que a onda teve código integrado
+            (não é NO-OP por docs/configs).</note></step>
       </steps>
       <output>Onda concluída, squash commits em $BASE_BRANCH, gates verdes,
         worktrees e branches DESTA EXECUÇÃO removidos (worktrees pré-existentes
@@ -694,25 +800,66 @@ metadata:
     <phase id="4" name="COMMIT-FINAL">
       <objective>Commitar tudo e entregar</objective>
       <steps>
-        <step order="0"><strong>PROCESSAR ÚLTIMA TESTING SUBWAVE:</strong>
-          Consulte o TASK_PLAN.md. Se EXISTE a seção "Testing Subwave
-          Onda N — PENDENTE" (testing subwave da última onda executada),
-          processe-a AGORA, ANTES de iniciar os passos finais:
+        <step order="0"><strong>PROCESSAR ÚLTIMAS SUBWAVES (TESTES +
+          VALIDAÇÃO):</strong> Consulte o TASK_PLAN.md. Se EXISTE a seção
+          "Testing Subwave Onda N — PENDENTE" ou "Validation Subwave Onda N —
+          PENDENTE" (subwaves da última onda executada), processe-as AGORA,
+          ANTES de iniciar os passos finais:
           <substeps>
-            <substep><strong>BARREIRA:</strong> Aguarde TODOS os agentes de teste
-              da última onda terminarem.</substep>
-            <substep><strong>REVISÃO DE TESTES:</strong> Revisores adversariais
-              frescos para cada agente de teste (mesmo protocolo do passo 6
-              da EXECUTE-ONDA, adaptado para diffs de teste).</substep>
-            <substep><strong>SQUASH-MERGE + GATE + LIMPEZA:</strong> Mesmo fluxo
-              do passo 7 da EXECUTE-ONDA. Commits com prefixo "test-ondaN-".
-              Se gate VERMELHO persistente (2 tentativas de fix): REVERTA o
-              squash-commit, limpe a worktree/branch, e documente os arquivos
-              sem cobertura no relatório final.</substep>
-            <substep><strong>ATUALIZAR TASK_PLAN.md:</strong> Marque como
-              "Testing Subwave Onda N — CONCLUÍDA".</substep>
+            <substep><strong>TESTING SUBWAVE (fluxo atual):</strong>
+              <substeps>
+                <substep><strong>BARREIRA:</strong> Aguarde TODOS os agentes de
+                  teste da última onda terminarem.</substep>
+                <substep><strong>REVISÃO DE TESTES:</strong> Revisores
+                  adversariais frescos para cada agente de teste (mesmo
+                  protocolo do passo 6 da EXECUTE-ONDA, adaptado para diffs de
+                  teste).</substep>
+                <substep><strong>SQUASH-MERGE + GATE + LIMPEZA:</strong> Mesmo
+                  fluxo do passo 7 da EXECUTE-ONDA. Commits com prefixo
+                  "test-ondaN-". Se gate VERMELHO persistente (2 tentativas de
+                  fix): REVERTA o squash-commit, limpe a worktree/branch, e
+                  documente os arquivos sem cobertura no relatório final.</substep>
+                <substep><strong>ATUALIZAR TASK_PLAN.md:</strong> Marque como
+                  "Testing Subwave Onda N — CONCLUÍDA".</substep>
+              </substeps></substep>
+            <substep><strong>VALIDATION SUBWAVE:</strong>
+              <substeps>
+                <substep><strong>BARREIRA:</strong> Aguarde os 2 agentes da
+                  validation subwave da última onda terminarem: o validador do
+                  gate (worktree val-ondaN-gate) e o revisor adversarial do
+                  diff integrado (sem worktree).</substep>
+                <substep><strong>AVALIAR VEREDITO:</strong> Avalie o veredito
+                  por etapa (build/lint/typecheck/testes) e os achados
+                  adversariais do revisor do diff integrado. Se TUDO VERDE
+                  (sem achados materiais): registre "Validation Subwave Onda
+                  N — CONCLUÍDA" no TASK_PLAN.md. Se VERMELHO ou com achados
+                  materiais: os achados entram no FLUXO FIX-FINAL (abaixo).</substep>
+                <substep><strong>LIMPEZA SEM MERGE:</strong> o gate de
+                  validação NUNCA é mergeado — a val-ondaN-gate é
+                  somente-leitura e assíncrona. Encerre com
+                  <cmd>"$DO_WT" remove val-ondaN-gate</cmd> +
+                  <cmd>"$DO_WT" drop-branch val-ondaN-gate</cmd>.</substep>
+              </substeps></substep>
+            <substep><strong>FLUXO FIX-FINAL (validação VERMELHA):</strong> Se a
+              validação reprovou (gate vermelho por código ou achados
+              materiais), cada achado vira um sub-agente fix-final-&lt;foco&gt;
+              (kind=fix, <cmd>"$DO_WT" new fix fix-final-&lt;foco&gt;</cmd> —
+              precedente do degradation gate-red) → squash-merge + gate +
+              limpeza pelo fluxo normal → RE-RODA a validação UMA vez (nova
+              worktree val-ondaN-gate-r2, mesmo protocolo da validation
+              subwave) → se persistir, desfaça o squash problemático com
+              <cmd>"$DO_WT" undo &lt;nome&gt;</cmd> e documente a degradação
+              no relatório final (seção "Arquivos sem cobertura" e/ou
+              "Validação de Código (Validation Subwaves)").
+              REGRA ANTI-LOOP: fix-final que toca produção NÃO dispara nova
+              testing/validation subwave — o débito de cobertura vai para
+              "Arquivos sem cobertura" no relatório.
+              DISTINÇÃO AMBIENTE-VS-CÓDIGO (espelho de R9): se a validação
+              falhou por AMBIENTE (deps ausentes na worktree de validação),
+              NÃO gere fix de produção — re-instale deps congeladas na
+              worktree de validação e re-rode.</substep>
           </substeps>
-          Se NÃO existe testing subwave pendente, este passo é NO-OP.</step>
+          Se NÃO existe subwave pendente, este passo é NO-OP.</step>
 
         <step order="1">O TASK_PLAN.md é descartável e NUNCA entra na história —
           mas ele vive sob <path>$DO_STATE</path>, dentro de
@@ -1069,6 +1216,92 @@ registre a ausência no handoff — NÃO saia da sua worktree para procurá-lo:
 ]]>
   </test-agent-template>
 
+  <validation-agent-template>
+    <![CDATA[
+Você é um sub-agente ESPECIALIZADO EM VALIDAÇÃO DE CÓDIGO. Sua ÚNICA missão é
+rodar o gate completo no estado integrado do fim da onda {{WAVE_ID}} e
+reportar o veredito POR ETAPA. VOCÊ NÃO MODIFICA NADA — nem testes nem produção.
+
+## TAREFA
+Rodar o gate completo no estado integrado (o código de produção JÁ está
+mergeado nesta worktree) e reportar o veredito de CADA etapa:
+1. **build** — comando de build do projeto, com cwd na worktree.
+2. **lint** — comando de lint do projeto.
+3. **typecheck** — comando de typecheck do projeto (se o projeto tem).
+4. **testes** — a suíte de testes EXISTENTE (sem adicionar testes novos).
+Cada veredito DEVE citar o comando executado + a saída real (resumida) +
+arquivo:linha de cada falha. Nunca invente PASS/FAIL.
+
+## SUA WORKTREE — SUA RAIZ-DE-MUNDO
+- Diretório: {{WORKTREE_PATH}} (absoluto — criado e travado pelo orquestrador)
+- Branch: {{BRANCH_NAME}}
+- O código de produção JÁ ESTÁ presente nesta worktree, herdado de
+  {{BASE_BRANCH}} — o branch da raiz-de-mundo desta execução — após os
+  squash-merges da onda {{WAVE_ID}}. NÃO faça merge, fetch, pull ou checkout de
+  main/master: eles pertencem a OUTRA árvore de trabalho.
+- Valem integralmente as mesmas fronteiras do template de sub-agente: nada é
+  escrito, commitado ou instalado fora de {{WORKTREE_PATH}}; leitura permitida
+  apenas em {{BASE_DIR}} e {{SKILL_HOME}}; o checkout principal {{MAIN_ROOT}}
+  é ZONA PROIBIDA.
+- Se o gate falhar por AMBIENTE (deps ausentes: "Cannot find module",
+  "ModuleNotFoundError"): instale NA PRÓPRIA WORKTREE, em modo congelado
+  (npm ci | pnpm install --frozen-lockfile | yarn install --immutable |
+  bun install --frozen-lockfile | uv sync --frozen |
+  POETRY_VIRTUALENVS_IN_PROJECT=1 poetry install | dotnet restore
+  --locked-mode | go build ./... | cargo build), com `HUSKY=0` no ambiente,
+  nunca em escopo global (R9) — e RE-RODE a etapa.
+- NÃO há o que commitar: você NÃO modifica arquivo algum. Se `git -C
+  {{WORKTREE_PATH}} status --porcelain` mostrar mudanças, PARE e reporte —
+  algo está errado (você não pode nem criar testes).
+
+## CONTEXTO
+- Handoffs dos sub-agentes que implementaram a onda:
+{{WAVE_HANDOFFS}}
+- Diff integrado da onda (referência; o revisor adversarial o refuta):
+{{WAVE_DIFF}}
+
+## REGRAS OBRIGATÓRIAS
+
+1. **NUNCA MODIFICAR NADA:** Nenhum arquivo de produção, nenhum arquivo de
+   teste, nenhuma configuração. SEM TDD, SEM coverage, SEM fix. Se encontrar
+   um problema, reporte com evidência (comando + saída + arquivo:linha) —
+   NÃO corrija.
+
+2. **EVIDÊNCIA REAL:** Todo resultado reportado DEVE citar o comando
+   executado e a saída real (resumida). Nunca invente PASS/FAIL.
+
+3. **AUTONOMIA TOTAL:** NÃO pergunte ao usuário. Infira com confiança.
+
+4. **VERIFICAÇÃO PRÉ-TÉRMINO:**
+   - As 4 etapas rodadas (build/lint/typecheck/testes), cada uma com veredito
+     individual e comando + saída real
+   - Nenhum arquivo modificado — `git -C {{WORKTREE_PATH}} status --porcelain`
+     vazio
+   - Cada falha reportada com arquivo:linha
+
+## FORMATO DE RESPOSTA (VEREDITO DE VALIDAÇÃO)
+
+```
+## Veredito do gate (onda {{WAVE_ID}})
+| Etapa | Comando | Veredito | Evidência |
+|-------|---------|----------|-----------|
+| build | [comando] | PASS/FAIL | [saída real resumida] |
+| lint | [comando] | PASS/FAIL | [saída real resumida] |
+| typecheck | [comando] | PASS/FAIL | [saída real resumida] |
+| testes | [comando] | PASS/FAIL | [saída real resumida] |
+
+## Falhas (arquivo:linha)
+- [arquivo:linha] — [descrição] — [comando que revelou]
+
+## Falhas por AMBIENTE (deps ausentes — re-instaladas na worktree e re-rodadas)
+- [ou "Nenhuma"]
+
+## Para o orquestrador
+[Qualquer risco, gap ou contexto útil]
+```
+]]>
+  </validation-agent-template>
+
   <final-report-template>
     <![CDATA[
 ## Tarefa concluída
@@ -1086,6 +1319,16 @@ registre a ausência no handoff — NÃO saia da sua worktree para procurá-lo:
 | Testing Subwave | Worktree | Arquivos cobertos | Cobertura | Status |
 |-----------------|----------|-------------------|-----------|--------|
 {{TESTING_SUBWAVE_ROWS}}
+
+## Validação de Código (Validation Subwaves)
+| Validation Subwave | Veredito do gate (build/lint/typecheck/testes) | Achados adversariais | Fixes gerados | Status |
+|--------------------|------------------------------------------------|----------------------|---------------|--------|
+{{VALIDATION_SUBWAVE_ROWS}}
+
+## Bugs encontrados
+| Origem (teste/validação) | Descrição | Fix aplicado (sub-tarefa) | Débito (documentado) |
+|--------------------------|-----------|---------------------------|----------------------|
+{{BUG_ROWS}}
 
 ## Arquivos sem cobertura (degradação)
 {{UNCOVERED_FILES_OR_NONE}}
@@ -1107,6 +1350,12 @@ Exceções (BLOCKED/ORPHANED) e o que foi feito com elas.]
 
 ## Decisões tomadas autonomamente
 [Premissas que você inferiu sem perguntar ao usuário]
+
+## Convergência (válvula de escape)
+[Se NÃO aplicável: "Convergência declarada pelo REVISOR DE PLANO."
+Se aplicável: convergência por válvula de escape (motivo: teto de ondas |
+REPLANs estagnados), propostas não executadas listadas aqui — o usuário
+decide se quer nova execução para os refinamentos.]
 
 ## Bloqueios (se houver)
 [Sub-tarefas que falharam e por quê]
@@ -1231,6 +1480,22 @@ justificativas.
         Um testing subwave parcial (alguns arquivos cobertos, outros não)
         é melhor que nenhum.</action>
     </case>
+    <case id="validation-subwave-failure">
+      <symptom>Validador da validation subwave falhou (erro, timeout, vazio)
+        ou gate VERMELHO por código no estado integrado</symptom>
+      <action>Mesmo tratamento de subagent-failure: re-dispare o validador NA
+        MESMA worktree val-ondaN-gate (máx 3 tentativas), reaproveitando o
+        estado parcial (deps instaladas não são re-baixadas). Na 3ª falha:
+        registre como BLOQUEIO na seção da validation subwave no TASK_PLAN.md
+        e documente no relatório final — o COMMIT-FINAL não fecha com
+        validação VERMELHA sem degradação documentada.
+        DISTINÇÃO AMBIENTE-VS-CÓDIGO (espelho de R9): gate vermelho POR
+        AMBIENTE (deps ausentes na worktree de validação): re-instalar deps
+        congeladas e re-rodar — NUNCA gerar fix de produção por falha de
+        ambiente. Gate vermelho POR CÓDIGO: os achados viram sub-tarefas
+        fix-final (passo 0 do COMMIT-FINAL), com no máximo 2 tentativas de
+        fix por achado.</action>
+    </case>
     <case id="test-coverage-insufficient">
       <symptom>Agente de teste reportou cobertura abaixo de 80% nos arquivos alvo</symptom>
       <action>Se ≥ 60%: aceite com ressalva documentada no handoff. Se &lt; 60%:
@@ -1270,13 +1535,17 @@ justificativas.
         "onda1-schema-busca: ..."); as worktrees onda1-* e os branches
         $BRANCH_NS/onda1-* NÃO existem mais; worktrees pré-existentes de
         terceiros continuam intactas.
-        Testing Subwave 1 é disparada em background: test-onda1-cache-coverage
-        e test-onda1-schema-tests rodam enquanto a Onda 2 executa.</lifecycle>
+        As subwaves da Onda 1 são disparadas em background ao fim dela (passo
+        10): Testing Subwave 1 (test-onda1-cache-coverage e
+        test-onda1-schema-tests) e Validation Subwave 1 (val-onda1-gate). Elas
+        rodam ENQUANTO a Onda 2 executa — os features da Onda 2 já foram
+        disparados (passo 3) e as subwaves são processadas no passo 3.5 da
+        Onda 2, em paralelo com a barreira do passo 4.</lifecycle>
       <testing-subwaves>
         <tsw for-wave="1" worktrees="test-onda1-cache-coverage, test-onda1-schema-tests"
-             runs-during="Onda 2" delivered-at="Fechamento da Onda 2 (passo 0)"/>
+             runs-during="Onda 2" delivered-at="Onda 2, passo 3.5 (slot ocioso, após disparo dos features)"/>
         <tsw for-wave="2" worktrees="test-onda2-endpoint-tests"
-             runs-during="COMMIT-FINAL setup" delivered-at="COMMIT-FINAL (passo 0)"/>
+             runs-during="COMMIT-FINAL setup" delivered-at="COMMIT-FINAL (passo 0 — processa as duas subwaves pendentes)"/>
       </testing-subwaves>
     </example>
   </examples>
@@ -1296,9 +1565,10 @@ justificativas.
     E lembre-se: o sistema de busca 3-tier (surf-skill → Brave → DDG keyless) é
     verificado ANTES de cada onda via check-search-credits.sh. O Tier 3 (DDG
     keyless) sempre funciona — qualidade reduzida mas sem bloqueio.
-    Testing subwaves (test-ondaN-*) rodam em BACKGROUND e são integradas
-    na PRÓXIMA onda (passo 0) ou no COMMIT-FINAL. Elas NUNCA bloqueiam
-    o progresso das ondas de feature. Sem busca = sem sub-agentes.
+    Testing subwaves (test-ondaN-*) e validation subwaves (val-ondaN-*) rodam
+    em BACKGROUND e são integradas na PRÓXIMA onda (passo 3.5) ou no
+    COMMIT-FINAL. Elas NUNCA bloqueiam o disparo das ondas de feature.
+    Sem busca = sem sub-agentes.
   </final-note>
 
 </orchestrator>
