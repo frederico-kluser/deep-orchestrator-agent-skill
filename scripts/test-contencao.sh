@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Testes de aceitação do MODO CONTIDO — A1..A11
+# Testes de aceitação do MODO CONTIDO — A1..A20 (50 asserções)
 set -uo pipefail
-SKILL=/home/ondokai/Projects/deep-orchestrator
+SKILL=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 CTX="$SKILL/scripts/do-context.sh"
 WT="$SKILL/scripts/do-wt.sh"
 LAB="${TMPDIR:-/tmp}/do-accept-$$"
@@ -9,8 +9,11 @@ PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  \033[32mPASS\033[0m %s\n' "$*"; }
 bad()  { FAIL=$((FAIL+1)); printf '  \033[31mFAIL\033[0m %s\n' "$*"; }
 chk()  { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (esperado='$3' obtido='$2')"; fi; }
+# pval <CHAVE> <arquivo-env>: extrai o valor da linha CHAVE='...' (portável, sem grep -P)
+pval() { sed -n "s/.*$1='\([^']*\)'.*/\1/p" "$2"; }
 
 rm -rf "$LAB"; mkdir -p "$LAB"; cd "$LAB"
+trap 'rm -rf "$LAB"' EXIT   # nunca deixar labs /tmp/do-accept-* órfãos
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
 # --- fixture: repo principal + worktree irmã + worktree de terceiro ----------
@@ -24,19 +27,19 @@ cd "$LAB"
 echo "=== A1: cwd = subdiretório da árvore principal → MODE=normal ==="
 mkdir -p main/src/deep
 out=$(cd main/src/deep && "$CTX" --quiet 2>&1); env1=$(echo "$out" | tail -1)
-chk "A1 MODE" "$(grep -oP "MODE='\K[^']+" "$env1")" "normal"
-chk "A1 BASE_DIR" "$(grep -oP "BASE_DIR='\K[^']+" "$env1")" "$LAB/main"
+chk "A1 MODE" "$(pval MODE "$env1")" "normal"
+chk "A1 BASE_DIR" "$(pval BASE_DIR "$env1")" "$LAB/main"
 
 echo "=== A2: cwd = subdiretório de worktree vinculada → MODE=contido ==="
 mkdir -p wtA/src/deep
 out=$(cd wtA/src/deep && "$CTX" --quiet 2>&1); ENVF=$(echo "$out" | tail -1)
-chk "A2 MODE" "$(grep -oP "MODE='\K[^']+" "$ENVF")" "contido"
-chk "A2 BASE_DIR" "$(grep -oP "BASE_DIR='\K[^']+" "$ENVF")" "$LAB/wtA"
-chk "A2 BASE_BRANCH" "$(grep -oP "BASE_BRANCH='\K[^']+" "$ENVF")" "feat/x"
-chk "A2 MAIN_ROOT" "$(grep -oP "MAIN_ROOT='\K[^']*" "$ENVF")" "$LAB/main"
-chk "A4 PLACEMENT" "$(grep -oP "PLACEMENT='\K[^']+" "$ENVF")" "sibling"
-chk "A4 CHILD_ROOT prefixo" "$(grep -oP "CHILD_ROOT='\K[^']+" "$ENVF" | sed "s#/[^/]*\$##")" "$LAB/.wtA-do"
-chk "A2 SKILL_HOME" "$(grep -oP "SKILL_HOME='\K[^']+" "$ENVF")" "$SKILL"
+chk "A2 MODE" "$(pval MODE "$ENVF")" "contido"
+chk "A2 BASE_DIR" "$(pval BASE_DIR "$ENVF")" "$LAB/wtA"
+chk "A2 BASE_BRANCH" "$(pval BASE_BRANCH "$ENVF")" "feat/x"
+chk "A2 MAIN_ROOT" "$(pval MAIN_ROOT "$ENVF")" "$LAB/main"
+chk "A4 PLACEMENT" "$(pval PLACEMENT "$ENVF")" "sibling"
+chk "A4 CHILD_ROOT prefixo" "$(pval CHILD_ROOT "$ENVF" | sed "s#/[^/]*\$##")" "$LAB/.wtA-do"
+chk "A2 SKILL_HOME" "$(pval SKILL_HOME "$ENVF")" "$SKILL"
 
 echo "=== A3: HEAD destacado / sem commits / não-repo ==="
 git -C wtThird checkout -q --detach
@@ -48,7 +51,7 @@ mkdir -p norepo && (cd norepo && "$CTX" --quiet >/dev/null 2>&1); chk "A3 não-r
 echo "=== A5: worktree hospedada em <repo>/.claude/worktrees/<x> → nested ==="
 git -C main worktree add -q "$LAB/main/.claude/worktrees/embedded" -b emb
 out=$(cd main/.claude/worktrees/embedded && "$CTX" --quiet 2>&1); env5=$(echo "$out"|tail -1)
-chk "A5 PLACEMENT" "$(grep -oP "PLACEMENT='\K[^']+" "$env5")" "nested"
+chk "A5 PLACEMENT" "$(pval PLACEMENT "$env5")" "nested"
 
 echo "=== A6/A7/A11: onda completa com 2 filhas ==="
 # sujeira preexistente do usuário na worktree (A10)
@@ -126,7 +129,7 @@ git -C "$BASE_DIR" reset -q && rm -f "$BASE_DIR/staged-pelo-usuario.txt"
 echo "=== A8: duas execuções concorrentes → namespaces disjuntos ==="
 e1=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); sleep 1
 e2=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 )
-n1=$(grep -oP "BRANCH_NS='\K[^']+" "$e1"); n2=$(grep -oP "BRANCH_NS='\K[^']+" "$e2")
+n1=$(pval BRANCH_NS "$e1"); n2=$(pval BRANCH_NS "$e2")
 if [ "$n1" != "$n2" ]; then ok "A8 namespaces disjuntos ($n1 != $n2)"; else bad "A8 namespaces iguais"; fi
 
 
