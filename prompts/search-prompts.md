@@ -2,10 +2,12 @@
 
 > Contrato de prompts de busca do deep-orchestrator para tarefas de
 > desenvolvimento de software. Define COMO as buscas são formuladas,
-> refinadas (question evolution) e avaliadas. Complementa o script
-> `brave-search.sh`, que implementa a parte técnica (API Brave, parsing,
-> flags CLI). Este documento é a camada de estratégia; o script é a camada
-> de execução.
+> refinadas (question evolution) e avaliadas. A interface PRIMÁRIA de
+> execução é `{{SKILL_HOME}}/scripts/search.sh` (fallback automático em
+> 3 tiers: surf-skill → Brave Search API → DuckDuckGo keyless); o
+> `brave-search.sh` é a implementação do Tier 2 (API Brave, parsing,
+> flags CLI). Este documento é a camada de estratégia; o search.sh é a
+> camada de execução.
 
 ## Filosofia de Busca para Dev
 
@@ -23,10 +25,11 @@ Diferente de busca genérica, busca para desenvolvimento precisa de:
 - **Consciência de frescor** (tecnologia de 2022 pode já estar obsoleta) — em
   software, obsoleto se mede em anos, às vezes meses (ecossistemas JS e de LLMs)
 
-Princípio extra, herdado do surf-research-skill (`--insights`): **estado o que
-julgo saber e busco o que o FALSIFICARIA.** Uma busca que só confirma o que o
-agente já acredita não é pesquisa; é viés. Toda rodada de evolução deve incluir
-pelo menos uma query de falsificação quando existirem crenças prévias.
+Princípio extra, herdado do sistema de busca 3-tier do deep-orchestrator
+(`search.sh --insights`): **estado o que julgo saber e busco o que o
+FALSIFICARIA.** Uma busca que só confirma o que o agente já acredita não é
+pesquisa; é viés. Toda rodada de evolução deve incluir pelo menos uma query de
+falsificação quando existirem crenças prévias.
 
 ---
 
@@ -34,17 +37,17 @@ pelo menos uma query de falsificação quando existirem crenças prévias.
 
 Oito categorias cobrem a esmagadora maioria das buscas de desenvolvimento.
 Cada uma tem um template de prompt base e regras de formulação. Placeholders
-estão em `{{MAIÚSCULAS}}`.
+estão em `{{MAIUSCULAS}}`.
 
 ### 1.1 API / Library Lookup
 
 Buscar documentação de API/biblioteca específica.
 
 ```text
-"{{API_NAME}}" {{VERSÃO}} documentation {{LINGUAGEM}}
-"{{API_NAME}}" {{VERSÃO}} reference {{FUNÇÃO_OU_CLASSE}}
-"{{API_NAME}}" {{VERSÃO}} example {{CASO_DE_USO}}
-site:{{DOMÍNIO_DOCS_OFICIAL}} "{{API_NAME}}" {{SÍMBOLO}}
+"{{API_NAME}}" {{VERSAO}} documentation {{LINGUAGEM}}
+"{{API_NAME}}" {{VERSAO}} reference {{FUNCAO_OU_CLASSE}}
+"{{API_NAME}}" {{VERSAO}} example {{CASO_DE_USO}}
+site:{{DOMINIO_DOCS_OFICIAL}} "{{API_NAME}}" {{SIMBOLO}}
 ```
 
 Regras:
@@ -60,8 +63,8 @@ Regras:
 Buscar solução de erro específico.
 
 ```text
-"{{MENSAGEM_DE_ERRO}}" {{LINGUAGEM}} {{VERSÃO_RUNTIME}}
-"{{NOME_OU_CÓDIGO_DO_ERRO}}" {{FRAMEWORK}} stack trace
+"{{MENSAGEM_DE_ERRO}}" {{LINGUAGEM}} {{VERSAO_RUNTIME}}
+"{{NOME_OU_CODIGO_DO_ERRO}}" {{FRAMEWORK}} stack trace
 "{{MENSAGEM_DE_ERRO}}" site:stackoverflow.com
 "{{MENSAGEM_DE_ERRO}}" site:github.com {{REPO}} issue
 ```
@@ -81,10 +84,10 @@ Regras:
 Pesquisar trade-offs de decisão arquitetural.
 
 ```text
-{{DECISÃO}} trade-offs {{TECNOLOGIA_A}} vs {{TECNOLOGIA_B}}
-"{{DECISÃO}}" ADR architecture decision record {{ANO}}
-{{DECISÃO}} case study produção {{EMPRESA_OU_CASO}}
-{{DECISÃO}} quando NÃO usar limitações
+{{DECISAO}} trade-offs {{TECNOLOGIA_A}} vs {{TECNOLOGIA_B}}
+"{{DECISAO}}" ADR architecture decision record {{ANO}}
+{{DECISAO}} case study produção {{EMPRESA_OU_CASO}}
+{{DECISAO}} quando NÃO usar limitações
 ```
 
 Regras:
@@ -100,10 +103,10 @@ Regras:
 Buscar breaking changes e guias de migração.
 
 ```text
-{{BIBLIOTECA}} {{VERSÃO_ANTIGA}} para {{VERSÃO_NOVA}} migration guide
-"{{BIBLIOTECA}}" breaking changes {{VERSÃO_NOVA}} release notes
+{{BIBLIOTECA}} {{VERSAO_ANTIGA}} para {{VERSAO_NOVA}} migration guide
+"{{BIBLIOTECA}}" breaking changes {{VERSAO_NOVA}} release notes
 {{BIBLIOTECA}} {{RECURSO_DEPRECATED}} deprecated replacement
-{{BIBLIOTECA}} changelog {{VERSÃO}} upgrade
+{{BIBLIOTECA}} changelog {{VERSAO}} upgrade
 ```
 
 Regras:
@@ -111,7 +114,7 @@ Regras:
   primária de breaking changes.
 - Buscar `deprecated` da versão nova, não só o guia de migração (muitos
   deprecations não estão no guia).
-- Cross-check com issues: `{{BIBLIOTECA}} {{VERSÃO_NOVA}} migration
+- Cross-check com issues: `{{BIBLIOTECA}} {{VERSAO_NOVA}} migration
   site:github.com` revela o que quebrou na prática.
 
 ### 1.5 Security Vulnerability
@@ -120,7 +123,7 @@ Buscar CVEs e security advisories.
 
 ```text
 {{BIBLIOTECA}} CVE {{ANO}} vulnerability
-"{{BIBLIOTECA}}" security advisory {{VERSÃO}} fixed
+"{{BIBLIOTECA}}" security advisory {{VERSAO}} fixed
 {{BIBLIOTECA}} CVE-{{ANO}}-{{ID}} versões afetadas patch
 site:github.com {{REPO}} security-advisories
 site:osv.dev "{{BIBLIOTECA}}"
@@ -139,9 +142,9 @@ Regras:
 Buscar técnicas de otimização.
 
 ```text
-{{BIBLIOTECA}} performance benchmark {{VERSÃO}}
-{{FRAMEWORK}} performance optimization {{PADRÃO_OU_GARGALO}}
-"{{OPERAÇÃO_A}}" vs "{{OPERAÇÃO_B}}" benchmark {{LINGUAGEM}}
+{{BIBLIOTECA}} performance benchmark {{VERSAO}}
+{{FRAMEWORK}} performance optimization {{PADRAO_OU_GARGALO}}
+"{{OPERACAO_A}}" vs "{{OPERACAO_B}}" benchmark {{LINGUAGEM}}
 {{FRAMEWORK}} profiling {{GARGALO}} {{CONTEXTO}}
 ```
 
@@ -158,7 +161,7 @@ Comparar bibliotecas/frameworks.
 
 ```text
 {{LIB_A}} vs {{LIB_B}} {{ANO}} comparison
-"{{LIB_A}}" vs "{{LIB_B}}" benchmark {{MÉTRICA}}
+"{{LIB_A}}" vs "{{LIB_B}}" benchmark {{METRICA}}
 "{{LIB_A}}" alternatives {{ECOSSISTEMA}} {{ANO}}
 "{{LIB_A}}" issues problems produção
 ```
@@ -175,7 +178,7 @@ Regras:
 Encontrar exemplos de código funcional.
 
 ```text
-"{{BIBLIOTECA}}" {{VERSÃO}} example {{RECURSO}}
+"{{BIBLIOTECA}}" {{VERSAO}} example {{RECURSO}}
 {{BIBLIOTECA}} {{RECURSO}} minimal example {{LINGUAGEM}}
 {{BIBLIOTECA}} {{RECURSO}} site:github.com examples
 "{{BIBLIOTECA}}" code snippet {{CASO_DE_USO}}
@@ -219,7 +222,7 @@ Princípios:
    falha; buscar cada critério separado funciona.
 3. **Convergência é alcançada, não presumida.** O loop só para por critério
    explícito (seção 2.3) ou esgotamento do orçamento de evoluções
-   (`--max-evolutions` no brave-search.sh).
+   (`--max-evolutions` no search.sh).
 4. **Não redescobrir.** Ângulos já explorados ficam registrados (seção 5 —
    Handoff) para que as evoluções vão mais fundo em vez de re-buscar o mesmo
    fato; caminhos sem resultado viram "explorado, sem achado", nunca
@@ -380,7 +383,7 @@ mais de broadening (mais resultados para avaliar) do que de narrowing
 2. **Rendimentos decrescentes:** 2 evoluções consecutivas não produziram
    ângulo novo (query evoluída devolveu URLs já vistos).
 3. **Orçamento esgotado:** número de evoluções atingiu `--max-evolutions`
-   do brave-search.sh. Convergência forçada: relatar qualidade parcial.
+   do search.sh. Convergência forçada: relatar qualidade parcial.
 4. **Saturação:** novas buscas retornam apenas duplicatas deduplicáveis.
 
 ### 2.4 Métricas de Qualidade de Resultado
@@ -453,24 +456,24 @@ por quê no rationale.
 Receba:
 {
   "original_query": "{{ORIGINAL_QUERY}}",
-  "round_number": {{ROUND_NUMBER}},
-  "max_evolutions": {{MAX_EVOLUTIONS}},
+  "round_number": "{{ROUND_NUMBER}}",
+  "max_evolutions": "{{MAX_EVOLUTIONS}}",
   "goal": "{{OBJETIVO_DA_PESQUISA}}",
-  "domain": "{{DOMÍNIO}}",  // frontend | backend | devops | data | ml_ai | mobile | security
+  "domain": "{{DOMINIO}}",
   "previous_results_summary": {
     "rounds": [
       {
-        "round": {{N}},
+        "round": "{{N}}",
         "query": "{{QUERY_USADA}}",
-        "results_count": {{N}},
-        "precision": {{0.0-1.0}},
+        "results_count": "{{N}}",
+        "precision": "{{0.0-1.0}}",
         "diversity_domains": ["github.com", "docs.example.com"],
-        "freshness": {{0.0-1.0}},
-        "authority_primary_ratio": {{0.0-1.0}},
-        "density_code_ratio": {{0.0-1.0}},
+        "freshness": "{{0.0-1.0}}",
+        "authority_primary_ratio": "{{0.0-1.0}}",
+        "density_code_ratio": "{{0.0-1.0}}",
         "best_findings": ["{{ACHADO_1}}", "{{ACHADO_2}}"],
         "gaps": ["{{LACUNA_1}}", "{{LACUNA_2}}"],
-        "explored_paths": ["{{ÂNGULO_EXPLORADO_1}}"]  // nunca re-propor
+        "explored_paths": ["{{ANGULO_EXPLORADO_1}}"]
       }
     ]
   }
@@ -478,22 +481,30 @@ Receba:
 
 Retorne EXATAMENTE:
 {
-  "evolved_query": "{{QUERY_EVOLUÍDA_OU_NULL_SE_CONVERGIU}}",
+  "evolved_query": "{{QUERY_EVOLUIDA_OU_NULL_SE_CONVERGIU}}",
   "strategy_used": "narrowing|broadening|lateral_expansion|validation|decomposition|null",
   "rationale": "{{JUSTIFICATIVA_CONCISA_1-3_FRASES}}",
   "converged": false,
   "convergence_reason": null
 }
-// Se convergiu: "converged": true, "evolved_query": null,
-// "convergence_reason": "sem lacunas | rendimentos decrescentes | orçamento esgotado"
 ```
+
+Notas de uso (substitua os placeholders pelos valores reais antes de
+enviar): campos numéricos (`round_number`, `max_evolutions`, `round`,
+`results_count`, `precision`, `freshness`, `authority_primary_ratio`,
+`density_code_ratio`) preenchidos SEM aspas; `domain` aceita `frontend |
+backend | devops | data | ml_ai | mobile | security`; `explored_paths`
+nunca re-propõe ângulos já explorados (regra 8 do system prompt). Se
+convergiu, retorne `"converged": true`, `"evolved_query": null` e
+`"convergence_reason"` com `"sem lacunas" | "rendimentos decrescentes" |
+"orçamento esgotado"`.
 
 ---
 
 ## 3. Prompts de Busca por Domínio
 
 Termos, fontes e armadilhas específicos por área. O domínio é escolhido
-pelo sub-agente ao formular as queries — o brave-search.sh NÃO tem a flag
+pelo sub-agente ao formular as queries — o search.sh NÃO tem a flag
 `--domain` (ver seção 4). O domínio tempera o plano de queries e a
 avaliação de qualidade (ex.: Freshness pesa mais em ML/AI que em security).
 
@@ -610,15 +621,17 @@ avaliação de qualidade (ex.: Freshness pesa mais em ML/AI que em security).
 
 ---
 
-## 4. Integração com brave-search.sh
+## 4. Integração com search.sh
 
-> **Nota de precedência:** o script `brave-search.sh`
-> (scripts/brave-search.sh) é a fonte da verdade para flags e
-> comportamento. Este documento é a camada de estratégia (COMO formular e
-> avaliar buscas); o script é a camada de execução (API Brave, parsing,
-> flags CLI). Se houver divergência entre este documento e o script, o
-> script vence — este documento deve ser atualizado na onda de
-> skill-update.
+> **Nota de precedência:** a interface PRIMÁRIA é `search.sh`
+> ({{SKILL_HOME}}/scripts/search.sh) — a fonte da verdade para flags e
+> comportamento; `brave-search.sh` é a implementação do Tier 2 (API Brave,
+> parsing, flags CLI) e só deve ser chamado diretamente em testes isolados
+> do tier. Este documento é a camada de estratégia (COMO formular e
+> avaliar buscas); o search.sh é a camada de execução (fallback 3-tier:
+> surf-skill → Brave → DDG keyless). Se houver divergência entre este
+> documento e o search.sh, o script vence — este documento deve ser
+> atualizado na onda de skill-update.
 
 O script **não** implementa os templates, estratégias e diagnósticos deste
 documento internamente. A relação real é a seguinte:
@@ -632,7 +645,12 @@ documento internamente. A relação real é a seguinte:
   estratégias da seção 2 — não há LLM no loop. A cada rodada o script
   classifica os resultados (`empty` / `few` / `lowq` / `good`) e reescreve
   a query mecanicamente:
-  - `empty` (zero resultados) → corta a query nas 3 primeiras palavras;
+  - `empty` (zero resultados) → corta a query nas 3 primeiras palavras.
+    ATENÇÃO (fallback 3-tier): resultado vazio NÃO é prova de inexistência —
+    o tier que respondeu pode ter degradado (ex.: apenas Tier 3 DDG, que é
+    Instant Answer, não full-text). Registre o tier efetivo no handoff e,
+    se um tier melhor estava indisponível, não declare "nada encontrado"
+    como fato;
   - `few` (menos da metade do `--count`) → remove a última palavra;
   - `lowq` (maioria sem descrição) → adiciona "best practice";
   - `good` → adiciona um sufixo rotativo ("guide", "tutorial", "example",
@@ -660,8 +678,10 @@ documento internamente. A relação real é a seguinte:
   sub-agente DEVE produzir no handoff ao orquestrador DEPOIS de usar o
   script — o sub-agente consolida a saída do script no formato da seção 5.
 
-Interface de uso (confirmada no script): `brave-search.sh [OPTS]
-"<query>"` com as flags listadas acima. Não existe `--domain`.
+Interface de uso (confirmada no script): `search.sh [OPTS]
+"<query>"` com as flags listadas acima (no Tier 2, o search.sh repassa as
+flags ao brave-search.sh — a implementação do tier). Não existe
+`--domain`.
 
 ---
 
