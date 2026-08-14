@@ -413,10 +413,11 @@ metadata:
           diretório das filhas é <strong>$CHILD_ROOT</strong>. Apenas confirme
           e registre no TASK_PLAN.md</step>
         <step order="7">Registre a PREMISSA de busca no TASK_PLAN.md (a
-          VERIFICAÇÃO dos tiers acontece uma única vez, no passo 8 — o
+          VERIFICAÇÃO dos tiers acontece em dois pontos: no passo 8 — o
           check-search-credits.sh já reporta Tier 2 NOT_CONFIGURED quando
-          $BRAVE_API_KEY não está definida — e no passo 0 da EXECUTE-ONDA;
-          aqui basta anotar a premissa): se <cmd>printenv BRAVE_API_KEY</cmd>
+          $BRAVE_API_KEY não está definida — e no passo 0 de CADA onda da
+          EXECUTE-ONDA, que é o check por onda de R7; aqui basta anotar a
+          premissa): se <cmd>printenv BRAVE_API_KEY</cmd>
           confirma a ausência, REGISTRE "BRAVE_API_KEY não definida — apenas
           Tier 3 (DDG keyless) disponível para pesquisa." e prossiga
           normalmente. Tier 3 (DDG) funciona sem chave — a pesquisa fica

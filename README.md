@@ -39,14 +39,14 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 - **Gate definido uma vez (F3-03)**: a FASE 1 detecta e registra no TASK_PLAN.md o trio exato `GATE_BUILD`/`GATE_TEST`/`GATE_LINT` do projeto-alvo (package.json/Makefile/pyproject.toml/Cargo.toml/go.mod); toda invocação de gate referencia esse trio, com cwd conforme o contexto (snapshot, validação ou `$BASE_DIR` no gate final).
 - **Lockfile como singleton (F3-04)**: manifesto + lockfile entram no mapa de propriedade como recurso singleton — no máximo 1 agente por onda adiciona dependências; os demais registram "deps pendentes: <pacote@versão>" no handoff e a adição acontece no COMMIT PREP da onda seguinte.
 - **Tiering de modelos por papel (F3-09)**: quando o harness permite, agentes de teste e revisores adversariais rodam em modelo médio, REVISOR DE PLANO e síntese final em modelo forte, features no padrão; regra de escala: ≤2 sub-tarefas pequenas e independentes não geram fan-out extra.
-- **Testes**: `scripts/test-contencao.sh` — 63 asserções (A33: falha tardia de gate com undo de HEAD avançado; A34: gate-pending bloqueia o fim de onda).
+- **Testes**: `scripts/test-contencao.sh` — 85 asserções (A33: falha tardia de gate com undo de HEAD avançado; A34: gate-pending bloqueia o fim de onda).
 
 ## Novidades na v3.2.0
 
 - **MODO CONTIDO** (acima) + **FASE 0 — DELIMITAR O MUNDO**: `scripts/do-context.sh` detecta worktree vinculada, resolve a fronteira e grava o arquivo de estado que toda chamada Bash sourceia.
 - **Guardas em código, não em prosa**: `scripts/do-wt.sh` concentra criação, merge, undo, remoção, limpeza e prova de contenção. Cada operação destrutiva recusa alvos que não estejam registrados nesta execução.
 - **Regra de dependências (R9)**: instalação permitida se necessária, sempre com cwd na worktree-filha, em modo congelado e com `HUSKY=0` (um postinstall de husky grava `core.hooksPath` no `.git` compartilhado). Cache global do usuário é permitido; escopo global de instalação é proibido.
-- **Testes de regressão**: `scripts/test-contencao.sh` — 63 asserções cobrindo detecção de modo, colocação, limpeza segura, worktrees de terceiros, preservação da sujeira do usuário, paths com acento e espaço, guarda de índice sujo, distinção entre vazamento nosso e trabalho do usuário no projeto principal, falha tardia de gate (A33) e gate-pending (A34).
+- **Testes de regressão**: `scripts/test-contencao.sh` — 85 asserções cobrindo detecção de modo, colocação, limpeza segura, worktrees de terceiros, preservação da sujeira do usuário, paths com acento e espaço, guarda de índice sujo, distinção entre vazamento nosso e trabalho do usuário no projeto principal, conflito e re-merge (A23), exits da FASE 0 (A28/A29), flock (A30), kind=validation (A31), falha tardia de gate (A33) e gate-pending (A34).
 
 ## Novidades na v3.0.0
 
@@ -102,6 +102,7 @@ deep-orchestrator/
 │   ├── check-search-credits.sh  # verificador multi-tier pré-onda (exit 0/1/2)
 │   ├── brave-search.sh          # fonte da função search_brave_api() — Tier 2
 │   ├── check-brave-credits.sh   # (DEPRECATED) — use check-search-credits.sh
+│   ├── generate-explainer.sh    # gera o EXPLAINER.html a partir do template (COMMIT-FINAL)
 │   ├── test-contencao.sh        # testes de regressão do MODO CONTIDO
 │   └── test-search.sh           # testes da cadeia de busca 3-tier (T1..T12 + PAR-1..3)
 ├── prompts/

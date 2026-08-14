@@ -23,6 +23,12 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 | `check-search-credits.sh` | Verificador multi-tier pre-onda. Verifica surf-skill (Tier 1, so AVAILABLE com keys.json do surf presente e nao-vazio — senao DEGRADED), Brave API (Tier 2) e DuckDuckGo keyless (Tier 3). Substitui `check-brave-credits.sh`. Exit codes: 0 (Tier 1 ou 2 ok), 1 (apenas Tier 3), 2 (nada disponivel ou deps ausentes). Opcoes: --fail-fast, --json. | -- |
 | ~~`check-brave-credits.sh`~~ | **(DEPRECATED)** Verificador antigo exclusivo da Brave Search API. Na resposta REAL da Brave o header X-Credit-Remaining nao existe (verificado 14/08/2026) — os creditos vem do 2o valor de X-RateLimit-Remaining (par "por segundo, por mes"; 2o valor = quota mensal). Suporta deteccao de assinatura ativa e cache de 10 min. Use `check-search-credits.sh`. | -- |
 
+## Ferramentas (geracao)
+
+| Script | Proposito | FASE |
+|---|---|---|
+| `generate-explainer.sh` | Gera o EXPLAINER.html a partir de templates/html-explainer.html: 7 tokens obrigatorios (--version, --date, --branch, --task-summary, --total-waves, --total-agents, --total-commits) + 8 slots via arquivo (--waves-table, --files-table, --commits-list, --before-after, --impact, --capabilities, --decisions, --timeline); blocos begin/end substituidos inteiros; demo neutralizado quando sem arquivo; zero {{ residual no output; exit 0/1/2. Usado no COMMIT-FINAL passo 4. | FASE 4 |
+
 ## Testes
 
 | Script | Proposito |
