@@ -1,1 +1,7 @@
 EXPLAINER.html
+# Estado de execução do orquestrador. O que o esconde do commit final é o
+# pathspec ':(exclude,top).deep-orchestrator' do gstatus/stage-delta — mas uma
+# execução que PARA no portão de aprovação (FASE 2.5) nunca chega lá, e o
+# usuário ficaria com '?? .deep-orchestrator/' no git status dele, contendo o
+# documento do plano e os comentários que ele mesmo escreveu na revisão.
+.deep-orchestrator/

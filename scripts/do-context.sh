@@ -124,8 +124,32 @@ if [ "$NEW_RUN" = 0 ]; then
       say ""
       continue
     fi
+    # Revalidação anti-stale do PORTÃO (FASE 2.5): o ENV_FILE é o ÚNICO
+    # carregador da decisão do passo 0.5 — o shell do harness não persiste entre
+    # chamadas. Reaproveitar um env cujo DO_PLAN_APPROVAL diverge do que ESTA
+    # invocação resolveu inverte a decisão em silêncio, nos dois sentidos:
+    # `plan=on` sobre um env antigo com '0' pularia a FASE 2.5 e executaria um
+    # plano NÃO aprovado (a violação exata que a R10 existe para impedir); e um
+    # env com '1' sob `plan=off` abriria um navegador que ninguém pediu. Um env
+    # anterior à v3.4.0 nem tem a chave — também diverge, e também precisa de
+    # execução nova, senão $PLAN_DOC viria vazio.
+    _want_gate="${DO_PLAN_APPROVAL:-0}"
+    case "$_want_gate" in 1|on|yes|true) _want_gate=1 ;; *) _want_gate=0 ;; esac
+    if grep -q '^DO_PLAN_APPROVAL=' "$prev" 2>/dev/null; then
+      _reuse_gate=$(sed -n "s/^DO_PLAN_APPROVAL='\([^']*\)'.*/\1/p" "$prev")
+    else
+      _reuse_gate="<ausente>"
+    fi
+    if [ "$_reuse_gate" != "$_want_gate" ]; then
+      say "DO_STALE: a execução em andamento tem PLAN_APPROVAL='$_reuse_gate' e esta invocação"
+      say "          resolveu '$_want_gate' — reaproveitar inverteria a decisão do portão em silêncio."
+      say "          Criando execução NOVA (equivalente a --new-run)."
+      say ""
+      continue
+    fi
     say "DO_REUSE: execução em andamento encontrada ($pend sub-tarefa(s) pendentes)."
-    say "          Reaproveitando o estado dela. Use --new-run para forçar uma nova."
+    say "          Reaproveitando o estado dela (PLAN_APPROVAL=$_reuse_gate)."
+    say "          Use --new-run para forçar uma nova."
     say ""
     printf '%s\n' "$prev"
     exit 0
@@ -304,6 +328,45 @@ esac
 [ "$DO_MAX_PARALLEL" -gt 0 ] 2>/dev/null \
   || die 2 "DO_MAX_PARALLEL inválido: '$DO_MAX_PARALLEL' — precisa ser maior que zero"
 
+# --- (0.9c) PORTÃO DE APROVAÇÃO: aprovação do plano no Plannotator (FASE 2.5) ----
+# ATENÇÃO ao vocabulário: neste projeto "gate" significa o trio
+# GATE_BUILD/GATE_TEST/GATE_LINT (FASE 1, passo 9). O que a FASE 2.5 faz é um
+# PORTÃO DE APROVAÇÃO DO PLANO — nada a ver com build/test/lint. Os nomes aqui
+# dizem APPROVAL de propósito, para que ninguém rode a suíte na hora do plano.
+# O orquestrador parseia o prefixo `plan=on|off` da invocação (e os gatilhos de
+# linguagem natural) e exporta DO_PLAN_APPROVAL antes da FASE 0. Ausente → 0, que
+# preserva EXATAMENTE o comportamento autônomo histórico da skill: quem nunca
+# pediu plano nunca vê um navegador abrir. O gate é ADITIVO, nunca default.
+case "${DO_PLAN_APPROVAL:-}" in
+  ""|0|off|no|false) DO_PLAN_APPROVAL=0 ;;
+  1|on|yes|true)     DO_PLAN_APPROVAL=1 ;;
+  *) die 2 "DO_PLAN_APPROVAL inválido: '${DO_PLAN_APPROVAL}' — use 0/1 (ou plan=off/plan=on na invocação)" ;;
+esac
+case "${DO_PLAN_MAX_REVISIONS:-}" in
+  "") DO_PLAN_MAX_REVISIONS=5 ;;
+  *[!0-9]*) die 2 "DO_PLAN_MAX_REVISIONS inválido: '${DO_PLAN_MAX_REVISIONS}' — inteiro positivo" ;;
+esac
+[ "$DO_PLAN_MAX_REVISIONS" -gt 0 ] 2>/dev/null \
+  || die 2 "DO_PLAN_MAX_REVISIONS inválido: '$DO_PLAN_MAX_REVISIONS' — precisa ser maior que zero"
+case "${DO_PLAN_TIMEOUT:-}" in
+  "") DO_PLAN_TIMEOUT=3600 ;;
+  *[!0-9]*) die 2 "DO_PLAN_TIMEOUT inválido: '${DO_PLAN_TIMEOUT}' — segundos, inteiro positivo" ;;
+esac
+[ "$DO_PLAN_TIMEOUT" -gt 0 ] 2>/dev/null \
+  || die 2 "DO_PLAN_TIMEOUT inválido: '$DO_PLAN_TIMEOUT' — precisa ser maior que zero"
+
+PLAN_APPROVAL_DIR="$DO_STATE/plan-approval"
+PLAN_DOC="$PLAN_APPROVAL_DIR/PLANO.md"
+# O diretório é criado AQUI, e SÓ com o portão ligado. A FASE 2.5 escreve o
+# $PLAN_DOC com `cat >` no passo 3, e um redirecionamento não cria diretório:
+# sem isto a PRIMEIRA rodada de toda execução com portão morria em ENOENT.
+# Condicionado ao portão de propósito: com ele desligado, o $DO_STATE tem que
+# ficar EXATAMENTE como sempre foi — quem não pediu plano não ganha nem um
+# diretório vazio a mais (asserção DC4 de test-plan-approval.sh).
+if [ "$DO_PLAN_APPROVAL" = 1 ]; then
+  mkdir -p "$PLAN_APPROVAL_DIR" || die 7 "não consegui criar $PLAN_APPROVAL_DIR"
+fi
+
 cat > "$ENV_FILE" <<EOF
 # deep-orchestrator — estado da execução $RUN_ID. Sourceie em TODA chamada Bash.
 MODE='$MODE'
@@ -326,9 +389,16 @@ PLAN_FILE='$PLAN_FILE'
 OWNED='$OWNED'
 DO_WT='$SKILL_HOME/scripts/do-wt.sh'
 DO_MAX_PARALLEL='$DO_MAX_PARALLEL'
+DO_PLAN_APPROVAL='$DO_PLAN_APPROVAL'
+DO_PLAN_MAX_REVISIONS='$DO_PLAN_MAX_REVISIONS'
+DO_PLAN_TIMEOUT='$DO_PLAN_TIMEOUT'
+PLAN_APPROVAL_DIR='$PLAN_APPROVAL_DIR'
+PLAN_DOC='$PLAN_DOC'
+DO_PLAN_APPROVAL_SH='$SKILL_HOME/scripts/plan-approval.sh'
 export MODE BASE_DIR BASE_BRANCH BASE_NAME BASE_SLUG MAIN_ROOT MAIN_ROOT_DESC
 export COMMON_DIR PARENT_DIR CHILD_ROOT PLACEMENT RUN_ID BRANCH_NS SKILL_HOME
 export DO_HOME DO_STATE PLAN_FILE OWNED DO_WT DO_MAX_PARALLEL
+export DO_PLAN_APPROVAL DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT PLAN_APPROVAL_DIR PLAN_DOC DO_PLAN_APPROVAL_SH
 
 # GIT_DIR exportada VENCE \`git -C\`: zerar em toda chamada.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_NAMESPACE 2>/dev/null || true
@@ -404,6 +474,12 @@ say "  CHILD_ROOT    = $CHILD_ROOT ($PLACEMENT)"
 say "  BRANCH_NS     = $BRANCH_NS"
 say "  SKILL_HOME    = ${SKILL_HOME:-<não resolvido>}  (somente leitura)"
 say "  DO_MAX_PARALLEL = $DO_MAX_PARALLEL  (cap de paralelismo por onda — F3-02)"
+if [ "$DO_PLAN_APPROVAL" = 1 ]; then
+  say "  PLAN_APPROVAL = ON   (FASE 2.5 — plano aprovado pelo usuário no Plannotator;"
+  say "                  até $DO_PLAN_MAX_REVISIONS revisões, timeout ${DO_PLAN_TIMEOUT}s por rodada)"
+else
+  say "  PLAN_APPROVAL = OFF  (autonomia total — nenhuma interação com o usuário)"
+fi
 say "  worktrees de terceiros: $(wc -l < "$DO_STATE/foreign-worktrees.txt" 2>/dev/null || echo 0) (NÃO tocar)"
 say ""
 say "Sourceie em TODA chamada Bash posterior:"
