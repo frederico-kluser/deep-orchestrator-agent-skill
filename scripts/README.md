@@ -10,8 +10,21 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 
 | Script | Proposito | FASE |
 |---|---|---|
-| `do-context.sh` | Resolve MODE (normal/contido), BASE_DIR, BASE_BRANCH, CHILD_ROOT, BRANCH_NS e grava arquivo de estado que TODO script posterior deve sourcear. Detecta se o cwd esta dentro de uma git worktree vinculada e delimita a RAIZ-DE-MUNDO. Grava DO_MAX_PARALLEL (cap de paralelismo por onda — F3-02; default 20, prefixo max-parallel=N na invocacao; exit 2 se nao for inteiro positivo). | FASE 0 |
+| `do-context.sh` | Resolve MODE (normal/contido), BASE_DIR, BASE_BRANCH, CHILD_ROOT, BRANCH_NS e grava arquivo de estado que TODO script posterior deve sourcear. Detecta se o cwd esta dentro de uma git worktree vinculada e delimita a RAIZ-DE-MUNDO. Grava tambem DO_PLAN_APPROVAL / DO_PLAN_MAX_REVISIONS / DO_PLAN_TIMEOUT / PLAN_APPROVAL_DIR / PLAN_DOC / DO_PLAN_APPROVAL_SH (FASE 2.5 -- portao de aprovacao; DO_PLAN_APPROVAL default 0, aceita 0/1/on/off/yes/no/true/false, exit 2 fora disso). Grava DO_MAX_PARALLEL (cap de paralelismo por onda — F3-02; default 20, prefixo max-parallel=N na invocacao; exit 2 se nao for inteiro positivo). | FASE 0 |
 | `do-wt.sh` | Gerencia todo o ciclo de vida das worktrees-filhas: cria (new, kinds feature/test/validation/fix/prep/integration), faz squash-merge (merge — merges SAO SERIAIS: toda reescrita do owned.tsv e serializada por flock (F4-07.1), sem lost update entre do-wt.sh paralelos; conflito de squash: resolva DENTRO da filha e re-execute — o indice residual e limpo automaticamente no re-merge (F4-07.2)), desfaz merge (undo — funciona com HEAD avancado, para falha tardia de gate de snapshot, e arquiva o commit em refs/do-archive/$RUN_ID/undo-<nome>), remove (remove), arquiva e apaga branch (drop-branch — so se MERGED/REMOVED; REVERTED: rode remove antes), encerra onda (sweep — DETECTA status=gate-pending: imprime aviso e sai != 0, o fim de onda nao fecha com gate de snapshot pendente; LISTA filhas REVERTED), verifica contencoes (verify — inclui chaves de config perigosas: include/includeIf, excludesFile/attributesFile, filter, sshCommand), consulta status (status), altera estado de filha (mark — com validacao de nome e status; statuses: ACTIVE/MERGED/REMOVED/BLOCKED/ORPHANED/REVERTED/gate-pending), estagia delta da onda (stage-delta), e lista arquivos tocados pela onda (wave-files — aceita a 1a filha MERGED da onda; se a filha passada nao foi mergeada, resolve automaticamente pela filha MERGED de menor pre_merge_sha do mesmo prefixo ondaN-). | FASE 3-4 |
+
+## Portao de aprovacao do plano (FASE 2.5)
+
+| Script | Proposito | FASE |
+|--------|-----------|------|
+| `check-plannotator.sh` | Verificador pre-fase. Resolve o executavel do Plannotator ($DO_PLANNOTATOR_BIN -> PATH -> ~/.local/bin -> %LOCALAPPDATA%/%USERPROFILE% no Git-Bash), confere a versao (minima 0.19.1) e SONDA a capacidade rodando `annotate` sem argumento -- que so imprime o usage, sem abrir navegador nem subir servidor. Com `--install`, instala o binario quando AUSENTE via `curl -fsSL https://plannotator.ai/install.sh | bash -s -- --minimal --non-interactive`: `--minimal` grava SO o binario em ~/.local/bin e nao escreve uma linha em ~/.claude, ~/.codex, ~/.gemini, ~/.kiro ou ~/.config/opencode. Uma instalacao EXISTENTE nunca e sobrescrita (o instalador oficial nao sabe atualizar: sempre rebaixa ~150 MB e sobrescreve, e um --minimal por cima de uma instalacao completa deixaria as integracoes de agente numa versao e o binario em outra). Recusa instalar como root (o instalador nao tem guarda de EUID e iria para /root/.local/bin, invisivel ao usuario real). Nunca sudo, nunca npm -g. Exit codes: 0 (disponivel), 1 (ausente mas instalavel), 2 (ausente e nao instalavel). Opcoes: --install, --json, --quiet, --min-version. | FASE 2.5 |
+| `plan-approval.sh` | UMA rodada de aprovacao do plano no Plannotator. Fotografa o documento num snapshot IMUTAVEL (chmod a-w) antes de manda-lo ao navegador, resolve o numero da revisao pelo MAIOR entre o trail e o que ja existe em disco (uma rodada interrompida deixa um rev-NNN.md sem linha no trail; contando so o trail, a rodada seguinte reusaria o numero e esbarraria no snapshot somente-leitura, travando o portao pelo resto da execucao), trava o TITULO na revisao 1 e RECUSA a rodada se ele mudar (o Plannotator rastreia versoes do MESMO plano pelo primeiro `#`; e regra do proprio Plannotator), roda `plannotator annotate <snap> --gate --json </dev/null` sob `timeout(1)` -- o `</dev/null` e obrigatorio: o dispatch do Plannotator cai num else final que LE STDIN como evento de hook -- e le a decisao do envelope --json (jq ou python3), nunca do texto humano. Forca DUAS travas de rede por default: `PLANNOTATOR_SHARE=disabled` (em sessao SSH o Plannotator publicaria o texto do plano num servico de paste) e `PLANNOTATOR_REMOTE=0` (sem isso, qualquer shell com SSH_TTY/SSH_CONNECTION faria o servidor escutar em 0.0.0.0:19432 -- e como /api/approve NAO tem autenticacao, qualquer um na rede leria o plano e poderia APROVA-LO, levando o orquestrador a criar worktrees e commitar; para revisar por SSH use um tunel `ssh -L 19432:127.0.0.1:19432 <host>`). Liberam-se com DO_PLAN_SHARE=1 e DO_PLAN_REMOTE=1, este ultimo com aviso em voz alta. Detecta o harness (claude-code > pi > jcode > opencode) so para carimbar PLANNOTATOR_ORIGIN. Subcomandos: init, round, status, feedback [N], doc [N], origin, title, approved. Exit codes de `round`: 0 aprovado, 10 anotado, 11 fechado, 12 timeout, 13 falha da ferramenta, 14 orcamento esgotado, 2 uso/ambiente (inclui deriva de titulo). | FASE 2.5 |
+
+## Distribuicao
+
+| Script | Proposito |
+|--------|-----------|
+| `sync-global-skill.sh` | Publica a skill para todos os agentes da maquina por SYMLINK: ${CLAUDE_CONFIG_DIR:-~/.claude}/skills, ~/.agents/skills (pi/jcode/opencode), ~/.jcode/skills e ~/.pi/agent/skills. Existe porque alguns agentes importam skills POR COPIA, e copia congela a versao do dia da importacao (verificado: ~/.jcode/skills/deep-orchestrator ficou em 3.1.0 com a skill viva em 3.4.0 -- rodar por la executava um orquestrador de duas versoes atras). Toca EXCLUSIVAMENTE a entrada `deep-orchestrator`; so substitui um diretorio depois de confirmar que ele tem SKILL.md com `name: deep-orchestrator`; guarda a copia antiga em `.bak-<data>`; nao cria diretorio-pai de agente que nao existe. Chamado pelo hook SessionStart do Claude Code. Opcoes: --quiet, --dry-run, --strict. Exit 0 sempre (1 so com --strict). |
 
 ## Busca (search)
 
@@ -34,9 +47,52 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 | Script | Proposito |
 |---|---|
 | `test-contencao.sh` | Testes de aceitacao do MODO CONTIDO (A1..A20 + A22/A23/A25/A26/A27/A28/A29/A30/A31 + A32/A33/A34, 85 assercoes — plano v3.3.0 + F4-06/F4-07). Cria fixtures (repo principal + worktree irma + worktree de terceiro) e verifica invariantes: deteccao de MODE, fronteira BASE_DIR, isolamento de worktrees, protecao contra operacoes em branches de terceiros. A23: merge com CONFLITO -> resolucao na filha -> re-merge automatico (F4-07.2). A27: lab com espaco e acento no nome (ponta a ponta). A28/A29: exits 6/7/9 da FASE 0 (indice sujo, aspa simples no branch, symref corrompido, path com newline, colisao de PREFIXO do namespace). A30: flock — dois marks paralelos sem lost update. A31: kind=validation ciclo completo. A33: falha tardia de gate de snapshot (undo da 1a filha com HEAD avancado — revert exato, 2a intacta, ref de undo arquivada, re-merge restaura) — cobre o A21 do plano. A34: gate-pending bloqueia o fim de onda (sweep sai != 0 ate mark MERGED). A32 cobre o A24 do plano (wave-files apos 2 squashes). Portavel: resolve o path da skill dinamicamente e limpa os labs em /tmp via trap. |
+| `test-plan-approval.sh` | Testes de aceitacao do PORTAO DE APROVACAO DO PLANO (G1..G9 + P1..P28 + DC1..DC3, 111 assercoes). Tudo mockado num PATH temporario: um `plannotator` FAKE fiel ao contrato real (usage em `annotate` sem argumento, `{"decision":"approved"|"dismissed"|"annotated"}` em uma linha, exit SEMPRE 0) e um `curl` FAKE que finge o instalador. SEM rede, SEM navegador, SEM instalar nada. Cobre: resolucao do binario (PATH, ~/.local/bin, DO_PLANNOTATOR_BIN), sonda de capacidade rejeitando binario velho, instalacao com --minimal --non-interactive, recusa de sobrescrever instalacao existente (G9), os seis exit codes de `round`, argv exato, imutabilidade do snapshot, deriva de titulo, orcamento de revisoes, PLANNOTATOR_SHARE=disabled por default, prioridade de deteccao de harness, round-trip de feedback com aspas/newline/acento/backslash, ruido antes do JSON, `annotated` com feedback vazio degradando para `dismissed`, contencao de escrita, idempotencia via `approved`, ausencia de jq E python3, e os DO_PLAN_* no ENV_FILE. |
 | `test-search.sh` | Testes de aceitacao da cadeia de busca (T1..T12 + PAR-1..3, 64 assercoes — F3-05/F3-06). Tudo mockado em PATH temporario (bins fake), SEM rede: T1 argv do Tier 1 (--budget-ms, sem --timeout/--dev-mode); T2 saida parcial + falha do Tier 1 nao polui o stdout; T3 envelope --json unificado (Tier 1 normalizado); T4 --max-evolutions no Tier 2 (loop com mock, credits = 2o valor de X-RateLimit-Remaining); T5 deps ausentes -> exit 2; T6 cadeia vazia -> exit 1; T7 HTTP 403 do DDG = REACHABLE; T8 cache + --fail-fast do check-brave-credits; T9 query com '*' nao expande glob; T10 >1 posicional e '--'; T11 --timeout sem valor; T12 trap RETURN nao corrompe exit code; PAR-1 20 queries paralelas (tempo ~1-2 jobs, dedup por URL); PAR-2 backoff 429; PAR-3 cache intra-run de queries identicas. Portavel e isolado (dir proprio por caso, lab limpo via trap). |
 
 ---
+
+## Fluxo do portao de aprovacao (FASE 2.5)
+
+```
+                     FASE 2 termina: plano publicado em $PLAN_FILE
+                                      |
+                     DO_PLAN_APPROVAL = 1 ?  --nao-->  FASE 3 (autonomia total)
+                                      | sim
+                     plan-approval.sh approved ? --sim--> FASE 3 (ja aprovado,
+                                      |                    reuso de ENV_FILE)
+                                      | nao
+                     check-plannotator.sh --install
+                       exit 0 -> segue | exit 1 -> 1 retry | exit 2 -> PARA (R2d)
+                                      |
+        +------------> escreve $PLAN_DOC (TITULO IMUTAVEL)
+        |                             |
+        |             plan-approval.sh round "$PLAN_DOC"
+        |                             |
+        |          +----------+-------+--------+-----------+-----------+
+        |          |          |                |           |           |
+        |         rc=0      rc=10            rc=11/12     rc=13       rc=14
+        |      APROVADO   ANOTADO          FECHADO/TO    FALHA     ORCAMENTO
+        |          |          |                |           |           |
+        |       FASE 3        |              PARA        retry        PARA
+        |                     |                            |
+        +---- REGERA o plano <+                        (1x, depois
+              (feedback = correcao DO PLANO,            trata como
+               nunca tarefa de codigo)                    exit 2)
+```
+
+Cada volta do laco e um Plannotator INTEIRAMENTE NOVO -- processo novo, servidor
+novo, aba nova. A rodada anterior fica preservada no trail
+($DO_STATE/plan-approval/rev-NNN.md, somente leitura, mais rev-NNN.feedback.md e
+uma linha no trail.tsv).
+
+Contrato de maquina do Plannotator (verificado no binario 0.19.17):
+`annotate <arquivo> --gate --json` imprime UMA linha em stdout --
+`{"decision":"approved"}`, `{"decision":"dismissed"}` ou
+`{"decision":"annotated","feedback":"<markdown>"}` -- e sai SEMPRE 0. Nunca
+ramifique pelo exit code do Plannotator: e o `plan-approval.sh` que traduz a
+decisao para exit codes distintos. `--gate` e obrigatorio: sem ele a UI nao
+mostra o botao Approve e o usuario fisicamente nao consegue aprovar.
 
 ## Fluxo de busca (search flow)
 
@@ -57,6 +113,15 @@ search.sh (interface unica recomendada)
         queries genericas costumam voltar HTTP 202 com corpo vazio
         (nesse caso o search.sh sai com exit 1 e relatorio vazio).
 ```
+
+### Tier 0 — pesquisa nativa do harness (Claude Code)
+
+Quando o harness que hospeda a skill expoe ferramentas de busca NATIVAS
+(Claude Code: `WebSearch`/`WebFetch`), sub-agentes podem usa-las DIRETAMENTE —
+sem chave e sem script. O `search.sh` (Tier 1 -> 2 -> 3) continua sendo a
+interface unificada e o fallback deterministico para harnesses sem ferramenta
+nativa (pi, jcode, opencode). O Tier 0 NAO entra no `check-search-credits.sh`:
+a verificacao pre-onda cobre a cadeia propria (Tiers 1-3).
 
 ## Fluxo paralelo (search-parallel.sh)
 

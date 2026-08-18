@@ -1,8 +1,10 @@
-# deep-orchestrator v3.3.0
+# deep-orchestrator v3.4.0
 
-![Versão](https://img.shields.io/badge/version-3.3.0-00d4ff)
+![Versão](https://img.shields.io/badge/version-3.4.0-00d4ff)
 
 Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda (`scripts/search.sh`: surf-skill → Brave Search API → DuckDuckGo keyless, com `check-search-credits.sh` e lotes via `search-parallel.sh`), e commita tudo ao final **sem perguntar nada ao usuário**.
+
+A única exceção — e ela só existe quando você pede — é o **PORTÃO DE APROVAÇÃO DO PLANO** (FASE 2.5): quando a invocação pede um plano, o plano vai para o [Plannotator](https://github.com/backnotprop/plannotator) e você aprova ou anota. Cada anotação **regera o plano e abre um Plannotator NOVO**, até a aprovação — e nenhuma worktree nasce antes dela. Sem pedido de plano, a autonomia total continua exatamente como sempre foi.
 
 ## Glossário (leia antes do resto)
 
@@ -28,6 +30,21 @@ Se a skill for invocada com o cwd **dentro de uma git worktree vinculada**, ela 
 O único vestígio compartilhado aceito é o registro administrativo das filhas em `$GIT_COMMON_DIR/worktrees/`, que o próprio git cria e é inevitável.
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
+
+## Novidades na v3.4.0
+
+- **PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5, R10)**: quando a invocação **pede um plano**, o plano vai para o [Plannotator](https://github.com/backnotprop/plannotator) e o usuário aprova ou anota, no navegador. **Cada anotação REGERA o plano e abre um Plannotator inteiramente NOVO** (processo novo, servidor novo, aba nova) — nunca um remendo na sessão anterior — até a aprovação ou até o orçamento de revisões acabar. Nenhuma worktree, branch ou commit existe antes do APROVADO, e é justamente por isso que o portão fica aqui: recusar o plano não custa rollback nenhum.
+- **Ligado só quando pedido**: `DO_PLAN_APPROVAL` é resolvido uma vez na FASE 0 (passo 0.5) por precedência — prefixo `plan=on`/`plan=off` > variável de ambiente > gatilhos negativos ("não me pergunte nada", "autônomo", "toca o barco") > gatilhos positivos ("faça um plano", "quero aprovar antes", "revisar o plano") > **default OFF**. Quem nunca falou em plano tem exatamente o comportamento autônomo de sempre: nenhum navegador abre.
+- **Instalação automática do Plannotator**: `scripts/check-plannotator.sh --install` resolve o executável (`$DO_PLANNOTATOR_BIN` → PATH → `~/.local/bin`, que quase nunca está no PATH de um shell não-interativo), confere a versão (mínima 0.19.1) e **sonda a capacidade** rodando `annotate` sem argumento — que só imprime o usage, sem abrir navegador. Ausente, instala com `--minimal`: **só o binário**, sem encostar em `~/.claude`, `~/.codex`, `~/.gemini`, `~/.kiro` ou `~/.config/opencode`. Uma instalação existente nunca é sobrescrita. Nunca `sudo`, nunca `npm -g`.
+- **Independente do agente**: o portão é **uma chamada Bash** — o menor denominador comum entre Claude Code, pi coding agent, jcode e opencode. Nada de hook de plan-mode, `ExitPlanMode` ou plugin de um agente específico, porque nada disso existe nos quatro. O harness é detectado (Claude Code > pi > jcode > opencode) só para carimbar `PLANNOTATOR_ORIGIN` na UI; a detecção jamais bloqueia o portão.
+- **Título imutável**: o Plannotator rastreia revisões do **mesmo** plano pelo primeiro `#` do documento. `plan-approval.sh` **recusa** (exit 2) a rodada cujo título mudou, com o título travado na mensagem — é a mesma regra que o próprio Plannotator impõe (*"Do NOT change the plan title"*).
+- **Decisão por exit code, nunca por texto**: `plan-approval.sh round` devolve 0 aprovado · 10 anotado · 11 fechado · 12 timeout · 13 falha da ferramenta · 14 orçamento esgotado. Cada rodada deixa um snapshot **imutável** (`rev-NNN.md`, somente leitura), o feedback (`rev-NNN.feedback.md`) e uma linha no `trail.tsv`.
+- **O plano aprovado vira restrição**: o REVISOR DE PLANO da FASE 3 passa a classificar cada proposta em DENTRO ou FORA do escopo aprovado. FORA reabre o portão uma vez (consumindo do mesmo orçamento); sem orçamento, a proposta é registrada como `FORA-DO-ESCOPO-NÃO-APROVADA` e o escopo aprovado é respeitado.
+- **O plano nunca sai da máquina sozinho** — duas travas independentes, ambas ligadas por default:
+  - `PLANNOTATOR_SHARE=disabled` impede o **upload** do texto do plano para o serviço de paste, que o Plannotator faria em sessão remota. Libere com `DO_PLAN_SHARE=1`.
+  - `PLANNOTATOR_REMOTE=0` mantém o servidor em **127.0.0.1**. Sem isso, qualquer shell com `SSH_TTY`/`SSH_CONNECTION` no ambiente — o caso normal de um servidor de desenvolvimento — faria o Plannotator escutar em `0.0.0.0:19432`; e como `/api/approve` **não tem autenticação**, qualquer pessoa que alcançasse a máquina leria o plano e poderia **aprová-lo por você**, levando o orquestrador a criar worktrees e commitar. Para revisar por SSH, use um túnel: `ssh -L 19432:127.0.0.1:19432 <host>`. `DO_PLAN_REMOTE=1` expõe na rede de propósito, com aviso em voz alta.
+- **`scripts/sync-global-skill.sh`**: publica a skill para todos os agentes por **symlink**, trocando as importações por cópia que congelam a versão (o jcode importa copiando: uma cópia de meses atrás roda um orquestrador de duas versões atrás). Só mexe na entrada `deep-orchestrator`, só substitui um diretório depois de confirmar que ele é uma cópia desta mesma skill, guarda backup, e não cria diretório de agente que não existe.
+- **Testes**: `scripts/test-plan-approval.sh` — 111 asserções, tudo mockado (binário e instalador falsos num PATH temporário), **sem rede, sem navegador e sem instalar nada**.
 
 ## Novidades na v3.3.0
 
@@ -72,27 +89,70 @@ ANALYZE  →  PLAN  →  EXECUTE-ONDA (repeat, ILIMITADO)  →  COMMIT-FINAL
 | 0 | **DELIMITAR O MUNDO** | Roda `$SKILL_HOME/scripts/do-context.sh`: detecta se o cwd está numa worktree vinculada, resolve `$BASE_DIR`, `$BASE_BRANCH`, `$MAIN_ROOT`, `$CHILD_ROOT`, `$BRANCH_NS` e `$SKILL_HOME`, e captura os baselines de contenção. Aborta com mensagem acionável se não houver branch de integração |
 | 1 | **ANALYZE** | Lê o prompt, mapeia a estrutura do repositório, identifica subsistemas, classifica greenfield/brownfield, localiza golden masters e verifica o sistema de busca 3-tier (`$SKILL_HOME/scripts/check-search-credits.sh --fail-fast` — exit 0 = Tier 1/2, exit 1 = só Tier 3 keyless, exit 2 = nada disponível) |
 | 2 | **PLAN** | Decompõe a tarefa em sub-tarefas atômicas, identifica o grafo de dependências, organiza em ondas topológicas (número NÃO fixo — o plano é um ponto de partida), define o mapa de propriedade de arquivos, batiza cada worktree, escreve os prompts de delegação, publica o TASK_PLAN.md |
+| 2.5 | **APROVAR O PLANO** | *Só quando `PLAN_APPROVAL=1`.* Garante o Plannotator na máquina (`check-plannotator.sh --install`), escreve o plano legível em `$PLAN_DOC` e roda `plan-approval.sh round`: aprovado → FASE 3; anotado → **regera o plano e abre um Plannotator NOVO** (até `DO_PLAN_MAX_REVISIONS`); fechado/timeout/orçamento → para limpo, sem nenhuma worktree criada. Desligado (o default), a fase é pulada inteira |
 | 3 | **EXECUTE-ONDA** | Para cada onda: verificação de tiers de busca (`check-search-credits.sh`) → commit prep (se necessário) → cria worktrees → dispara agentes em paralelo (escalonado) → barreira → **recálculo dinâmico (REVISOR DE PLANO)** → revisão adversarial → squash-merge um a um (gate em snapshot `int-ondaN-*`, em background; limpeza aguarda o verde de cada snapshot) → remoção APENAS das worktrees-filhas e branches desta execução, por nome registrado → prova de contenção → handoff para a próxima onda. Repete até o REVISOR DE PLANO declarar CONVERGÊNCIA |
 | 4 | **COMMIT-FINAL** | Remove o TASK_PLAN.md, roda o gate completo (o trio GATE_BUILD/GATE_TEST/GATE_LINT da FASE 1), commita **apenas o que esta execução produziu** (a sujeira preexistente do usuário é preservada), varredura final restrita à lista nominal registrada, **gera o EXPLAINER.html** (a partir do template `$SKILL_HOME/templates/html-explainer.html`) e produz o relatório final |
 
 ### Regras fundamentais
 
 1. **Nunca escreve código** — delega tudo a sub-agentes
-2. **Nunca pergunta ao usuário** — autonomia total, infere com confiança. Três exceções, e apenas estas: (a) `BRAVE_API_KEY` não definida E a tarefa exige pesquisa de alta qualidade (só o Tier 3 keyless não basta); (b) `check-search-credits.sh` retorna exit 2 (todos os tiers de busca indisponíveis) E a tarefa ou alguma sub-tarefa exige pesquisa; (c) abort da FASE 0 (não é repositório, HEAD destacado, repo sem commits, índice sujo)
-3. **Trabalho completo, do início ao commit** — nunca entrega trabalho parcial
+2. **Nunca pergunta ao usuário** — autonomia total, infere com confiança. Quatro exceções, e apenas estas: (a) `BRAVE_API_KEY` não definida E a tarefa exige pesquisa de alta qualidade (só o Tier 3 keyless não basta); (b) `check-search-credits.sh` retorna exit 2 (todos os tiers de busca indisponíveis) E a tarefa ou alguma sub-tarefa exige pesquisa; (c) abort da FASE 0 (não é repositório, HEAD destacado, repo sem commits, índice sujo); (d) o **portão de aprovação do plano** está ativo (`PLAN_APPROVAL=1`) — aí a interação é a entrega pedida, acontece no navegador (nunca por pergunta em texto) e só na FASE 2.5
+3. **Trabalho completo, do início ao commit** — nunca entrega trabalho parcial. Única saída antecipada legítima: o portão terminar sem aprovação — e aí nada foi construído, então o repositório fica exatamente como estava
 4. **Worktree é a unidade de isolamento** — cada sub-agente trabalha em sua própria worktree Git com nome descritivo (ex.: `onda1-cache-service`)
 5. **Squash-merge um a um, nunca octopus** — integração sequencial em `$BASE_BRANCH`; o gate roda em snapshot de integração `int-ondaN-*` (fora da seção crítica) e a limpeza de cada filha aguarda o verde do snapshot (decisão D1: builds duplicados são esperados)
 6. **Worktree nasce nomeada e morre no fim da própria onda** — limpeza imediata após gate verde, sempre por nome registrado
 7. **Verificar o sistema de busca 3-tier antes de cada onda** — `$SKILL_HOME/scripts/check-search-credits.sh --fail-fast`; exit 0 = Tier 1/2 disponível (pesquisa completa), exit 1 = só Tier 3 keyless (degradado — registre no TASK_PLAN.md e prossiga), exit 2 = nada disponível: se a tarefa exige pesquisa, nenhuma worktree é criada e nenhum sub-agente é disparado; sem pesquisa exigida, a execução prossegue sem busca, com registro
 8. **A worktree de invocação é a raiz-de-mundo** — nada é escrito fora dela; o branch dela é o único alvo de integração; a limpeza só toca o que esta execução registrou
 9. **Dependências: dentro da worktree, congeladas, nunca globais** — instale só se necessário, com cwd na filha e `HUSKY=0`; cache global do usuário é permitido
+10. **Só executa plano que o usuário aprovou** — quando o portão está ativo, nenhuma worktree nasce antes do APROVADO; o título do plano é imutável entre revisões; cada anotação regera o plano num Plannotator novo; e o feedback do usuário é correção **do plano**, nunca tarefa de implementação
+
+## Técnicas e fundamentos
+
+O deep-orchestrator não inventa orquestração do zero: ele compõe técnicas documentadas e verificadas (pesquisa profunda com fontes, agosto/2026) em cima do que o harness já oferece. As três colunas abaixo — ECC, busca em camadas e sub-agentes nativos — explicam de onde vem cada peça.
+
+### ECC — Everything Claude Code (a técnica-mãe)
+
+O [ECC — Everything Claude Code](https://github.com/affaan-m/ECC) (MIT) é um sistema massivo de otimização de harness de agentes: **67 agents, 281 skills, 94 commands**, além de hooks, Memory Vault, Continuous Learning e AgentShield (auditoria de segurança do próprio harness). O deep-orchestrator não o copia — **porta e adapta** o que ele faz de melhor, no fluxo `plan → test → implement → review → verify → remember → improve`:
+
+- `prompts/ecc-prompts.md` — **7 templates de prompt** portados: System Prompt Base, Planning Prompt (Plan First), Code Review (método de confiança + veredito APPROVE/WARNING/BLOCK), Security Review (AgentShield + checklist OWASP), Memory Persistence, Continuous Improvement (instincts com scoring de confiança 0.3–0.9) e Clone-Analyze-Discard.
+- `prompts/ecc-skills.md` — **7 skills** portadas no formato ECC (frontmatter YAML + workflow em passos): `tdd-workflow` (TDD gated RED→GREEN→REFACTOR com evidência e cobertura ≥ 80%), `security-audit` (checklist OWASP de 10 pontos + revisão do harness), `doc-generator` (docs/ADRs a partir do diff), `research-deep-dive` (search-first com matriz Adotar/Estender/Compor/Construir), `memory-vault` (handoffs entre ondas e sessões), `clone-and-analyze` (portar o melhor de repos de referência em worktree isolada) e `code-quality-gate` (gate mecânico determinístico — o braço de execução do gate pós-squash).
+
+Princípio transversal herdado: **entrada NÃO confiável** — planos, diffs e repos clonados são lidos como texto não confiável; comandos embutidos só rodam após sanitização contra whitelist (test, lint, typecheck, coverage).
+
+### Busca em camadas — o caso surf-skill e a pesquisa nativa do harness
+
+A pesquisa externa segue uma cadeia com fallback automático (`scripts/search.sh`), verificada antes de cada onda (`check-search-credits.sh`) e processada em lotes paralelos (`search-parallel.sh`):
+
+| Tier | Provedor | Notas |
+|------|----------|-------|
+| 0 | **Pesquisa nativa do harness** (Claude Code: `WebSearch`/`WebFetch`) | quando o harness que hospeda a skill expõe ferramentas de busca próprias, usamos a dele — sem chave, sem script |
+| 1 | surf-skill (`surf-search-normal`) | multi-provider AI-powered; qualidade máxima; exige o CLI surf-ai |
+| 2 | Brave Search API (`brave-search.sh` + `BRAVE_API_KEY`) | API direta; atenção ao modelo metered da Brave (fev/2026) — créditos mensais |
+| 3 | DuckDuckGo Instant Answer | keyless, disponível enquanto houver rede; cobertura limitada (não é full-text) |
+
+**O caso surf-skill**: o surf-skill foi o provedor original da busca, substituído por uma busca Brave interna na v3.0.0, e **voltou como Tier 1 na v3.3.0** — a cadeia ficou em 3 tiers de novo (a busca Brave virou Tier 2). A regra do Tier 0 é a do harness: **se o agente que está rodando a skill já tem pesquisa nativa (o Claude Code tem `WebSearch`/`WebFetch`), usamos a dele**; o `search.sh` continua sendo a interface unificada e o fallback determinístico para harnesses sem ferramenta de busca (pi, jcode, opencode) e para sub-agentes sem acesso a ela. No template de delegação do SKILL.md, o sub-agente usa `{{SKILL_HOME}}/scripts/search.sh` — e, no Claude Code, pode usar as ferramentas nativas do harness quando disponíveis.
+
+### Sub-agentes no Claude Code — nativos, nenhum plugin necessário
+
+**Resposta curta da pesquisa profunda (25 claims verificadas adversarialmente contra as docs oficiais, 0 refutadas, 2026-08-18): o Claude Code já tem sub-agentes nativos. Não existe plugin a instalar para isso — e não há nada para abrir em outro terminal.** Plugins são um canal **opcional** de distribuição, não um requisito.
+
+- **O que são**: arquivos Markdown com frontmatter YAML em `.claude/agents/` (projeto) ou `~/.claude/agents/` (usuário — vale em todos os projetos, sem configuração extra). O frontmatter define `name`, `description`, `tools`, `model`, `permissionMode`, `skills`, `memory`, `background`, `isolation`; o corpo do arquivo vira o system prompt.
+- **Como são disparados**: pela ferramenta **Agent** (renomeada da Task na v2.1.63; `Task(...)` continua como alias), que roda o sub-agente em contexto próprio — em paralelo ou em background — e devolve um único resultado ao pai. Sub-agentes começam com **contexto zero**: prompts precisam ser autocontidos (é exatamente o que o template de delegação do SKILL.md faz).
+- **Tipos embutidos**: `Explore` (busca/análise read-only; pula CLAUDE.md e o git status do pai por velocidade), `Plan`, `general-purpose`, `claude`, `statusline-setup`, `claude-code-guide`. É o `general-purpose` que o orquestrador usa nas ondas.
+- **Paralelismo**: nativo, com teto de **20 sub-agentes concorrentes por sessão** (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, v2.1.217+) e até 3 níveis de profundidade de spawn — as ondas do orquestrador (≤ `DO_MAX_PARALLEL`, default 20) cabem no teto do harness.
+- **Terminal novo**: agentes de usuário em `~/.claude/agents/` persistem em todos os projetos. Prioridade de resolução de nomes: managed settings (org) > flag `--agents` (JSON, vale só na sessão) > `.claude/agents/` (projeto) > `~/.claude/agents/` (usuário) > `agents/` de plugins. Desde a v2.1.198 o `/agents` não abre mais wizard — imprime onde editar os arquivos.
+- **Plugins (aditivos, opcionais)**: o sistema `/plugin` empacota skills, hooks, MCP e **também agentes prontos** (pasta `agents/` do plugin; invocados por @-mention escopado `plugin:agente`). Marketplaces: o oficial `anthropics/claude-plugins-official` (adicionado automaticamente na primeira execução; ex.: `pr-review-toolkit`, com 6 agentes de revisão de PR) e o comunitário `anthropics/claude-plugins-community` (com triagem de segurança da Anthropic — que **só** vale para ele: plugins de URLs git arbitrárias ou diretórios locais não passam por triagem). Coleções grandes de terceiros existem (ex.: `wshobson/agents`, 200+ agentes) — **nenhuma é necessária** para o que este projeto faz.
+- **Equipes nativas** (`agent teams`): existem no harness, mas são **experimentais e desabilitadas por padrão** — o sistema de ondas com worktrees do deep-orchestrator segue sendo a abordagem de produção.
+- **Nota**: o harness também tem `claude --worktree <nome>` para sessões paralelas isoladas; o deep-orchestrator mantém o sistema próprio (R6/R8, `do-wt.sh`) porque precisa de nomes, branches e limpeza controlados por registro (`owned.tsv`) — isolamento real por worktree, não apenas por sessão.
+
+Fontes primárias: [subagents](https://code.claude.com/docs/en/subagents) · [agents — run in parallel](https://code.claude.com/docs/en/agents) · [discover-plugins](https://code.claude.com/docs/en/discover-plugins) · [claude-plugins-official](https://github.com/anthropics/claude-plugins-official) · [claude-plugins-community](https://github.com/anthropics/claude-plugins-community). Fatos version-sensitive (v2.1.63 / v2.1.186 / v2.1.198 / v2.1.217+) devem ser conferidos contra a versão do Claude Code instalada.
 
 ## Estrutura da casa da skill (`$SKILL_HOME`)
 
 ```
 deep-orchestrator/
 ├── README.md                    # Este arquivo
-├── SKILL.md                     # Definição do skill v3.3.0 (frontmatter YAML + XML do orquestrador)
+├── SKILL.md                     # Definição do skill v3.4.0 (frontmatter YAML + XML do orquestrador)
 ├── scripts/
 │   ├── README.md                # Índice de todos os scripts e o fluxo de busca 3-tier
 │   ├── do-context.sh            # FASE 0 — delimita a raiz-de-mundo e grava o estado
@@ -100,15 +160,20 @@ deep-orchestrator/
 │   ├── search.sh                # interface única de busca 3-tier (surf-skill → Brave → DDG keyless)
 │   ├── search-parallel.sh       # busca em lote paralelo (uma chamada por lote, nunca loop)
 │   ├── check-search-credits.sh  # verificador multi-tier pré-onda (exit 0/1/2)
+│   ├── check-plannotator.sh     # FASE 2.5 — resolve/instala o Plannotator (exit 0/1/2)
+│   ├── plan-approval.sh         # FASE 2.5 — uma rodada de aprovação no Plannotator
+│   ├── sync-global-skill.sh     # publica a skill por symlink para todos os agentes
 │   ├── brave-search.sh          # fonte da função search_brave_api() — Tier 2
 │   ├── check-brave-credits.sh   # (DEPRECATED) — use check-search-credits.sh
 │   ├── generate-explainer.sh    # gera o EXPLAINER.html a partir do template (COMMIT-FINAL)
-│   ├── test-contencao.sh        # testes de regressão do MODO CONTIDO
-│   └── test-search.sh           # testes da cadeia de busca 3-tier (T1..T12 + PAR-1..3)
+│   ├── test-contencao.sh        # testes de regressão do MODO CONTIDO (85 asserções)
+│   ├── test-search.sh           # testes da cadeia de busca 3-tier (64 asserções)
+│   └── test-plan-approval.sh    # testes do portão de aprovação (111 asserções, mockado)
 ├── prompts/
 │   ├── ecc-prompts.md           # 7 templates de prompt portados do ECC
 │   ├── ecc-skills.md            # 7 skills ECC portados
-│   └── search-prompts.md        # Prompts de busca otimizados para dev
+│   ├── search-prompts.md        # Prompts de busca otimizados para dev
+│   └── plan-approval-prompts.md # Templates da FASE 2.5 (documento, feedback, regeração)
 └── templates/
     └── html-explainer.html      # Template do HTML explainer (6 abas, Bootstrap 5)
 ```
@@ -151,9 +216,41 @@ export BRAVE_API_KEY=<chave>
 ```
 /deep-orchestrator <descrição da tarefa>
 /deep-orchestrator max-parallel=N <descrição da tarefa>   # prefixo OPCIONAL
+/deep-orchestrator plan=on <descrição da tarefa>          # prefixo OPCIONAL — força o portão
+/deep-orchestrator plan=off faça um plano e execute       # força a autonomia total
 ```
 
 O prefixo `max-parallel=N` define o cap de concorrência (F3-02): o orquestrador o parseia antes da FASE 0 e exporta `DO_MAX_PARALLEL=N` (validado como inteiro positivo; inválido → aborta com mensagem clara). Ausente → default **20**. O teto vale para TUDO em voo — features da onda, worktrees de teste/validação das subwaves (incluindo as até 3 worktrees de teste por onda), revisores e REVISOR DE PLANO. Ondas com mais features que o cap viram batches sequenciais, cada batch com a sua barreira.
+
+### O portão de aprovação do plano
+
+O prefixo `plan=on|off` liga ou desliga a FASE 2.5. Sem ele, a decisão vem dos gatilhos, nesta ordem:
+
+| Precedência | Sinal | Resultado |
+|---|---|---|
+| 1 | prefixo `plan=on` / `plan=off` | vence tudo |
+| 2 | `DO_PLAN_APPROVAL` no ambiente | respeitado |
+| 3 | gatilho **negativo**: "não me pergunte nada", "autônomo", "toca o barco", "sem interrupção" | **OFF** (vence o positivo) |
+| 4 | gatilho **positivo**: "faça um plano", "planeje", "quero aprovar antes", "revisar o plano", "plannotator" | **ON** |
+| 5 | nada disso | **OFF** — o default |
+
+Variáveis do portão (todas com default, validadas na FASE 0):
+
+| Variável | Default | O que faz |
+|---|---|---|
+| `DO_PLAN_APPROVAL` | `0` | liga a FASE 2.5 |
+| `DO_PLAN_MAX_REVISIONS` | `5` | teto de rodadas no Plannotator |
+| `DO_PLAN_TIMEOUT` | `3600` | segundos de espera pela decisão, por rodada |
+| `DO_PLAN_SHARE` | `0` | `1` permite o compartilhamento externo do Plannotator |
+| `DO_PLANNOTATOR_BIN` | — | caminho explícito do executável |
+| `DO_PLANNOTATOR_INSTALL` | `1` | `0` proíbe a instalação automática |
+| `DO_PLAN_REMOTE` | `0` | `1` deixa o Plannotator escutar em `0.0.0.0` (revisão remota). Leia o aviso de segurança acima antes |
+
+O trail de cada execução fica em `$DO_STATE/plan-approval/`: um snapshot imutável e um arquivo de feedback por rodada, mais o `trail.tsv`. Como `$DO_STATE` é apagado no fim, a tabela de revisões é copiada para o relatório final antes da limpeza.
+
+Se o navegador não abrir sozinho, `plannotator sessions --open 1` reabre a sessão ativa.
+
+Uma rodada interrompida (Ctrl-C, máquina suspensa, processo morto) **não trava o portão**: a numeração de revisões considera o que existe em disco, então a tentativa abortada fica preservada com o número dela e a próxima entra na seguinte. Se a rodada morreu depois de você decidir, a decisão está em `rev-NNN.stdout`.
 
 ### Triggers
 
@@ -166,6 +263,13 @@ O skill é ativado automaticamente com frases como:
 - "não me pergunte nada"
 - "autônomo"
 - "toca o barco"
+
+E, para a FASE 2.5 (portão de aprovação):
+
+- "faça um plano"
+- "planeje isso"
+- "quero aprovar o plano antes"
+- "revisar o plano"
 
 ### Quando usar
 
