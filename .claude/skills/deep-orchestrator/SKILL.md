@@ -13,14 +13,14 @@ description: >-
   2.5): quando o usuário PEDE UM PLANO, ele vai ao Plannotator (instalado
   sozinho se faltar) e cada anotação REGERA o plano num Plannotator NOVO, até
   aprovar; sem pedido de plano a autonomia segue total. Invocação:
-  /deep-orchestrator [plan=on|off] [max-parallel=N] <tarefa>. Triggers: "faça
+  /deep-orchestrator [plan=on|off] [max-parallel=N] [wt=<nome>] <tarefa>. Triggers: "faça
   um plano", "quero aprovar o plano antes", "orquestre isso", "divida essa
   tarefa", "resolva do início ao fim", "não me pergunte nada".
 when_to_use: >-
   Quando o usuário quer uma tarefa resolvida do início ao fim sem interrupções,
   especialmente tarefas complexas que se beneficiam de decomposição em ondas
   paralelas. NUNCA invoque para tarefas triviais de um passo só.
-argument-hint: "[plan=on|off] [max-parallel=N] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); max-parallel=N é o cap de concorrência (default 20 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto)
+argument-hint: "[plan=on|off] [max-parallel=N] [wt=<nome>] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); max-parallel=N é o cap de concorrência (default 20 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto); wt=<nome> cria/entra uma worktree irmã verdadeira do projeto (PROJECT_NAME.worktrees/<nome>) e faz TODO o trabalho DENTRO dela — o checkout principal é preservado; o nome é deduplicado contra o que já existir dentro da pasta irmã
 disable-model-invocation: false
 user-invocable: true
 disallowed-tools:
@@ -387,6 +387,25 @@ metadata:
           inteiro positivo acontece no próprio do-context.sh (exit 2 com
           mensagem clara) — nunca tente "recuperar" uma FASE 0 que abortou
           por isso</step>
+        <step order="0.2"><strong>PARSEIE O PREFIXO wt=&lt;nome&gt;
+          (WT-ROOT):</strong> se $ARGUMENTS começa com <code>wt=&lt;nome&gt;</code>
+          (ou o nome veio junto dos outros prefixos em qualquer ordem), exporte
+          <code>DO_WT_ROOT=1</code> e <code>DO_WT_NAME=&lt;nome&gt;</code> ANTES
+          da FASE 0 e use o resto como tarefa. Ausente → modo normal (trabalho no
+          checkout atual). O do-context.sh (FASE 0) então: cria/entra numa worktree
+          irmã VERDADEIRA do projeto em <code>&lt;pai&gt;/&lt;repo&gt;.worktrees/&lt;nome&gt;</code>,
+          deduplica o nome contra o que já existir lá dentro (colisão ganha -2, -3…),
+          e RE-EXECUTA a FASE 0 com o cwd DENTRO dela — de modo que TODO o trabalho
+          (ondas, sub-agentes, merges, gates, COMMIT-FINAL) acontece dentro da
+          worktree e o checkout principal fica INTOCADO (MODE=contido).
+          <strong>O nome pode vir do próprio prompt da tarefa</strong>: em vez de
+          <code>wt=cache-session</code>, basta <code>wt=on</code> (sem valor) para
+          que o orquestrador derive um nome kebab-case das primeiras palavras
+          significativas da tarefa; DO_WT_NAME então recebe aquele slug. Se a pasta
+          irmã <code>.worktrees/</code> JÁ EXISTE, entramos nela em vez de recriar.
+          O wt-root é PERSISTENTE: sobrevive entre execuções (o branch
+          <code>do/wt/&lt;nome&gt;</code> é reusado), ao contrário das filhas
+          efêmeras de CHILD_ROOT.</step>
         <step order="0.5"><strong>RESOLVA O PORTÃO DE APROVAÇÃO DO PLANO
           (R10):</strong> decida AQUI, uma única vez, se a FASE 2.5 vai rodar, e
           exporte <code>DO_PLAN_APPROVAL=1</code> ou <code>0</code> ANTES de
@@ -457,7 +476,10 @@ metadata:
         <step order="5">Registre no TASK_PLAN.md (assim que ele existir) o bloco
           de contexto: MODE, BASE_DIR, BASE_BRANCH, MAIN_ROOT, CHILD_ROOT,
           PLACEMENT, BRANCH_NS, SKILL_HOME, ENV_FILE e a contagem de worktrees
-          de terceiros (que NUNCA são tocadas).</step>
+          de terceiros (que NUNCA são tocadas). Se DO_WT_ROOT=1 (flag wt=), registre
+          também a worktree irmã: <code>&lt;repo&gt;.worktrees/&lt;nome&gt;</code>
+          é a RAIZ-DE-MUNDO desta execução, o checkout principal
+          <code>MAIN_ROOT</code> é ZONA PROIBIDA e TODO o trabalho acontece lá.</step>
       </steps>
       <output>ENV_FILE gravado; fronteira conhecida; baselines de contenção
         (sujeira preexistente do usuário, config local do repo, HEAD e status do

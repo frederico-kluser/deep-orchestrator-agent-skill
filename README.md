@@ -218,7 +218,17 @@ export BRAVE_API_KEY=<chave>
 /deep-orchestrator max-parallel=N <descrição da tarefa>   # prefixo OPCIONAL
 /deep-orchestrator plan=on <descrição da tarefa>          # prefixo OPCIONAL — força o portão
 /deep-orchestrator plan=off faça um plano e execute       # força a autonomia total
+/deep-orchestrator wt=on <descrição da tarefa>            # prefixo OPCIONAL — worktree irmã nomeada como raiz-de-mundo
+/deep-orchestrator wt=feature-x <descrição da tarefa>     # prefixo OPCIONAL — com nome explícito
 ```
+
+O prefixo `wt=` (WT-ROOT) é o fato novo desta versão. Ele cria — ou reentra — uma worktree **irmã verdadeira** do projeto em `<pai>/<repo>.worktrees/<nome>` e faz **todo** o trabalho **dentro dela**, preservando o checkout principal intacto. O fluxo:
+
+1. A pasta irmã `<pai>/<repo>.worktrees/` é criada se faltar, ou **reentrada** se já existir (nunca recriada).
+2. O nome do diretório da worktree é o `<nome>` passado (`wt=feature-x`), ou um slug derivado do prompt da tarefa se você usar `wt=on` sem valor. O nome é **deduplicado** contra o que já existe dentro da pasta irmã: colisão com um diretório de uma feature anterior ganha `-2`, `-3`, … até achar um livre.
+3. A `FASE 0` **re-executa com o cwd dentro da worktree**: o resto é o MODO CONTIDO já existente — ondas, sub-agentes, merges via squash, gates, subwaves de teste/validação e o COMMIT-FINAL aterrissam **lá dentro**, e o checkout principal é `$MAIN_ROOT`, zona proibida.
+
+A worktree irmã é **persistente** (ao contrário das worktrees-filhas efêmeras por onda): o branch `do/wt/<nome>` é reusado entre execuções. Variáveis: `DO_WT_ROOT` (`1` quando ativo), `DO_WT_NAME` (o slug/nome resolvido), `DO_WT_ROOT_ENTERED` (sentinel interno de re-entrada).
 
 O prefixo `max-parallel=N` define o cap de concorrência (F3-02): o orquestrador o parseia antes da FASE 0 e exporta `DO_MAX_PARALLEL=N` (validado como inteiro positivo; inválido → aborta com mensagem clara). Ausente → default **20**. O teto vale para TUDO em voo — features da onda, worktrees de teste/validação das subwaves (incluindo as até 3 worktrees de teste por onda), revisores e REVISOR DE PLANO. Ondas com mais features que o cap viram batches sequenciais, cada batch com a sua barreira.
 

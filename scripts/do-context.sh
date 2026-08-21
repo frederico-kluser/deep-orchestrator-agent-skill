@@ -180,6 +180,94 @@ esac
 
 if [ "$GIT_DIR_ABS" != "$COMMON_DIR" ]; then MODE=contido; else MODE=normal; fi
 
+# --- (0.3b) WT-ROOT: worktree NOMEADA como RAIZ-DE-MUNDO (flag wt=) -----------
+# Quando o orquestrador recebe o prefixo `wt=<nome>` (DO_WT_ROOT=1), o trabalho
+# NÃO acontece no checkout principal: acontece numa worktree irmã VERDADEIRA do
+# projeto, em <pai>/<repo>.worktrees/<nome>, que passa a ser a RAIZ-DE-MUNDO.
+#
+# Como chega aqui, na prática:
+#   • cwd JÁ é a worktree (invocação dentro dela): MODE=contido já vale e este
+#     bloco NÃO roda — o fluxo EXISTENTE abaixo trata tudo (ondas, sub-agentes,
+#     merges, gates, COMMIT-FINAL) com a fronteira = esta worktree.
+#   • cwd é o checkout PRINCIPAL e DO_WT_ROOT=1: criamos/reusamos a worktree irmã,
+#     deduplicamos o nome contra o que já existe, ENTRA `<repo>.worktrees/<nome>`
+#     e RE-EXECUTAMOS este script com o cwd dentro dela. A re-execução cai no
+#     mesmo MODE=contido de sempre — zero lógica duplicada. O sentinel evita loop.
+#
+# O wt-root é PERSISTENTE: ao contrário das filhas efêmeras de CHILD_ROOT (que
+# morrem na onda), ele sobrevive entre execuções — o par pasta/branch se reusa.
+if [ "$DO_WT_ROOT" = 1 ] && [ "$MODE" = normal ] && [ "${DO_WT_ROOT_ENTERED:-0}" != 1 ]; then
+  _wt_name="${DO_WT_NAME:-}"
+  # Nome vem do orquestrador (kebab-case, ≤40 chars). Pode conter espaço do prompt
+  # original: normalizamos aqui para um slug seguro de nome de pasta.
+  _wt_name=$(printf '%s' "$_wt_name" | tr '[:upper:]' '[:lower:]' \
+             | tr -cs 'a-z0-9' '-' | sed 's/^-//;s/-$//')
+  case "$_wt_name" in
+    ""|*/*|.)
+      die 7 "DO_WT_ROOT=1 mas DO_WT_NAME resultou num nome inválido: '$_wt_name' — o orquestrador deve passar um nome que vire kebab-case" ;;
+  esac
+  [ "${#_wt_name}" -le 40 ] || _wt_name="${_wt_name:0:40}"
+  # Pasta irmã: <pai>/<repo>.worktrees/ — exatamente o pedido "PROJECT_NAME.worktrees".
+  # BASE_NAME ainda não foi resolvido aqui (é (0.6)) — deriva do basename de BASE_DIR.
+  # Se JÁ existe (entre execuções), entra nela em vez de recriar (pedido explícito).
+  _wt_base="${WT_ROOT_BASE:-$(cd "$BASE_DIR/.." && pwd -P)/$(basename "$BASE_DIR").worktrees}"
+  # Dedupe o nome contra o que JÁ EXISTE dentro de <repo>.worktrees/: o pedido é
+  # "a pasta irmã pode já existir; entre nela, e só crie um nome que não exista lá
+  # dentro". Colisão com um diretório existente (de feature anterior) ganha -2, -3...
+  # até um nome livre. A paleta é <nome>, <nome>-2, <nome>-3...
+  if [ -e "$_wt_base/$_wt_name" ]; then
+    say "DOCTYPE: '$(basename "$BASE_DIR").worktrees/$_wt_name' já existe — procurando nome livre."
+    _n=2
+    while [ -e "$_wt_base/$_wt_name-$_n" ] && [ "$_n" -lt 1000 ]; do _n=$((_n+1)); done
+    [ "$_n" -lt 1000 ] || die 7 "não achei nome livre sob $_wt_base para $_wt_name"
+    _wt_name="$_wt_name-$_n"
+    say "DO_WT_ROOT: nome deduplicado -> $_wt_name"
+  fi
+  _wt_path="$_wt_base/$_wt_name"
+
+  # Proteção de symlink: vetor de escrita fora da fronteira.
+  for _p in "$_wt_base" "$_wt_path"; do
+    [ -L "$_p" ] && die 7 "$_p é um symlink — recuso trabalhar através dele"
+  done
+  # <pai>/<repo>.worktrees/ é irmã oculta do projeto (como o CHILD_ROOT sibling);
+  # só não pode cair DENTRO de outra working tree git — mesmo motivo do CHILD_ROOT.
+  if git -C "$(dirname "$_wt_base")" rev-parse --show-toplevel >/dev/null 2>&1 \
+     && [ "$(git -C "$(dirname "$_wt_base")" rev-parse --show-toplevel)" != "$(dirname "$_wt_base")" ]; then
+    die 7 "o container irmão $_wt_base cairia dentro de outra working tree git"
+  fi
+
+  [ -e "$_wt_path" ] && die 7 "$_wt_path existe mas não é uma worktree git (sem .git arquivo) — recuso"
+  # Branch determinístico e reusável: do/wt/<nome>. Se o ref já existe (worktree
+  # anterior removida/feita prune mas branch preservado), REUSA-o via `add <path>
+  # <branch>` (sem -b — nunca -B, que resetaria silenciosamente o branch da run
+  # anterior); senão CRIAmos com -b a partir do HEAD.
+  _wt_branch="do/wt/$_wt_name"
+  git check-ref-format --branch "$_wt_branch" >/dev/null 2>&1 \
+    || die 7 "branch inválido: $_wt_branch"
+  mkdir -p "$_wt_base" || die 7 "não consegui criar $_wt_base"
+  if git show-ref --verify --quiet "refs/heads/$_wt_branch"; then
+    git worktree add -q "$_wt_path" "$_wt_branch" \
+      || die 7 "worktree em '$_wt_path' do branch '$_wt_branch' falhou — provável: o branch está"
+             "  registrado em OUTRA worktree ('git worktree list') ou a entrada anterior virou"
+             "  prunable porque o diretório sumiu sem 'git worktree remove' — rode 'git worktree "
+             "  prune' no repo principal ($BASE_DIR) e re-invoque"
+    say "DO_WT_ROOT: worktree $_wt_path no branch existente $_wt_branch (reusado)"
+  else
+    git worktree add -q -b "$_wt_branch" "$_wt_path" HEAD \
+      || die 7 "não consegui criar a worktree $_wt_path (branch $_wt_branch)"
+    say "DO_WT_ROOT: worktree criada em $_wt_path (branch $_wt_branch)"
+  fi
+
+  # ENTRA na worktree e RE-RODA este script FASE 0 com o cwd dentro dela. A partir
+  # daqui MODE=contido e toda a contenção EXISTENTE vale — nada duplicado.
+  cd "$_wt_path" || die 7 "não consegui entrar em $_wt_path"
+  DO_WT_ROOT_ENTERED=1
+  export DO_WT_ROOT_ENTERED
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+        GIT_COMMON_DIR GIT_NAMESPACE GIT_ALTERNATE_OBJECT_DIRECTORIES 2>/dev/null || true
+  exec "$0" "$@"
+fi
+
 # --- (0.4) MAIN_ROOT: o checkout principal = ZONA PROIBIDA -------------------
 MAIN_ROOT=$(cd "$COMMON_DIR/.." 2>/dev/null && pwd -P) || MAIN_ROOT=""
 if [ -n "$MAIN_ROOT" ]; then
