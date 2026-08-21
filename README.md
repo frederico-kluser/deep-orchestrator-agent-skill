@@ -220,6 +220,7 @@ export BRAVE_API_KEY=<chave>
 /deep-orchestrator plan=off faça um plano e execute       # força a autonomia total
 /deep-orchestrator wt=on <descrição da tarefa>            # prefixo OPCIONAL — worktree irmã nomeada como raiz-de-mundo
 /deep-orchestrator wt=feature-x <descrição da tarefa>     # prefixo OPCIONAL — com nome explícito
+/deep-orchestrator no-stop <descrição da tarefa>         # prefixo OPCIONAL — remove o teto de 10 ondas
 ```
 
 O prefixo `wt=` (WT-ROOT) é o fato novo desta versão. Ele cria — ou reentra — uma worktree **irmã verdadeira** do projeto em `<pai>/<repo>.worktrees/<nome>` e faz **todo** o trabalho **dentro dela**, preservando o checkout principal intacto. O fluxo:
@@ -231,6 +232,8 @@ O prefixo `wt=` (WT-ROOT) é o fato novo desta versão. Ele cria — ou reentra 
 A worktree irmã é **persistente** (ao contrário das worktrees-filhas efêmeras por onda): o branch `do/wt/<nome>` é reusado entre execuções. Variáveis: `DO_WT_ROOT` (`1` quando ativo), `DO_WT_NAME` (o slug/nome resolvido), `DO_WT_ROOT_ENTERED` (sentinel interno de re-entrada).
 
 O prefixo `mp=N` define o cap de concorrência (F3-02): o orquestrador o parseia antes da FASE 0 e exporta `DO_MAX_PARALLEL=N` (validado como inteiro positivo; inválido → aborta com mensagem clara). Ausente → default **50**. O teto vale para TUDO em voo — features da onda, worktrees de teste/validação das subwaves (incluindo as até 3 worktrees de teste por onda), revisores e REVISOR DE PLANO. Ondas com mais features que o cap viram batches sequenciais, cada batch com a sua barreira. Nota: o harness do Claude Code impõe um teto próprio de ~20 sub-agentes concorrentes por sessão (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`), então o com `mp=` acima de 20 a concorrência real fica limitada pelo harness (o resto espera em fila) — o `mp=` continua servindo para dimensionar as ondas/batches.
+
+O prefixo `no-stop` (booleano, sem valor) remove o **teto de 10 ondas por execução**: o orquestrador o parseia antes da FASE 0 e exporta `DO_NO_STOP=1` (validado como 0/1; inválido → aborta com mensagem clara). Ausente → default `0`, que preserva o comportamento histórico (máximo de 10 ondas). Com `no-stop`, a execução dura **quantas ondas forem necessárias** até o REVISOR DE PLANO declarar convergência — ideal para tarefas que exigem qualidade máxima sem teto arbitrário de rodadas. A válvula anti-loop **permanece ativa** mesmo com `no-stop`: 2 REPLANs consecutivos sem novas sub-tarefas aceitas forçam a convergência (documentada no relatório final), garantindo que a execução nunca itere para sempre sem progresso.
 
 ### O portão de aprovação do plano
 
