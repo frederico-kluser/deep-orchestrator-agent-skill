@@ -13,14 +13,15 @@ description: >-
   2.5): quando o usuário PEDE UM PLANO, ele vai ao Plannotator (instalado
   sozinho se faltar) e cada anotação REGERA o plano num Plannotator NOVO, até
   aprovar; sem pedido de plano a autonomia segue total. Invocação:
-  /deep-orchestrator [plan=on|off] [mp=N] [wt=<nome>] <tarefa>. Triggers: "faça
+  /deep-orchestrator [plan=on|off] [mp=N] [wt=<nome>] [no-stop] <tarefa>.
+  Triggers: "faça
   um plano", "quero aprovar o plano antes", "orquestre isso", "divida essa
   tarefa", "resolva do início ao fim", "não me pergunte nada".
 when_to_use: >-
   Quando o usuário quer uma tarefa resolvida do início ao fim sem interrupções,
   especialmente tarefas complexas que se beneficiam de decomposição em ondas
   paralelas. NUNCA invoque para tarefas triviais de um passo só.
-argument-hint: "[plan=on|off] [mp=N] [wt=<nome>] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); mp=N é o cap de concorrência (env DO_MAX_PARALLEL; default 50 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto); wt=<nome> cria/entra uma worktree irmã verdadeira do projeto (PROJECT_NAME.worktrees/<nome>) e faz TODO o trabalho DENTRO dela — o checkout principal é preservado; o nome é deduplicado contra o que já existir dentro da pasta irmã
+argument-hint: "[plan=on|off] [mp=N] [wt=<nome>] [no-stop] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); mp=N é o cap de concorrência (env DO_MAX_PARALLEL; default 50 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto); wt=<nome> cria/entra uma worktree irmã verdadeira do projeto (PROJECT_NAME.worktrees/<nome>) e faz TODO o trabalho DENTRO dela — o checkout principal é preservado; o nome é deduplicado contra o que já existir dentro da pasta irmã; no-stop remove o teto de 10 ondas por execução (env DO_NO_STOP; default 0 — com no-stop a execução dura quantas ondas forem necessárias até a convergência, mantida a válvula anti-loop de 2 REPLANs estagnados)
 disable-model-invocation: false
 user-invocable: true
 disallowed-tools:
@@ -387,6 +388,16 @@ metadata:
           inteiro positivo acontece no próprio do-context.sh (exit 2 com
           mensagem clara) — nunca tente "recuperar" uma FASE 0 que abortou
           por isso</step>
+        <step order="0.1"><strong>PARSEIE O PREFIXO no-stop:</strong>
+          se $ARGUMENTS contém <code>no-stop</code> como token (prefixo booleano,
+          sem valor — pode vir junto de mp=N / wt= / plan= em qualquer ordem),
+          exporte <code>DO_NO_STOP=1</code> ANTES da FASE 0 e remova o token da
+          tarefa. Ausente → default 0 (teto histórico de 10 ondas preservado).
+          A validação acontece no próprio do-context.sh (exit 2 com mensagem
+          clara para valor inválido). Com DO_NO_STOP=1, o teto de 10 ondas é
+          REMOVIDO — a execução dura quantas ondas forem necessárias até a
+          convergência — MANTENDO a válvula anti-loop de 2 REPLANs consecutivos
+          estagnados.</step>
         <step order="0.2"><strong>PARSEIE O PREFIXO wt=&lt;nome&gt;
           (WT-ROOT):</strong> se $ARGUMENTS começa com <code>wt=&lt;nome&gt;</code>
           (ou o nome veio junto dos outros prefixos em qualquer ordem), exporte
@@ -824,9 +835,13 @@ metadata:
       <repeat>Para cada onda, em ordem (1, 2, 3...), enquanto houver sub-tarefas
         pendentes — o plano inicial não limita: após CADA onda, o REVISOR DE PLANO
         recalcula o plano e novas sub-tarefas viram novas ondas. Ondas são
-        ILIMITADAS por design, com válvula de escape nomeada: MÁXIMO 10 ONDAS
-        por execução; e 2 REPLANs consecutivos sem novas sub-tarefas ACEITAS →
-        convergência forçada. Continua até que um sub-agente REVISOR DE PLANO
+        ILIMITADAS por design. Válvulas de escape nomeadas: (i) MÁXIMO 10 ONDAS
+        por execução — SOMENTE quando <code>DO_NO_STOP=0</code> (default); com
+        <code>DO_NO_STOP=1</code> (prefixo <code>no-stop</code>) este teto é
+        REMOVIDO e a execução dura quantas ondas forem necessárias até a
+        convergência; e (ii) 2 REPLANs consecutivos sem novas sub-tarefas
+        ACEITAS → convergência forçada — esta válvula anti-loop SEMPRE se
+        aplica, com ou sem no-stop. Continua até que um sub-agente REVISOR DE PLANO
         declare CONVERGÊNCIA (não há mais sub-tarefas pendentes) ou uma válvula
         de escape force a convergência</repeat>
       <note><strong>EVOLUÇÃO FUTURA (não implementar agora):</strong>
@@ -1028,9 +1043,11 @@ metadata:
           re-dispare o REPLAN (custo de 1 sub-agente) ou passe um delta dos
           fixes.
 
-          Ondas são ILIMITADAS por design, com válvula de escape nomeada:
-          MÁXIMO 10 ONDAS por execução; e 2 REPLANs consecutivos sem novas
-          sub-tarefas ACEITAS → convergência forçada (ver relatório final).
+          Ondas são ILIMITADAS por design. Válvulas de escape nomeadas: (i)
+          MÁXIMO 10 ONDAS por execução — apenas com <code>DO_NO_STOP=0</code>
+          (default); com <code>DO_NO_STOP=1</code> (prefixo <code>no-stop</code>)
+          o teto é removido; e (ii) 2 REPLANs consecutivos sem novas sub-tarefas
+          ACEITAS → convergência forçada, SEMPRE ativa (ver relatório final).
 
           <strong>SUBWAVES SÃO EXCLUÍDAS DO REPLAN:</strong> O REVISOR DE
           PLANO NUNCA propõe subwaves — nem testing nem validation — elas são
@@ -1950,9 +1967,10 @@ Exceções (BLOCKED/ORPHANED) e o que foi feito com elas.]
 
 ## Convergência (válvula de escape)
 [Se NÃO aplicável: "Convergência declarada pelo REVISOR DE PLANO."
-Se aplicável: convergência por válvula de escape (motivo: teto de ondas |
-REPLANs estagnados), propostas não executadas listadas aqui — o usuário
-decide se quer nova execução para os refinamentos.]
+Se aplicável: convergência por válvula de escape (motivo: teto de ondas — SÓ
+com DO_NO_STOP=0 | REPLANs estagnados — único motivo possível com
+DO_NO_STOP=1), propostas não executadas listadas aqui — o usuário decide se
+quer nova execução para os refinamentos.]
 
 ## Bloqueios (se houver)
 [Sub-tarefas que falharam e por quê]
