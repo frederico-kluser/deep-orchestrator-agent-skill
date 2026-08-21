@@ -147,8 +147,27 @@ if [ "$NEW_RUN" = 0 ]; then
       say ""
       continue
     fi
+    # Revalidação anti-stale do NO_STOP: mesma classe de inversão silenciosa do
+    # portão — reaproveitar um env cujo DO_NO_STOP diverge do que ESTA invocação
+    # resolveu liga/desliga o teto de 10 ondas sem o usuário pedir, nos dois
+    # sentidos. Um env anterior à introdução da flag nem tem a chave — também
+    # diverge, e também precisa de execução nova.
+    _want_nostop="${DO_NO_STOP:-0}"
+    case "$_want_nostop" in 1|on|yes|true) _want_nostop=1 ;; *) _want_nostop=0 ;; esac
+    if grep -q '^DO_NO_STOP=' "$prev" 2>/dev/null; then
+      _reuse_nostop=$(sed -n "s/^DO_NO_STOP='\([^']*\)'.*/\1/p" "$prev")
+    else
+      _reuse_nostop="<ausente>"
+    fi
+    if [ "$_reuse_nostop" != "$_want_nostop" ]; then
+      say "DO_STALE: a execução em andamento tem NO_STOP='$_reuse_nostop' e esta invocação"
+      say "          resolveu '$_want_nostop' — reaproveitar inverteria a flag no-stop em silêncio."
+      say "          Criando execução NOVA (equivalente a --new-run)."
+      say ""
+      continue
+    fi
     say "DO_REUSE: execução em andamento encontrada ($pend sub-tarefa(s) pendentes)."
-    say "          Reaproveitando o estado dela (PLAN_APPROVAL=$_reuse_gate)."
+    say "          Reaproveitando o estado dela (PLAN_APPROVAL=$_reuse_gate, NO_STOP=$_reuse_nostop)."
     say "          Use --new-run para forçar uma nova."
     say ""
     printf '%s\n' "$prev"
