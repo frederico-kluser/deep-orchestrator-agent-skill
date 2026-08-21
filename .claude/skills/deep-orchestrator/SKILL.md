@@ -46,9 +46,9 @@ allowed-tools:
 model: inherit
 effort: xhigh
 metadata:
-  version: "3.4.0"
+  version: "3.5.0"
   created: "2026-08-02"
-  updated: "2026-08-18"
+  updated: "2026-08-21"
   skill-home: "exemplo: ~/Projects/deep-orchestrator — a resolução real é dinâmica na FASE 0 (do-context.sh → $SKILL_HOME)"   # casa da skill (scripts/, prompts/, templates/) — NÃO é o projeto-alvo
   based-on: "playbook-modernizar-legado-agentes-paralelos"
 ---

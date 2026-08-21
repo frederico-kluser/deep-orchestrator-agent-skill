@@ -1,6 +1,6 @@
-# deep-orchestrator v3.4.0
+# deep-orchestrator v3.5.0
 
-![Versão](https://img.shields.io/badge/version-3.4.0-00d4ff)
+![Versão](https://img.shields.io/badge/version-3.5.0-00d4ff)
 
 Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda (`scripts/search.sh`: surf-skill → Brave Search API → DuckDuckGo keyless, com `check-search-credits.sh` e lotes via `search-parallel.sh`), e commita tudo ao final **sem perguntar nada ao usuário**.
 
@@ -30,6 +30,11 @@ Se a skill for invocada com o cwd **dentro de uma git worktree vinculada**, ela 
 O único vestígio compartilhado aceito é o registro administrativo das filhas em `$GIT_COMMON_DIR/worktrees/`, que o próprio git cria e é inevitável.
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
+
+## Novidades na v3.5.0
+
+- **Flag `no-stop` (DO_NO_STOP)**: remove o **teto de 10 ondas por execução**. Quando presente, a execução dura **quantas ondas forem necessárias** até o REVISOR DE PLANO declarar convergência — ideal para quem quer qualidade máxima sem teto arbitrário de rodadas. A válvula anti-loop **permanece ativa** mesmo com `no-stop`: 2 REPLANs consecutivos sem novas sub-tarefas ACEITAS forçam a convergência (documentada no relatório final), então a execução nunca itera para sempre sem progresso. Invocação: `/deep-orchestrator no-stop <tarefa>`. Ausente → default `0` (teto histórico de 10 ondas preservado).
+- **Validação e guarda no `do-context.sh`**: a flag é parseada antes da FASE 0 e exportada como `DO_NO_STOP` (valores `0/1/on/off/yes/no/true/false`; inválido → `die 2` com mensagem clara), gravada no ENV_FILE, exportada, exibida no resumo da FASE 0 (`NO_STOP = ON/OFF`), e protegida por **guarda anti-stale no caminho DO_REUSE** (espelhando o guarda de `DO_PLAN_APPROVAL`) — reaproveitar um env com valor divergente cria execução nova em vez de inverter a flag em silêncio.
 
 ## Novidades na v3.4.0
 
@@ -152,7 +157,7 @@ Fontes primárias: [subagents](https://code.claude.com/docs/en/subagents) · [ag
 ```
 deep-orchestrator/
 ├── README.md                    # Este arquivo
-├── SKILL.md                     # Definição do skill v3.4.0 (frontmatter YAML + XML do orquestrador)
+├── SKILL.md                     # Definição do skill v3.5.0 (frontmatter YAML + XML do orquestrador)
 ├── scripts/
 │   ├── README.md                # Índice de todos os scripts e o fluxo de busca 3-tier
 │   ├── do-context.sh            # FASE 0 — delimita a raiz-de-mundo e grava o estado
@@ -306,6 +311,8 @@ O orquestrador vai:
 Ao final, o histórico do **branch da raiz-de-mundo** (o branch da worktree em que a skill foi invocada; `main`/`master` apenas quando a invocação foi na árvore principal) terá 3 commits squash de feature — um por sub-agente —, um squash commit por worktree de teste das testing subwaves (até 3 por subwave; `test-onda1-*`, `test-onda2-*`), os fixes das validation subwaves (`val-ondaN-*`) e o commit final com o `EXPLAINER.html`. Nenhuma worktree-filha nem branch desta execução sobra; worktrees e branches pré-existentes de outras sessões não são tocados.
 
 ## Versão
+
+**3.5.0** — flag `no-stop` (DO_NO_STOP): remove o teto de 10 ondas por execução (ondas ilimitadas até a convergência); validação/export/resumo no `do-context.sh` + guarda anti-stale no caminho DO_REUSE; documentada no SKILL.md (frontmatter + FASE 0 + repeat + REPLAN + relatório) e no README.
 
 **3.3.0** — sistema de busca 3-tier (search.sh + check-search-credits.sh + search-parallel.sh), subwaves duplas (TESTING + VALIDATION), gate em snapshot de integração (F3-01), DO_MAX_PARALLEL (F3-02), gate definido uma vez (F3-03), lockfile singleton (F3-04), tiering de modelos por papel (F3-09), correções críticas da Fase 1 (F1-01 a F1-04).
 
