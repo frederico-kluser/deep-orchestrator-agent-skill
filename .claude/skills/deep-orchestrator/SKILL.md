@@ -2,7 +2,7 @@
 name: deep-orchestrator
 description: >-
   Orquestrador autônomo multi-agente. NUNCA escreve código — planeja, divide
-  em ONDAS paralelas (teto DO_MAX_PARALLEL, default 20 — replanejadas a cada
+  em ONDAS paralelas (teto DO_MAX_PARALLEL, default 50 — replanejadas a cada
   onda), cria worktrees
   isoladas e NOMEADAS, revisa adversarialmente, integra por squash-merge um a
   um com gate (build/test/lint) em snapshot, limpa worktree + branch + commits
@@ -13,14 +13,14 @@ description: >-
   2.5): quando o usuário PEDE UM PLANO, ele vai ao Plannotator (instalado
   sozinho se faltar) e cada anotação REGERA o plano num Plannotator NOVO, até
   aprovar; sem pedido de plano a autonomia segue total. Invocação:
-  /deep-orchestrator [plan=on|off] [max-parallel=N] [wt=<nome>] <tarefa>. Triggers: "faça
+  /deep-orchestrator [plan=on|off] [mp=N] [wt=<nome>] <tarefa>. Triggers: "faça
   um plano", "quero aprovar o plano antes", "orquestre isso", "divida essa
   tarefa", "resolva do início ao fim", "não me pergunte nada".
 when_to_use: >-
   Quando o usuário quer uma tarefa resolvida do início ao fim sem interrupções,
   especialmente tarefas complexas que se beneficiam de decomposição em ondas
   paralelas. NUNCA invoque para tarefas triviais de um passo só.
-argument-hint: "[plan=on|off] [max-parallel=N] [wt=<nome>] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); max-parallel=N é o cap de concorrência (default 20 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto); wt=<nome> cria/entra uma worktree irmã verdadeira do projeto (PROJECT_NAME.worktrees/<nome>) e faz TODO o trabalho DENTRO dela — o checkout principal é preservado; o nome é deduplicado contra o que já existir dentro da pasta irmã
+argument-hint: "[plan=on|off] [mp=N] [wt=<nome>] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); mp=N é o cap de concorrência (env DO_MAX_PARALLEL; default 50 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto); wt=<nome> cria/entra uma worktree irmã verdadeira do projeto (PROJECT_NAME.worktrees/<nome>) e faz TODO o trabalho DENTRO dela — o checkout principal é preservado; o nome é deduplicado contra o que já existir dentro da pasta irmã
 disable-model-invocation: false
 user-invocable: true
 disallowed-tools:
@@ -380,10 +380,10 @@ metadata:
         principal" resolve para main/master e todo o trabalho aterrissa no
         projeto principal — exatamente o que não pode acontecer.</rationale>
       <steps>
-        <step order="0"><strong>PARSEIE O PREFIXO max-parallel=N (F3-02):</strong>
-          se $ARGUMENTS começa com <code>max-parallel=N</code>, exporte
+        <step order="0"><strong>PARSEIE O PREFIXO mp=N (F3-02):</strong>
+          se $ARGUMENTS começa com <code>mp=N</code>, exporte
           <code>DO_MAX_PARALLEL=N</code> ANTES da FASE 0 e use o resto como
-          tarefa. Ausente → default 20. A validação de
+          tarefa. Ausente → default 50. A validação de
           inteiro positivo acontece no próprio do-context.sh (exit 2 com
           mensagem clara) — nunca tente "recuperar" uma FASE 0 que abortou
           por isso</step>
@@ -414,7 +414,7 @@ metadata:
             <substep>1. Prefixo explícito no $ARGUMENTS:
               <code>plan=on</code> → 1, <code>plan=off</code> → 0. Vence tudo.
               Remova o prefixo antes de usar o resto como tarefa (ele pode vir
-              junto do max-parallel=N, em qualquer ordem).</substep>
+              junto do mp=N, em qualquer ordem).</substep>
             <substep>2. Variável de ambiente DO_PLAN_APPROVAL já definida pelo
               usuário: respeite-a.</substep>
             <substep>3. Gatilhos NEGATIVOS no $ARGUMENTS — "não me pergunte
@@ -571,8 +571,8 @@ metadata:
           após cada onda (fase 3, passo 5), podendo adicionar ou remover ondas.
           <substeps>
             <substep><strong>ORÇAMENTO DE PARALELISMO (DO_MAX_PARALLEL,
-              F3-02):</strong> features por onda ≤ $DO_MAX_PARALLEL (default 20;
-              prefixo max-parallel=N na invocação — FASE 0 passo 0); in-flight
+              F3-02):</strong> features por onda ≤ $DO_MAX_PARALLEL (default 50;
+              prefixo mp=N na invocação — FASE 0 passo 0); in-flight
               TOTAL — features da onda + worktrees de teste/validação das
               subwaves da onda anterior (incluindo as até 3 worktrees de teste)
               + revisores + REVISOR DE PLANO — ≤ DO_MAX_PARALLEL: TUDO cabe no

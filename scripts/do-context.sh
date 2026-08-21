@@ -196,7 +196,7 @@ if [ "$GIT_DIR_ABS" != "$COMMON_DIR" ]; then MODE=contido; else MODE=normal; fi
 #
 # O wt-root é PERSISTENTE: ao contrário das filhas efêmeras de CHILD_ROOT (que
 # morrem na onda), ele sobrevive entre execuções — o par pasta/branch se reusa.
-if [ "$DO_WT_ROOT" = 1 ] && [ "$MODE" = normal ] && [ "${DO_WT_ROOT_ENTERED:-0}" != 1 ]; then
+if [ "${DO_WT_ROOT:-0}" = 1 ] && [ "$MODE" = normal ] && [ "${DO_WT_ROOT_ENTERED:-0}" != 1 ]; then
   _wt_name="${DO_WT_NAME:-}"
   # Nome vem do orquestrador (kebab-case, ≤40 chars). Pode conter espaço do prompt
   # original: normalizamos aqui para um slug seguro de nome de pasta.
@@ -404,14 +404,14 @@ mkdir -p "$DO_STATE" "$CHILD_ROOT" || die 7 "não consegui criar $DO_STATE / $CH
 printf 'run_id\tkind\tname\tbranch\tpath\tbase_sha\tpre_merge_sha\tpost_merge_sha\tstatus\n' > "$OWNED"
 
 # --- (0.9b) DO_MAX_PARALLEL: cap de paralelismo (F3-02) ----------------------
-# O orquestrador parseia o prefixo `max-parallel=N` da invocação e exporta
-# DO_MAX_PARALLEL antes da FASE 0; ausente → default 20 (CAP protetor — o ponto
-# ótimo recomendado é 3-5). Validação: inteiro positivo. Só dígitos, então a
+# O orquestrador parseia o prefixo `mp=N` da invocação e exporta
+# DO_MAX_PARALLEL antes da FASE 0; ausente → default 50 (CAP protetor).
+# Validação: inteiro positivo. Só dígitos, então a
 # interpolação no ENV_FILE (aspas simples) é segura.
 case "${DO_MAX_PARALLEL:-}" in
-  "") DO_MAX_PARALLEL=20 ;;   # ausente → default 20 (CAP protetor)
+  "") DO_MAX_PARALLEL=50 ;;   # ausente → default 50 (CAP protetor)
   *[!0-9]*)
-    die 2 "DO_MAX_PARALLEL inválido: '${DO_MAX_PARALLEL}' — precisa ser um inteiro positivo (ex.: max-parallel=20)" ;;
+    die 2 "DO_MAX_PARALLEL inválido: '${DO_MAX_PARALLEL}' — precisa ser um inteiro positivo (ex.: mp=50)" ;;
 esac
 [ "$DO_MAX_PARALLEL" -gt 0 ] 2>/dev/null \
   || die 2 "DO_MAX_PARALLEL inválido: '$DO_MAX_PARALLEL' — precisa ser maior que zero"
