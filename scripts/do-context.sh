@@ -442,6 +442,15 @@ case "${DO_PLAN_TIMEOUT:-}" in
 esac
 [ "$DO_PLAN_TIMEOUT" -gt 0 ] 2>/dev/null \
   || die 2 "DO_PLAN_TIMEOUT inválido: '$DO_PLAN_TIMEOUT' — precisa ser maior que zero"
+# (0.9d) DO_NO_STOP: controla o teto de ondas por execução. O orquestrador
+# parseia o prefixo `no-stop` da invocação e exporta DO_NO_STOP antes da FASE 0.
+# Ausente → 0, que preserva o teto histórico de 10 ondas; =1 remove o teto
+# (ondas ilimitadas), MANTENDO a válvula anti-loop de 2 REPLANs estagnados.
+case "${DO_NO_STOP:-}" in
+  ""|0|off|no|false) DO_NO_STOP=0 ;;
+  1|on|yes|true)     DO_NO_STOP=1 ;;
+  *) die 2 "DO_NO_STOP inválido: '${DO_NO_STOP}' — use 0/1 (ou no-stop na invocação)" ;;
+esac
 
 PLAN_APPROVAL_DIR="$DO_STATE/plan-approval"
 PLAN_DOC="$PLAN_APPROVAL_DIR/PLANO.md"
@@ -480,13 +489,14 @@ DO_MAX_PARALLEL='$DO_MAX_PARALLEL'
 DO_PLAN_APPROVAL='$DO_PLAN_APPROVAL'
 DO_PLAN_MAX_REVISIONS='$DO_PLAN_MAX_REVISIONS'
 DO_PLAN_TIMEOUT='$DO_PLAN_TIMEOUT'
+DO_NO_STOP='$DO_NO_STOP'
 PLAN_APPROVAL_DIR='$PLAN_APPROVAL_DIR'
 PLAN_DOC='$PLAN_DOC'
 DO_PLAN_APPROVAL_SH='$SKILL_HOME/scripts/plan-approval.sh'
 export MODE BASE_DIR BASE_BRANCH BASE_NAME BASE_SLUG MAIN_ROOT MAIN_ROOT_DESC
 export COMMON_DIR PARENT_DIR CHILD_ROOT PLACEMENT RUN_ID BRANCH_NS SKILL_HOME
 export DO_HOME DO_STATE PLAN_FILE OWNED DO_WT DO_MAX_PARALLEL
-export DO_PLAN_APPROVAL DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT PLAN_APPROVAL_DIR PLAN_DOC DO_PLAN_APPROVAL_SH
+export DO_PLAN_APPROVAL DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_NO_STOP PLAN_APPROVAL_DIR PLAN_DOC DO_PLAN_APPROVAL_SH
 
 # GIT_DIR exportada VENCE \`git -C\`: zerar em toda chamada.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_NAMESPACE 2>/dev/null || true
@@ -567,6 +577,11 @@ if [ "$DO_PLAN_APPROVAL" = 1 ]; then
   say "                  até $DO_PLAN_MAX_REVISIONS revisões, timeout ${DO_PLAN_TIMEOUT}s por rodada)"
 else
   say "  PLAN_APPROVAL = OFF  (autonomia total — nenhuma interação com o usuário)"
+fi
+if [ "$DO_NO_STOP" = 1 ]; then
+  say "  NO_STOP       = ON   (teto de 10 ondas REMOVIDO — ondas ilimitadas; válvula anti-loop de REPLAN estagnado mantida)"
+else
+  say "  NO_STOP       = OFF  (teto histórico de 10 ondas por execução — FASE 3)"
 fi
 say "  worktrees de terceiros: $(wc -l < "$DO_STATE/foreign-worktrees.txt" 2>/dev/null || echo 0) (NÃO tocar)"
 say ""
