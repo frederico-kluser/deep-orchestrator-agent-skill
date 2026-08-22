@@ -1,1 +1,1 @@
-.claude/skills/deep-orchestrator/SKILL.md
+.claude/skills/deep-orchestrator-agent-skill/SKILL.md
