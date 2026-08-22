@@ -1,6 +1,6 @@
-# Scripts -- deep-orchestrator
+# Scripts -- deep-orchestrator-agent-skill
 
-Diretorio de scripts executaveis do deep-orchestrator. Cada script tem uma funcao
+Diretorio de scripts executaveis do deep-orchestrator-agent-skill. Cada script tem uma funcao
 especifica no ciclo de orquestracao. A ordem de execucao e ditada pelas FASES do
 orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 
@@ -24,16 +24,16 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 
 | Script | Proposito |
 |--------|-----------|
-| `sync-global-skill.sh` | Publica a skill para todos os agentes da maquina por SYMLINK: ${CLAUDE_CONFIG_DIR:-~/.claude}/skills, ~/.agents/skills (pi/jcode/opencode), ~/.jcode/skills e ~/.pi/agent/skills. Existe porque alguns agentes importam skills POR COPIA, e copia congela a versao do dia da importacao (verificado: ~/.jcode/skills/deep-orchestrator ficou em 3.1.0 com a skill viva em 3.4.0 -- rodar por la executava um orquestrador de duas versoes atras). Toca EXCLUSIVAMENTE a entrada `deep-orchestrator`; so substitui um diretorio depois de confirmar que ele tem SKILL.md com `name: deep-orchestrator`; guarda a copia antiga em `.bak-<data>`; nao cria diretorio-pai de agente que nao existe. Chamado pelo hook SessionStart do Claude Code. Opcoes: --quiet, --dry-run, --strict. Exit 0 sempre (1 so com --strict). |
+| `sync-global-skill.sh` | Publica a skill para todos os agentes da maquina por SYMLINK: ${CLAUDE_CONFIG_DIR:-~/.claude}/skills, ~/.agents/skills (pi/jcode/opencode), ~/.jcode/skills e ~/.pi/agent/skills. Existe porque alguns agentes importam skills POR COPIA, e copia congela a versao do dia da importacao (verificado: ~/.jcode/skills/deep-orchestrator-agent-skill ficou em 3.1.0 com a skill viva em 3.4.0 -- rodar por la executava um orquestrador de duas versoes atras). Toca EXCLUSIVAMENTE a entrada `deep-orchestrator-agent-skill`; so substitui um diretorio depois de confirmar que ele tem SKILL.md com `name: deep-orchestrator-agent-skill`; guarda a copia antiga em `.bak-<data>`; nao cria diretorio-pai de agente que nao existe. Chamado pelo hook SessionStart do Claude Code. Opcoes: --quiet, --dry-run, --strict. Exit 0 sempre (1 so com --strict). |
 
 ## Busca (search)
 
 | Script | Proposito | Tier |
 |---|---|---|
-| **`search.sh`** | Interface UNIFICADA de busca do deep-orchestrator. Smart wrapper com cadeia de fallback automatica em 3 tiers. Interface CLI identica ao `brave-search.sh` para backward compatibility. Este e o script que sub-agentes devem usar. Exit codes: 0 (resultados), 1 (sem resultados em TODA a cadeia ou erro de busca), 2 (configuracao/uso). | T1 -> T2 -> T3 |
+| **`search.sh`** | Interface UNIFICADA de busca do deep-orchestrator-agent-skill. Smart wrapper com cadeia de fallback automatica em 3 tiers. Interface CLI identica ao `brave-search.sh` para backward compatibility. Este e o script que sub-agentes devem usar. Exit codes: 0 (resultados), 1 (sem resultados em TODA a cadeia ou erro de busca), 2 (configuracao/uso). | T1 -> T2 -> T3 |
 | **`search-parallel.sh`** | Buscas em PARALELO para LOTES (decisao D3): `--batch <arquivo>` (uma query por linha) ou queries posicionais multiplas; uma chamada `search.sh` por query em background (sem teto de quantidade), jitter de disparo 0-2s por job, backoff exponencial com jitter (1s/2s/4s) em HTTP 429, cache intra-run de queries identicas, e relatorio agregado DEDUPLICADO por URL (query -> tier -> URLs). Exit codes: 0 (>=1 query com resultado), 1 (todas falharam/vazias), 2 (uso). NUNCA chame search.sh em loop — use este script. | PARALELO |
 | `brave-search.sh` | Wrapper da Brave Search API. Exibe a funcao `search_brave_api()` como funcao sourceable (usada como Tier 2 do `search.sh`). Ainda funciona standalone com interface similar ao surf-search-normal (--task, --goal, --insights, --deliverable, --brief-file). Suporta evolucao de queries com deduplicacao por URL. | T2 |
-| `check-search-credits.sh` | Verificador multi-tier pre-onda. Verifica surf-skill (Tier 1, so AVAILABLE com keys.json do surf presente e nao-vazio — senao DEGRADED), Brave API (Tier 2) e DuckDuckGo keyless (Tier 3). Substitui `check-brave-credits.sh`. Exit codes: 0 (Tier 1 ou 2 ok), 1 (apenas Tier 3), 2 (nada disponivel ou deps ausentes). Opcoes: --fail-fast, --json. | -- |
+| `check-search-credits.sh` | Verificador multi-tier pre-onda. Verifica surf-agent-skill (Tier 1, so AVAILABLE com keys.json do surf presente e nao-vazio — senao DEGRADED), Brave API (Tier 2) e DuckDuckGo keyless (Tier 3). Substitui `check-brave-credits.sh`. Exit codes: 0 (Tier 1 ou 2 ok), 1 (apenas Tier 3), 2 (nada disponivel ou deps ausentes). Opcoes: --fail-fast, --json. | -- |
 | ~~`check-brave-credits.sh`~~ | **(DEPRECATED)** Verificador antigo exclusivo da Brave Search API. Na resposta REAL da Brave o header X-Credit-Remaining nao existe (verificado 14/08/2026) — os creditos vem do 2o valor de X-RateLimit-Remaining (par "por segundo, por mes"; 2o valor = quota mensal). Suporta deteccao de assinatura ativa e cache de 10 min. Use `check-search-credits.sh`. | -- |
 
 ## Ferramentas (geracao)
@@ -99,7 +99,7 @@ mostra o botao Approve e o usuario fisicamente nao consegue aprovar.
 ```
 search.sh (interface unica recomendada)
   |
-  +-- [Tier 1] surf-skill (surf-search-normal / surf-free-skill)
+  +-- [Tier 1] surf-agent-skill (surf-search-normal / surf-free-skill)
   |     AI-powered multi-provider. Melhor qualidade.
   |     Se falhar ou indisponivel, cai para Tier 2.
   |
@@ -145,7 +145,7 @@ search-parallel.sh --batch <arquivo> | <query1> <query2> ...
 ```
 check-search-credits.sh
   |
-  +-- [Tier 1] surf-skill disponivel?  -> exit 0 (pesquisa completa)
+  +-- [Tier 1] surf-agent-skill disponivel?  -> exit 0 (pesquisa completa)
   |     (AVAILABLE so com ~/.config/surf/keys.json presente e nao-vazio;
   |      sem keys -> DEGRADED)
   +-- [Tier 2] Brave API funcional?    -> exit 0 (pesquisa completa)

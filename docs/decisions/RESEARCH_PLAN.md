@@ -1,6 +1,6 @@
 # Research Plan: Deep-Orchestrator — Suporte Completo ao Ecossistema
 
-**Pergunta original:** Quais decisões arquiteturais e de produto o deep-orchestrator deve tomar para dar suporte a TODAS as ferramentas, modelos, APIs e plataformas do ecossistema do usuário?
+**Pergunta original:** Quais decisões arquiteturais e de produto o deep-orchestrator-agent-skill deve tomar para dar suporte a TODAS as ferramentas, modelos, APIs e plataformas do ecossistema do usuário?
 
 **Modo:** deep | **Data:** 2026-08-03 | **Status:** CONCLUÍDO
 
@@ -9,7 +9,7 @@
 | Categoria | Ferramentas |
 |-----------|-------------|
 | Harness | Claude Code (backend DeepSeek v4-pro) |
-| Orquestração | deep-orchestrator |
+| Orquestração | deep-orchestrator-agent-skill |
 | Terminal | claude-8000 (kitty) |
 | Skills de UI | motion-plus-ui, motion-plus-animation, motion, html-explainer |
 | Skills de pesquisa | surf-research-skill, surf-plan-skill, surf-free-skill |

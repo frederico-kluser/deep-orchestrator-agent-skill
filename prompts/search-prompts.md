@@ -1,10 +1,10 @@
 # Search Prompts — Otimizados para Desenvolvimento de Software
 
-> Contrato de prompts de busca do deep-orchestrator para tarefas de
+> Contrato de prompts de busca do deep-orchestrator-agent-skill para tarefas de
 > desenvolvimento de software. Define COMO as buscas são formuladas,
 > refinadas (question evolution) e avaliadas. A interface PRIMÁRIA de
 > execução é `{{SKILL_HOME}}/scripts/search.sh` (fallback automático em
-> 3 tiers: surf-skill → Brave Search API → DuckDuckGo keyless); o
+> 3 tiers: surf-agent-skill → Brave Search API → DuckDuckGo keyless); o
 > `brave-search.sh` é a implementação do Tier 2 (API Brave, parsing,
 > flags CLI). Este documento é a camada de estratégia; o search.sh é a
 > camada de execução.
@@ -25,7 +25,7 @@ Diferente de busca genérica, busca para desenvolvimento precisa de:
 - **Consciência de frescor** (tecnologia de 2022 pode já estar obsoleta) — em
   software, obsoleto se mede em anos, às vezes meses (ecossistemas JS e de LLMs)
 
-Princípio extra, herdado do sistema de busca 3-tier do deep-orchestrator
+Princípio extra, herdado do sistema de busca 3-tier do deep-orchestrator-agent-skill
 (`search.sh --insights`): **estado o que julgo saber e busco o que o
 FALSIFICARIA.** Uma busca que só confirma o que o agente já acredita não é
 pesquisa; é viés. Toda rodada de evolução deve incluir pelo menos uma query de
@@ -629,7 +629,7 @@ avaliação de qualidade (ex.: Freshness pesa mais em ML/AI que em security).
 > parsing, flags CLI) e só deve ser chamado diretamente em testes isolados
 > do tier. Este documento é a camada de estratégia (COMO formular e
 > avaliar buscas); o search.sh é a camada de execução (fallback 3-tier:
-> surf-skill → Brave → DDG keyless). Se houver divergência entre este
+> surf-agent-skill → Brave → DDG keyless). Se houver divergência entre este
 > documento e o search.sh, o script vence — este documento deve ser
 > atualizado na onda de skill-update.
 

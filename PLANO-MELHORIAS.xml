@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<plano-de-melhorias projeto="deep-orchestrator" versao-atual="3.2.0" versao-alvo="3.3.0"
+<plano-de-melhorias projeto="deep-orchestrator-agent-skill" versao-atual="3.2.0" versao-alvo="3.3.0"
                     gerado-em="2026-08-14" idioma="pt-BR" formato="v1">
 
   <!-- ════════════════════════════════════════════════════════════════════
@@ -53,7 +53,7 @@
       ALTO (melhoria importante), MEDIO, BAIXO.
       Esforços: P (pequeno, &lt;1h), M (médio), G (grande, toca fluxo central).
       As fases são sequenciais; itens dentro de uma fase podem ser paralelizados
-      (ideal para rodar sob o próprio deep-orchestrator — dogfooding — depois da Fase 1).
+      (ideal para rodar sob o próprio deep-orchestrator-agent-skill — dogfooding — depois da Fase 1).
     </como-ler>
   </metadados>
 
@@ -71,13 +71,13 @@
     </decisao>
     <decisao id="D2" pergunta="Teto de concorrência fixo ou configurável?">
       CONFIGURÁVEL na chamada da skill: o usuário pode passar o limite ao invocar
-      (ex.: /deep-orchestrator max-parallel=8 &lt;tarefa&gt;). Se não passar, o default
+      (ex.: /deep-orchestrator-agent-skill max-parallel=8 &lt;tarefa&gt;). Se não passar, o default
       é 20. Resolvido na FASE 0 e gravado no arquivo de estado como DO_MAX_PARALLEL.
       A contagem in-flight inclui: agentes de feature da onda + subwaves (teste e
       validação) da onda anterior + revisores + REVISOR DE PLANO.
     </decisao>
     <decisao id="D3" pergunta="Tavily como Tier 3c opcional? / provedores de busca">
-      NÃO adicionar provedores: a cadeia permanece surf-skill (Tier 1) → Brave Search
+      NÃO adicionar provedores: a cadeia permanece surf-agent-skill (Tier 1) → Brave Search
       API (Tier 2) → DuckDuckGo keyless (Tier 3, último recurso). Nada de Tavily,
       Wikipedia ou outros. EM TROCA: pesquisas em PARALELO SEM LIMITE de quantidade —
       implementado em CÓDIGO (novo script scripts/search-parallel.sh) que a skill
@@ -88,7 +88,7 @@
     <decisao id="D4" pergunta="Escopo deste documento">
       Este XML é o plano de AÇÃO completo (o que fazer, onde, como, como testar).
       A execução das 4 fases é um trabalho separado, que pode rodar sob o próprio
-      deep-orchestrator (dogfooding) após a Fase 1 estar aplicada.
+      deep-orchestrator-agent-skill (dogfooding) após a Fase 1 estar aplicada.
     </decisao>
   </decisoes-do-usuario>
 
@@ -270,7 +270,7 @@ fi]]></depois>
         <arquivo path="scripts/test-contencao.sh" linhas="4 (SKILL=...), 13 (LAB=...), 27+ (grep -oP)"/>
       </onde>
       <problema>
-        Linha 4: SKILL=/home/ondokai/Projects/deep-orchestrator — em qualquer outro
+        Linha 4: SKILL=/home/ondokai/Projects/deep-orchestrator-agent-skill — em qualquer outro
         clone/máquina o teste roda contra o path errado ou falha. Linha 13: sem trap nem
         rm -rf final, e o sufixo $$ muda a cada run → labs /tmp/do-accept-* órfãos se
         acumulam (encontrado um real). grep -oP não existe no BSD/macOS.
@@ -583,7 +583,7 @@ fi]]></depois>
         com fan-out grande. Decisão D2: configurável na chamada, default 20.
       </problema>
       <correcao>
-        <passo n="1">Interface: `/deep-orchestrator max-parallel=N &lt;tarefa&gt;` — o orquestrador parseia o prefixo, exporta DO_MAX_PARALLEL=N antes da FASE 0. Se ausente: default 20.</passo>
+        <passo n="1">Interface: `/deep-orchestrator-agent-skill max-parallel=N &lt;tarefa&gt;` — o orquestrador parseia o prefixo, exporta DO_MAX_PARALLEL=N antes da FASE 0. Se ausente: default 20.</passo>
         <passo n="2">do-context.sh: gravar DO_MAX_PARALLEL no ENV_FILE (<![CDATA[DO_MAX_PARALLEL="${DO_MAX_PARALLEL:-20}"]]>), com validação de inteiro positivo.</passo>
         <passo n="3">PLAN (403-407): nova regra de orçamento — "features por onda ≤ DO_MAX_PARALLEL; in-flight total (features da onda + subwaves da onda anterior + revisores + REVISOR DE PLANO) ≤ 2×DO_MAX_PARALLEL; ondas maiores viram batches sequenciais dentro da mesma onda, cada batch com sua barreira, compartilhando o mesmo passo 7".</passo>
         <passo n="4">Dispatches escalonados com alguns segundos de intervalo (mitiga rate limit 429 — Brave por segundo é 1 req/s nesta conta, verificado ao vivo via X-RateLimit-Limit).</passo>
@@ -803,7 +803,7 @@ fi]]></depois>
         O README parou na v3.0.0: diz "verifica créditos Brave antes de cada onda"
         (agora é 3-tier); diz que o brave-search.sh "substitui o surf-search-normal,
         não depende mais do surf-research-skill" — CONTRADIZ a reintrodução do
-        surf-skill como Tier 1 (SKILL.md:168-169); FASE 1 cita check-brave-credits.sh
+        surf-agent-skill como Tier 1 (SKILL.md:168-169); FASE 1 cita check-brave-credits.sh
         --fail-fast (script DEPRECATED, scripts/README.md:23); exceções da R2 citam
         "créditos Brave esgotados" (R2 atual: exit 2 = TODOS os tiers fora); a árvore
         omite search.sh e check-search-credits.sh; Brave API key consta como
@@ -815,7 +815,7 @@ fi]]></depois>
       </problema>
       <correcao>
         <passo n="1">Bump: frontmatter version 3.3.0 + updated; nova seção "Novidades na v3.3.0" no README: busca 3-tier (search.sh/check-search-credits.sh), validation subwaves paralelas (F2-02), gate em snapshot (F3-01), DO_MAX_PARALLEL (F3-02), search-parallel.sh (F3-05), correções críticas (F1-*).</passo>
-        <passo n="2">Reescrever as linhas desatualizadas: tagline (5) com 3-tier; nota histórica da v3.0.0 marcada como SUPERADA ("o surf-skill voltou como Tier 1 na v3.3.0"); FASE 1 e regras 2/7 citando check-search-credits.sh e exit codes 0/1/2; árvore de diretórios completa incluindo search.sh, check-search-credits.sh, search-parallel.sh e test-search.sh.</passo>
+        <passo n="2">Reescrever as linhas desatualizadas: tagline (5) com 3-tier; nota histórica da v3.0.0 marcada como SUPERADA ("o surf-agent-skill voltou como Tier 1 na v3.3.0"); FASE 1 e regras 2/7 citando check-search-credits.sh e exit codes 0/1/2; árvore de diretórios completa incluindo search.sh, check-search-credits.sh, search-parallel.sh e test-search.sh.</passo>
         <passo n="3">Requisitos: Brave API key como OPCIONAL (Tier 3 keyless existe, cobertura limitada); surf-search-normal como OPCIONAL (habilita Tier 1, melhor qualidade); nota sobre o modelo metered da Brave (créditos mensais + cobrança ao exceder — o check pré-onda é proteção financeira).</passo>
         <passo n="4">"um commit por testing subwave" → "um squash commit por worktree de teste (até 3 por subwave) + fixes das validation subwaves".</passo>
       </correcao>
@@ -840,7 +840,7 @@ fi]]></depois>
         REJEITA a skill; harness que ignora torna a whitelist inócua (R1 vira só
         prosa). Incoerência de desenho: o orquestrador não pesquisa (sub-agentes usam
         search.sh via Bash), mas a whitelist inclui 4 ferramentas de busca web.
-        E metadata.skill-home aponta ~/Projects/deep-orchestrator — path da máquina
+        E metadata.skill-home aponta ~/Projects/deep-orchestrator-agent-skill — path da máquina
         do autor; a FASE 0 resolve dinamicamente.
       </problema>
       <correcao>
@@ -1019,7 +1019,7 @@ fi]]></depois>
       </onde>
       <problema>Os symlinks apontam para um /tmp já limpo — a skill como documentação de agente está inacessível e o help do CLI aponta para caminho morto. Não afeta o Tier 1 (que usa o binário do npm link), mas qualquer agente que tente LER a skill falha.</problema>
       <correcao>
-        <passo n="1">Repontar manualmente (ação do usuário, fora de qualquer execução da skill): ln -sfn /home/ondokai/Projects/surf-skill/skills/surf-research-skill ~/.agents/skills/surf-research-skill (e idem para surf-plan-skill, surf-free-skill, e os dois em ~/.claude/skills/).</passo>
+        <passo n="1">Repontar manualmente (ação do usuário, fora de qualquer execução da skill): ln -sfn /home/ondokai/Projects/surf-agent-skill/skills/surf-research-skill ~/.agents/skills/surf-research-skill (e idem para surf-plan-skill, surf-free-skill, e os dois em ~/.claude/skills/).</passo>
       </correcao>
       <como-testar>
         <teste>readlink -f ~/.agents/skills/surf-research-skill/SKILL.md → resolve e o arquivo lê.</teste>
@@ -1059,7 +1059,7 @@ fi]]></depois>
     <dep from="F4-03" to="F3-05">search-prompts.md atualizado menciona o search-parallel.sh.</dep>
     <dep from="F4-04" to="F1-05">O gerador só é útil com o template já saneado.</dep>
     <dep from="F4-06" to="F1-*,F2-*,F3-*">Cada asserção nova cobre um item já implementado.</dep>
-    <dep nota="Dogfooding: a partir do fim da Fase 1, as Fases 2-4 podem ser executadas pelo PRÓPRIO deep-orchestrator corrigido — cada item vira uma sub-tarefa, os mapas de propriedade são disjuntos por arquivo na maioria dos itens."/>
+    <dep nota="Dogfooding: a partir do fim da Fase 1, as Fases 2-4 podem ser executadas pelo PRÓPRIO deep-orchestrator-agent-skill corrigido — cada item vira uma sub-tarefa, os mapas de propriedade são disjuntos por arquivo na maioria dos itens."/>
   </dependencias>
 
   <!-- ════════════════════════════════════════════════════════════════════

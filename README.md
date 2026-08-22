@@ -1,8 +1,8 @@
-# deep-orchestrator v3.5.0
+# deep-orchestrator-agent-skill v3.5.0
 
 ![Versão](https://img.shields.io/badge/version-3.5.0-00d4ff)
 
-Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda (`scripts/search.sh`: surf-skill → Brave Search API → DuckDuckGo keyless, com `check-search-credits.sh` e lotes via `search-parallel.sh`), e commita tudo ao final **sem perguntar nada ao usuário**.
+Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda (`scripts/search.sh`: surf-agent-skill → Brave Search API → DuckDuckGo keyless, com `check-search-credits.sh` e lotes via `search-parallel.sh`), e commita tudo ao final **sem perguntar nada ao usuário**.
 
 A única exceção — e ela só existe quando você pede — é o **PORTÃO DE APROVAÇÃO DO PLANO** (FASE 2.5): quando a invocação pede um plano, o plano vai para o [Plannotator](https://github.com/backnotprop/plannotator) e você aprova ou anota. Cada anotação **regera o plano e abre um Plannotator NOVO**, até a aprovação — e nenhuma worktree nasce antes dela. Sem pedido de plano, a autonomia total continua exatamente como sempre foi.
 
@@ -33,7 +33,7 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 
 ## Novidades na v3.5.0
 
-- **Flag `no-stop` (DO_NO_STOP)**: remove o **teto de 10 ondas por execução**. Quando presente, a execução dura **quantas ondas forem necessárias** até o REVISOR DE PLANO declarar convergência — ideal para quem quer qualidade máxima sem teto arbitrário de rodadas. A válvula anti-loop **permanece ativa** mesmo com `no-stop`: 2 REPLANs consecutivos sem novas sub-tarefas ACEITAS forçam a convergência (documentada no relatório final), então a execução nunca itera para sempre sem progresso. Invocação: `/deep-orchestrator no-stop <tarefa>`. Ausente → default `0` (teto histórico de 10 ondas preservado).
+- **Flag `no-stop` (DO_NO_STOP)**: remove o **teto de 10 ondas por execução**. Quando presente, a execução dura **quantas ondas forem necessárias** até o REVISOR DE PLANO declarar convergência — ideal para quem quer qualidade máxima sem teto arbitrário de rodadas. A válvula anti-loop **permanece ativa** mesmo com `no-stop`: 2 REPLANs consecutivos sem novas sub-tarefas ACEITAS forçam a convergência (documentada no relatório final), então a execução nunca itera para sempre sem progresso. Invocação: `/deep-orchestrator-agent-skill no-stop <tarefa>`. Ausente → default `0` (teto histórico de 10 ondas preservado).
 - **Validação e guarda no `do-context.sh`**: a flag é parseada antes da FASE 0 e exportada como `DO_NO_STOP` (valores `0/1/on/off/yes/no/true/false`; inválido → `die 2` com mensagem clara), gravada no ENV_FILE, exportada, exibida no resumo da FASE 0 (`NO_STOP = ON/OFF`), e protegida por **guarda anti-stale no caminho DO_REUSE** (espelhando o guarda de `DO_PLAN_APPROVAL`) — reaproveitar um env com valor divergente cria execução nova em vez de inverter a flag em silêncio.
 
 ## Novidades na v3.4.0
@@ -48,16 +48,16 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 - **O plano nunca sai da máquina sozinho** — duas travas independentes, ambas ligadas por default:
   - `PLANNOTATOR_SHARE=disabled` impede o **upload** do texto do plano para o serviço de paste, que o Plannotator faria em sessão remota. Libere com `DO_PLAN_SHARE=1`.
   - `PLANNOTATOR_REMOTE=0` mantém o servidor em **127.0.0.1**. Sem isso, qualquer shell com `SSH_TTY`/`SSH_CONNECTION` no ambiente — o caso normal de um servidor de desenvolvimento — faria o Plannotator escutar em `0.0.0.0:19432`; e como `/api/approve` **não tem autenticação**, qualquer pessoa que alcançasse a máquina leria o plano e poderia **aprová-lo por você**, levando o orquestrador a criar worktrees e commitar. Para revisar por SSH, use um túnel: `ssh -L 19432:127.0.0.1:19432 <host>`. `DO_PLAN_REMOTE=1` expõe na rede de propósito, com aviso em voz alta.
-- **`scripts/sync-global-skill.sh`**: publica a skill para todos os agentes por **symlink**, trocando as importações por cópia que congelam a versão (o jcode importa copiando: uma cópia de meses atrás roda um orquestrador de duas versões atrás). Só mexe na entrada `deep-orchestrator`, só substitui um diretório depois de confirmar que ele é uma cópia desta mesma skill, guarda backup, e não cria diretório de agente que não existe.
+- **`scripts/sync-global-skill.sh`**: publica a skill para todos os agentes por **symlink**, trocando as importações por cópia que congelam a versão (o jcode importa copiando: uma cópia de meses atrás roda um orquestrador de duas versões atrás). Só mexe na entrada `deep-orchestrator-agent-skill`, só substitui um diretório depois de confirmar que ele é uma cópia desta mesma skill, guarda backup, e não cria diretório de agente que não existe.
 - **Testes**: `scripts/test-plan-approval.sh` — 111 asserções, tudo mockado (binário e instalador falsos num PATH temporário), **sem rede, sem navegador e sem instalar nada**.
 
 ## Novidades na v3.3.0
 
-- **Sistema de busca 3-tier (F1-03)**: `scripts/search.sh` — surf-skill (Tier 1, multi-provider AI-powered) → Brave Search API (Tier 2, via `search_brave_api()` do `brave-search.sh`) → DuckDuckGo keyless (Tier 3, Instant Answer, cobertura limitada). Verificação de tiers antes de cada onda via `scripts/check-search-credits.sh` (exit 0 = Tier 1/2 disponível; exit 1 = só Tier 3, degradado; exit 2 = nada disponível) e lotes paralelos via `scripts/search-parallel.sh` (uma chamada por lote, nunca loop). O surf-skill voltou como Tier 1 — a busca Brave interna da v3.0.0 não o substitui mais.
+- **Sistema de busca 3-tier (F1-03)**: `scripts/search.sh` — surf-agent-skill (Tier 1, multi-provider AI-powered) → Brave Search API (Tier 2, via `search_brave_api()` do `brave-search.sh`) → DuckDuckGo keyless (Tier 3, Instant Answer, cobertura limitada). Verificação de tiers antes de cada onda via `scripts/check-search-credits.sh` (exit 0 = Tier 1/2 disponível; exit 1 = só Tier 3, degradado; exit 2 = nada disponível) e lotes paralelos via `scripts/search-parallel.sh` (uma chamada por lote, nunca loop). O surf-agent-skill voltou como Tier 1 — a busca Brave interna da v3.0.0 não o substitui mais.
 - **Subwaves duplas (F2-02/F2-04)**: TESTING (`test-ondaN-*`, máximo 3 worktrees de teste por onda — contam no teto DO_MAX_PARALLEL) e VALIDATION (`val-ondaN-*`, gate completo + revisão adversarial do diff integrado) rodam em background após cada onda e são integradas na onda seguinte (passo 3.5) ou no COMMIT-FINAL — nunca bloqueiam o disparo das ondas de feature.
 - **Correções críticas da Fase 1 (F1-01 a F1-04)**: `do-wt.sh undo` seguro (reset --hard só com working tree exclusivamente untracked; o commit desfeito é arquivado em `refs/do-archive/$RUN_ID/undo-<nome>`), baseline de ignorados na FASE 0 + `clean-ignored-delta` no lugar do `git clean -fdXq` genérico (nunca apaga ignorados pré-existentes do usuário), `stage-delta` com `-uall` nos dois lados (arquivos novos dentro de dirs untracked do usuário entram no commit; a sujeira preexistente continua fora) e `--budget-ms` no Tier 1 do search.sh (`--timeout` em segundos vira milissegundos para o surf-search-normal).
 - **Gate em snapshot de integração (F3-01)**: o squash-merge é atômico e o gate (build + testes + linter) sai da seção crítica — roda em background numa worktree efêmera `int-ondaN-<nome>` (kind=integration, registrada no owned.tsv) criada no SHA pós-merge. Merges seguem em sequência; a limpeza de cada filha e o fim da onda aguardam o respectivo gate de snapshot (`status=gate-pending` no owned.tsv; o `do-wt.sh sweep` detecta gate-pending, avisa e sai != 0). Falha tardia: `do-wt.sh undo <nome>` reverte exatamente aquele squash com HEAD avançado, arquivando o commit em `refs/do-archive/$RUN_ID/undo-<nome>`. **Decisão D1**: builds duplicados (snapshot + validação + gate final) são esperados.
-- **DO_MAX_PARALLEL (F3-02)**: prefixo `mp=N` na invocação (`/deep-orchestrator mp=N <tarefa>`) — o orquestrador exporta `DO_MAX_PARALLEL` antes da FASE 0; ausente, default 50. Orçamento: features por onda ≤ DO_MAX_PARALLEL; in-flight total ≤ DO_MAX_PARALLEL (features + worktrees de teste/validação das subwaves + revisores + REVISOR DE PLANO — tudo no mesmo teto); ondas maiores viram batches sequenciais com a própria barreira.
+- **DO_MAX_PARALLEL (F3-02)**: prefixo `mp=N` na invocação (`/deep-orchestrator-agent-skill mp=N <tarefa>`) — o orquestrador exporta `DO_MAX_PARALLEL` antes da FASE 0; ausente, default 50. Orçamento: features por onda ≤ DO_MAX_PARALLEL; in-flight total ≤ DO_MAX_PARALLEL (features + worktrees de teste/validação das subwaves + revisores + REVISOR DE PLANO — tudo no mesmo teto); ondas maiores viram batches sequenciais com a própria barreira.
 - **Gate definido uma vez (F3-03)**: a FASE 1 detecta e registra no TASK_PLAN.md o trio exato `GATE_BUILD`/`GATE_TEST`/`GATE_LINT` do projeto-alvo (package.json/Makefile/pyproject.toml/Cargo.toml/go.mod); toda invocação de gate referencia esse trio, com cwd conforme o contexto (snapshot, validação ou `$BASE_DIR` no gate final).
 - **Lockfile como singleton (F3-04)**: manifesto + lockfile entram no mapa de propriedade como recurso singleton — no máximo 1 agente por onda adiciona dependências; os demais registram "deps pendentes: <pacote@versão>" no handoff e a adição acontece no COMMIT PREP da onda seguinte.
 - **Tiering de modelos por papel (F3-09)**: quando o harness permite, agentes de teste e revisores adversariais rodam em modelo médio, REVISOR DE PLANO e síntese final em modelo forte, features no padrão; regra de escala: ≤2 sub-tarefas pequenas e independentes não geram fan-out extra.
@@ -73,7 +73,7 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 ## Novidades na v3.0.0
 
 - **Ondas ilimitadas** com recálculo dinâmico — após cada onda, um sub-agente REVISOR DE PLANO analisa os handoffs e o TASK_PLAN.md, propõe novas sub-tarefas ou declara CONVERGÊNCIA. O ciclo só termina por convergência declarada, nunca por um número fixo de ondas.
-- **Busca interna Brave** (`$SKILL_HOME/scripts/brave-search.sh`) — CLI próprio sobre a Brave Search API que substituía o `surf-search-normal` e não dependia mais do `surf-research-skill` nem do CLI `surf-ai`. **SUPERADA na v3.3.0**: o surf-skill voltou como **Tier 1** do sistema de busca 3-tier (`search.sh`); a Brave API virou o Tier 2 e o DuckDuckGo keyless o Tier 3.
+- **Busca interna Brave** (`$SKILL_HOME/scripts/brave-search.sh`) — CLI próprio sobre a Brave Search API que substituía o `surf-search-normal` e não dependia mais do `surf-research-skill` nem do CLI `surf-ai`. **SUPERADA na v3.3.0**: o surf-agent-skill voltou como **Tier 1** do sistema de busca 3-tier (`search.sh`); a Brave API virou o Tier 2 e o DuckDuckGo keyless o Tier 3.
 - **Verificação de créditos** antes de cada onda (`$SKILL_HOME/scripts/check-brave-credits.sh`) — sem créditos, o orquestrador para e informa o usuário (única exceção à autonomia total). **SUPERADA na v3.3.0**: o verificador agora é `check-search-credits.sh` (3 tiers; exit 2 = TODOS os tiers fora) — `check-brave-credits.sh` está DEPRECATED.
 - **ECC Prompts integrados** — 7 templates de prompt (`$SKILL_HOME/prompts/ecc-prompts.md`) + 7 skills portados do ECC (`$SKILL_HOME/prompts/ecc-skills.md`), incluindo Security Review (AgentShield), Planning Prompt (Plan First) e Prompt Defense Baseline.
 - **Prompts de busca para dev** (`$SKILL_HOME/prompts/search-prompts.md`) — 8 categorias de busca, sistema de evolução de perguntas (question evolution) e prompts por domínio.
@@ -81,7 +81,7 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 
 ## Como funciona
 
-O deep-orchestrator nunca escreve código. Ele atua como arquiteto-distribuidor: projeta o plano, divide o trabalho em ondas topológicas (quantas forem necessárias — o REVISOR DE PLANO recalcula após cada onda), cria e batiza worktrees isoladas do Git (uma por sub-agente), dispara os agentes em paralelo, aplica revisão adversarial, integra cada resultado via `git merge --squash` um a um — o gate (o trio GATE_BUILD/GATE_TEST/GATE_LINT registrado na FASE 1) roda em background numa worktree de snapshot efêmera `int-ondaN-*`, fora da seção crítica — remove worktree + branch + commits intermediários ao fim de cada onda (a limpeza de cada filha aguarda o verde do snapshot), e commita tudo ao final.
+O deep-orchestrator-agent-skill nunca escreve código. Ele atua como arquiteto-distribuidor: projeta o plano, divide o trabalho em ondas topológicas (quantas forem necessárias — o REVISOR DE PLANO recalcula após cada onda), cria e batiza worktrees isoladas do Git (uma por sub-agente), dispara os agentes em paralelo, aplica revisão adversarial, integra cada resultado via `git merge --squash` um a um — o gate (o trio GATE_BUILD/GATE_TEST/GATE_LINT registrado na FASE 1) roda em background numa worktree de snapshot efêmera `int-ondaN-*`, fora da seção crítica — remove worktree + branch + commits intermediários ao fim de cada onda (a limpeza de cada filha aguarda o verde do snapshot), e commita tudo ao final.
 
 ```
 ANALYZE  →  PLAN  →  EXECUTE-ONDA (repeat, ILIMITADO)  →  COMMIT-FINAL
@@ -113,29 +113,29 @@ ANALYZE  →  PLAN  →  EXECUTE-ONDA (repeat, ILIMITADO)  →  COMMIT-FINAL
 
 ## Técnicas e fundamentos
 
-O deep-orchestrator não inventa orquestração do zero: ele compõe técnicas documentadas e verificadas (pesquisa profunda com fontes, agosto/2026) em cima do que o harness já oferece. As três colunas abaixo — ECC, busca em camadas e sub-agentes nativos — explicam de onde vem cada peça.
+O deep-orchestrator-agent-skill não inventa orquestração do zero: ele compõe técnicas documentadas e verificadas (pesquisa profunda com fontes, agosto/2026) em cima do que o harness já oferece. As três colunas abaixo — ECC, busca em camadas e sub-agentes nativos — explicam de onde vem cada peça.
 
 ### ECC — Everything Claude Code (a técnica-mãe)
 
-O [ECC — Everything Claude Code](https://github.com/affaan-m/ECC) (MIT) é um sistema massivo de otimização de harness de agentes: **67 agents, 281 skills, 94 commands**, além de hooks, Memory Vault, Continuous Learning e AgentShield (auditoria de segurança do próprio harness). O deep-orchestrator não o copia — **porta e adapta** o que ele faz de melhor, no fluxo `plan → test → implement → review → verify → remember → improve`:
+O [ECC — Everything Claude Code](https://github.com/affaan-m/ECC) (MIT) é um sistema massivo de otimização de harness de agentes: **67 agents, 281 skills, 94 commands**, além de hooks, Memory Vault, Continuous Learning e AgentShield (auditoria de segurança do próprio harness). O deep-orchestrator-agent-skill não o copia — **porta e adapta** o que ele faz de melhor, no fluxo `plan → test → implement → review → verify → remember → improve`:
 
 - `prompts/ecc-prompts.md` — **7 templates de prompt** portados: System Prompt Base, Planning Prompt (Plan First), Code Review (método de confiança + veredito APPROVE/WARNING/BLOCK), Security Review (AgentShield + checklist OWASP), Memory Persistence, Continuous Improvement (instincts com scoring de confiança 0.3–0.9) e Clone-Analyze-Discard.
 - `prompts/ecc-skills.md` — **7 skills** portadas no formato ECC (frontmatter YAML + workflow em passos): `tdd-workflow` (TDD gated RED→GREEN→REFACTOR com evidência e cobertura ≥ 80%), `security-audit` (checklist OWASP de 10 pontos + revisão do harness), `doc-generator` (docs/ADRs a partir do diff), `research-deep-dive` (search-first com matriz Adotar/Estender/Compor/Construir), `memory-vault` (handoffs entre ondas e sessões), `clone-and-analyze` (portar o melhor de repos de referência em worktree isolada) e `code-quality-gate` (gate mecânico determinístico — o braço de execução do gate pós-squash).
 
 Princípio transversal herdado: **entrada NÃO confiável** — planos, diffs e repos clonados são lidos como texto não confiável; comandos embutidos só rodam após sanitização contra whitelist (test, lint, typecheck, coverage).
 
-### Busca em camadas — o caso surf-skill e a pesquisa nativa do harness
+### Busca em camadas — o caso surf-agent-skill e a pesquisa nativa do harness
 
 A pesquisa externa segue uma cadeia com fallback automático (`scripts/search.sh`), verificada antes de cada onda (`check-search-credits.sh`) e processada em lotes paralelos (`search-parallel.sh`):
 
 | Tier | Provedor | Notas |
 |------|----------|-------|
 | 0 | **Pesquisa nativa do harness** (Claude Code: `WebSearch`/`WebFetch`) | quando o harness que hospeda a skill expõe ferramentas de busca próprias, usamos a dele — sem chave, sem script |
-| 1 | surf-skill (`surf-search-normal`) | multi-provider AI-powered; qualidade máxima; exige o CLI surf-ai |
+| 1 | surf-agent-skill (`surf-search-normal`) | multi-provider AI-powered; qualidade máxima; exige o CLI surf-ai |
 | 2 | Brave Search API (`brave-search.sh` + `BRAVE_API_KEY`) | API direta; atenção ao modelo metered da Brave (fev/2026) — créditos mensais |
 | 3 | DuckDuckGo Instant Answer | keyless, disponível enquanto houver rede; cobertura limitada (não é full-text) |
 
-**O caso surf-skill**: o surf-skill foi o provedor original da busca, substituído por uma busca Brave interna na v3.0.0, e **voltou como Tier 1 na v3.3.0** — a cadeia ficou em 3 tiers de novo (a busca Brave virou Tier 2). A regra do Tier 0 é a do harness: **se o agente que está rodando a skill já tem pesquisa nativa (o Claude Code tem `WebSearch`/`WebFetch`), usamos a dele**; o `search.sh` continua sendo a interface unificada e o fallback determinístico para harnesses sem ferramenta de busca (pi, jcode, opencode) e para sub-agentes sem acesso a ela. No template de delegação do SKILL.md, o sub-agente usa `{{SKILL_HOME}}/scripts/search.sh` — e, no Claude Code, pode usar as ferramentas nativas do harness quando disponíveis.
+**O caso surf-agent-skill**: o surf-agent-skill foi o provedor original da busca, substituído por uma busca Brave interna na v3.0.0, e **voltou como Tier 1 na v3.3.0** — a cadeia ficou em 3 tiers de novo (a busca Brave virou Tier 2). A regra do Tier 0 é a do harness: **se o agente que está rodando a skill já tem pesquisa nativa (o Claude Code tem `WebSearch`/`WebFetch`), usamos a dele**; o `search.sh` continua sendo a interface unificada e o fallback determinístico para harnesses sem ferramenta de busca (pi, jcode, opencode) e para sub-agentes sem acesso a ela. No template de delegação do SKILL.md, o sub-agente usa `{{SKILL_HOME}}/scripts/search.sh` — e, no Claude Code, pode usar as ferramentas nativas do harness quando disponíveis.
 
 ### Sub-agentes no Claude Code — nativos, nenhum plugin necessário
 
@@ -147,22 +147,22 @@ A pesquisa externa segue uma cadeia com fallback automático (`scripts/search.sh
 - **Paralelismo**: nativo, com teto de **20 sub-agentes concorrentes por sessão** (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, v2.1.217+) e até 3 níveis de profundidade de spawn — o teto efetivo das ondas do orquestrador é `min(DO_MAX_PARALLEL, 20)`: o default do DO_MAX_PARALLEL virou **50**, mas o harness impõe 20 concorrentes reais por sessão (filas do resto), então na prática as ondas raramente passam de ~20 em voo.
 - **Terminal novo**: agentes de usuário em `~/.claude/agents/` persistem em todos os projetos. Prioridade de resolução de nomes: managed settings (org) > flag `--agents` (JSON, vale só na sessão) > `.claude/agents/` (projeto) > `~/.claude/agents/` (usuário) > `agents/` de plugins. Desde a v2.1.198 o `/agents` não abre mais wizard — imprime onde editar os arquivos.
 - **Plugins (aditivos, opcionais)**: o sistema `/plugin` empacota skills, hooks, MCP e **também agentes prontos** (pasta `agents/` do plugin; invocados por @-mention escopado `plugin:agente`). Marketplaces: o oficial `anthropics/claude-plugins-official` (adicionado automaticamente na primeira execução; ex.: `pr-review-toolkit`, com 6 agentes de revisão de PR) e o comunitário `anthropics/claude-plugins-community` (com triagem de segurança da Anthropic — que **só** vale para ele: plugins de URLs git arbitrárias ou diretórios locais não passam por triagem). Coleções grandes de terceiros existem (ex.: `wshobson/agents`, 200+ agentes) — **nenhuma é necessária** para o que este projeto faz.
-- **Equipes nativas** (`agent teams`): existem no harness, mas são **experimentais e desabilitadas por padrão** — o sistema de ondas com worktrees do deep-orchestrator segue sendo a abordagem de produção.
-- **Nota**: o harness também tem `claude --worktree <nome>` para sessões paralelas isoladas; o deep-orchestrator mantém o sistema próprio (R6/R8, `do-wt.sh`) porque precisa de nomes, branches e limpeza controlados por registro (`owned.tsv`) — isolamento real por worktree, não apenas por sessão.
+- **Equipes nativas** (`agent teams`): existem no harness, mas são **experimentais e desabilitadas por padrão** — o sistema de ondas com worktrees do deep-orchestrator-agent-skill segue sendo a abordagem de produção.
+- **Nota**: o harness também tem `claude --worktree <nome>` para sessões paralelas isoladas; o deep-orchestrator-agent-skill mantém o sistema próprio (R6/R8, `do-wt.sh`) porque precisa de nomes, branches e limpeza controlados por registro (`owned.tsv`) — isolamento real por worktree, não apenas por sessão.
 
 Fontes primárias: [subagents](https://code.claude.com/docs/en/subagents) · [agents — run in parallel](https://code.claude.com/docs/en/agents) · [discover-plugins](https://code.claude.com/docs/en/discover-plugins) · [claude-plugins-official](https://github.com/anthropics/claude-plugins-official) · [claude-plugins-community](https://github.com/anthropics/claude-plugins-community). Fatos version-sensitive (v2.1.63 / v2.1.186 / v2.1.198 / v2.1.217+) devem ser conferidos contra a versão do Claude Code instalada.
 
 ## Estrutura da casa da skill (`$SKILL_HOME`)
 
 ```
-deep-orchestrator/
+deep-orchestrator-agent-skill/
 ├── README.md                    # Este arquivo
 ├── SKILL.md                     # Definição do skill v3.5.0 (frontmatter YAML + XML do orquestrador)
 ├── scripts/
 │   ├── README.md                # Índice de todos os scripts e o fluxo de busca 3-tier
 │   ├── do-context.sh            # FASE 0 — delimita a raiz-de-mundo e grava o estado
 │   ├── do-wt.sh                 # ciclo de vida das worktrees-filhas (guardas de contenção)
-│   ├── search.sh                # interface única de busca 3-tier (surf-skill → Brave → DDG keyless)
+│   ├── search.sh                # interface única de busca 3-tier (surf-agent-skill → Brave → DDG keyless)
 │   ├── search-parallel.sh       # busca em lote paralelo (uma chamada por lote, nunca loop)
 │   ├── check-search-credits.sh  # verificador multi-tier pré-onda (exit 0/1/2)
 │   ├── check-plannotator.sh     # FASE 2.5 — resolve/instala o Plannotator (exit 0/1/2)
@@ -187,8 +187,8 @@ deep-orchestrator/
 
 - Claude Code (CLI)
 - Git
-- **Brave Search API key** — `export BRAVE_API_KEY=<chave>` (https://api.search.brave.com/app/keys) — **OPCIONAL**: habilita o Tier 2. Sem ela, a busca segue funcional em modo degradado (Tier 3 DuckDuckGo keyless, Instant Answer com cobertura limitada) e o Tier 1 (surf-skill) dispensa a chave. **Modelo metered da Brave (desde fev/2026)**: os planos dão créditos mensais e passam a COBRAR pelo uso que excede a quota — a verificação pré-onda (`check-search-credits.sh`) é também proteção financeira
-- **`surf-search-normal` (surf-skill)** — **OPCIONAL**: habilita o Tier 1 (multi-provider AI-powered). Ausente, a busca cai direto para os Tiers 2/3
+- **Brave Search API key** — `export BRAVE_API_KEY=<chave>` (https://api.search.brave.com/app/keys) — **OPCIONAL**: habilita o Tier 2. Sem ela, a busca segue funcional em modo degradado (Tier 3 DuckDuckGo keyless, Instant Answer com cobertura limitada) e o Tier 1 (surf-agent-skill) dispensa a chave. **Modelo metered da Brave (desde fev/2026)**: os planos dão créditos mensais e passam a COBRAR pelo uso que excede a quota — a verificação pré-onda (`check-search-credits.sh`) é também proteção financeira
+- **`surf-search-normal` (surf-agent-skill)** — **OPCIONAL**: habilita o Tier 1 (multi-provider AI-powered). Ausente, a busca cai direto para os Tiers 2/3
 - `curl` e `jq` (usados pelos scripts de busca)
 - `project-router` skill resolvido a partir da raiz-de-mundo (`<raiz>/.claude/skills/project-router/` ou `<raiz>/.agents/skills/project-router/`). Ausente, o sub-agente registra no handoff e segue — não cai para o repositório principal nem para `~/.claude`
 
@@ -200,32 +200,32 @@ Uma worktree recém-criada **não** herda `node_modules`, `.venv` ou `target`: s
 
 ```bash
 # Clone o repositório
-git clone <repo-url> ~/Projects/deep-orchestrator
+git clone <repo-url> ~/Projects/deep-orchestrator-agent-skill
 
 # Adicione ao seu projeto como skill — copie o diretório INTEIRO,
 # pois scripts/, prompts/ e templates/ são referenciados pelo SKILL.md
-mkdir -p .claude/skills/deep-orchestrator
-cp -r SKILL.md scripts prompts templates .claude/skills/deep-orchestrator/
+mkdir -p .claude/skills/deep-orchestrator-agent-skill
+cp -r SKILL.md scripts prompts templates .claude/skills/deep-orchestrator-agent-skill/
 
 # Este bloco é setup MANUAL do usuário, executado UMA VEZ, fora de qualquer
 # execução da skill — NUNCA por um sub-agente. A skill não se auto-instala no
 # repositório-alvo: ela é lida de $SKILL_HOME.
 
 # OPCIONAL — defina a chave da Brave Search API (habilita o Tier 2); sem ela,
-# a busca segue via Tier 1 (surf-skill) e/ou Tier 3 (DDG keyless)
+# a busca segue via Tier 1 (surf-agent-skill) e/ou Tier 3 (DDG keyless)
 export BRAVE_API_KEY=<chave>
 ```
 
 ## Uso
 
 ```
-/deep-orchestrator <descrição da tarefa>
-/deep-orchestrator mp=N <descrição da tarefa>            # prefixo OPCIONAL
-/deep-orchestrator plan=on <descrição da tarefa>          # prefixo OPCIONAL — força o portão
-/deep-orchestrator plan=off faça um plano e execute       # força a autonomia total
-/deep-orchestrator wt=on <descrição da tarefa>            # prefixo OPCIONAL — worktree irmã nomeada como raiz-de-mundo
-/deep-orchestrator wt=feature-x <descrição da tarefa>     # prefixo OPCIONAL — com nome explícito
-/deep-orchestrator no-stop <descrição da tarefa>         # prefixo OPCIONAL — remove o teto de 10 ondas
+/deep-orchestrator-agent-skill <descrição da tarefa>
+/deep-orchestrator-agent-skill mp=N <descrição da tarefa>            # prefixo OPCIONAL
+/deep-orchestrator-agent-skill plan=on <descrição da tarefa>          # prefixo OPCIONAL — força o portão
+/deep-orchestrator-agent-skill plan=off faça um plano e execute       # força a autonomia total
+/deep-orchestrator-agent-skill wt=on <descrição da tarefa>            # prefixo OPCIONAL — worktree irmã nomeada como raiz-de-mundo
+/deep-orchestrator-agent-skill wt=feature-x <descrição da tarefa>     # prefixo OPCIONAL — com nome explícito
+/deep-orchestrator-agent-skill no-stop <descrição da tarefa>         # prefixo OPCIONAL — remove o teto de 10 ondas
 ```
 
 O prefixo `wt=` (WT-ROOT) é o fato novo desta versão. Ele cria — ou reentra — uma worktree **irmã verdadeira** do projeto em `<pai>/<repo>.worktrees/<nome>` e faz **todo** o trabalho **dentro dela**, preservando o checkout principal intacto. O fluxo:
@@ -296,7 +296,7 @@ Tarefas complexas que se beneficiam de decomposição em ondas paralelas — esp
 ### Exemplo
 
 ```
-/deep-orchestrator Adicionar endpoint de busca com cache a uma API REST
+/deep-orchestrator-agent-skill Adicionar endpoint de busca com cache a uma API REST
 ```
 
 O orquestrador vai:

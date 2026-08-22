@@ -120,7 +120,7 @@ Use quando `round` sai **10 (ANNOTATED)**. Este é o caminho principal da fase,
 não uma exceção.
 
 ```
-Você está na FASE 2.5 do deep-orchestrator, revisão {{N}} de {{MAX}}.
+Você está na FASE 2.5 do deep-orchestrator-agent-skill, revisão {{N}} de {{MAX}}.
 
 O usuário anotou o plano no Plannotator. O trabalho agora é REGERAR O PLANO —
 NÃO é implementar nada. É PROIBIDO escrever código, criar worktree ou tratar

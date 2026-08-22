@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# brave-search.sh — Wrapper da Brave Search API para o deep-orchestrator
+# brave-search.sh — Wrapper da Brave Search API para o deep-orchestrator-agent-skill
 # -----------------------------------------------------------------------------
 # Substitui o surf-search-normal usando diretamente a API do Brave Search,
 # permitindo que os sub-agentes do orquestrador pesquisem sem o CLI surf-ai.

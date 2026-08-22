@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>deep-orchestrator — Auditoria completa e plano de melhorias</title>
+<title>deep-orchestrator-agent-skill — Auditoria completa e plano de melhorias</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -193,7 +193,7 @@ footer {
 <div class="container">
 
 <header>
-  <span class="eyebrow">Plano de melhorias · deep-orchestrator v3.2.0</span>
+  <span class="eyebrow">Plano de melhorias · deep-orchestrator-agent-skill v3.2.0</span>
   <h1>Auditoria completa: erros, paralelismo ilusório e o redesenho do fim de onda</h1>
   <div class="prompt-box">
     <span class="prompt-label">Brief</span>
@@ -452,7 +452,7 @@ footer {
         </marker>
       </defs>
       <rect x="12" y="50" width="126" height="56" rx="10" class="box"/>
-      <text x="75" y="72" text-anchor="middle" class="t">T1 · surf-skill</text>
+      <text x="75" y="72" text-anchor="middle" class="t">T1 · surf-agent-skill</text>
       <text x="75" y="88" text-anchor="middle" class="s">fix: --budget-ms</text>
       <line x1="138" y1="78" x2="150" y2="78" class="e" marker-end="url(#c)"/>
       <rect x="154" y="50" width="126" height="56" rx="10" class="box"/>
@@ -535,7 +535,7 @@ args+=( <span class="fn">--budget-ms</span> <span class="str">"$(( TIMEOUT * 100
     <div class="risk-row">
       <div class="risk-name">README raiz parou na v3.0.0</div>
       <div><span class="badge med">Alto</span></div>
-      <div class="risk-mitigation">Cita <code>check-brave-credits.sh</code> (deprecated), diz que o surf-skill "foi removido" (foi reintroduzido como Tier 1), omite <code>search.sh</code> da árvore, exige BRAVE_API_KEY (com Tier 3 é opcional). O 3-tier entrou sem bump de versão. Fix: v3.3.0 + seção de novidades + sincronizar com <code>scripts/README.md</code> (que está correto).</div>
+      <div class="risk-mitigation">Cita <code>check-brave-credits.sh</code> (deprecated), diz que o surf-agent-skill "foi removido" (foi reintroduzido como Tier 1), omite <code>search.sh</code> da árvore, exige BRAVE_API_KEY (com Tier 3 é opcional). O 3-tier entrou sem bump de versão. Fix: v3.3.0 + seção de novidades + sincronizar com <code>scripts/README.md</code> (que está correto).</div>
     </div>
     <div class="risk-row">
       <div class="risk-name">Prompts ECC ensinam padrões proibidos</div>
@@ -658,7 +658,7 @@ args+=( <span class="fn">--budget-ms</span> <span class="str">"$(( TIMEOUT * 100
   </div>
   <div class="callout">
     <h3>Executar as correções agora?</h3>
-    <p>Este documento é só diagnóstico + plano. As 4 fases de correção são um trabalho multi-arquivo separado — que pode ele mesmo rodar sob o deep-orchestrator (dogfooding) uma vez corrigidos os críticos #1 e #5.</p>
+    <p>Este documento é só diagnóstico + plano. As 4 fases de correção são um trabalho multi-arquivo separado — que pode ele mesmo rodar sob o deep-orchestrator-agent-skill (dogfooding) uma vez corrigidos os críticos #1 e #5.</p>
     <span class="decide-with">Decide with: usuário</span>
   </div>
 </section>
@@ -678,7 +678,7 @@ args+=( <span class="fn">--budget-ms</span> <span class="str">"$(( TIMEOUT * 100
 </section>
 
 <footer>
-  <span>deep-orchestrator · auditoria com 8 subagentes paralelos + 2 pesquisas web ao vivo</span>
+  <span>deep-orchestrator-agent-skill · auditoria com 8 subagentes paralelos + 2 pesquisas web ao vivo</span>
   <span>achados completos com arquivo:linha nos relatórios da sessão</span>
 </footer>
 

@@ -3,13 +3,13 @@
 # check-search-credits.sh — Verifica disponibilidade de TODAS as camadas de busca
 # -----------------------------------------------------------------------------
 # Substitui check-brave-credits.sh como verificador pré-onda do orquestrador.
-# Verifica surf-skill (Tier 1), Brave API (Tier 2) e DuckDuckGo keyless (Tier 3).
+# Verifica surf-agent-skill (Tier 1), Brave API (Tier 2) e DuckDuckGo keyless (Tier 3).
 #
 # Uso:
 #   check-search-credits.sh [--fail-fast] [--json]
 #
 # Camadas verificadas (em ordem de prioridade):
-#   Tier 1 — surf-skill:    surf-search-normal + surf-free-skill (AI-powered multi-provider)
+#   Tier 1 — surf-agent-skill:    surf-search-normal + surf-free-skill (AI-powered multi-provider)
 #   Tier 2 — Brave API:     Brave Search API com chave de assinatura (legacy)
 #   Tier 3 — Keyless DDG:   DuckDuckGo Instant Answer API (fallback sem chave)
 #
@@ -42,8 +42,8 @@ usage() {
   cat <<EOF
 Uso: $SCRIPT_NAME [OPTS]
 
-Verificador pré-onda do deep-orchestrator. Testa TODAS as camadas de busca
-disponíveis (surf-skill, Brave API, DuckDuckGo keyless) e reporta o status
+Verificador pré-onda do deep-orchestrator-agent-skill. Testa TODAS as camadas de busca
+disponíveis (surf-agent-skill, Brave API, DuckDuckGo keyless) e reporta o status
 consolidado para que o orquestrador decida se os sub-agentes podem pesquisar.
 
 OPÇÕES
@@ -159,7 +159,7 @@ now_ms() {
 }
 
 # ---------------------------------------------------------------------------
-# Tier 1 — surf-skill (surf-search-normal + surf-free-skill)
+# Tier 1 — surf-agent-skill (surf-search-normal + surf-free-skill)
 # ---------------------------------------------------------------------------
 
 # Retorna via variáveis globais:
@@ -215,7 +215,7 @@ check_tier1_surf_skill() {
 
   # Monta detail
   local components=()
-  components+=("surf-skill v${T1_VERSION}")
+  components+=("surf-agent-skill v${T1_VERSION}")
   if [[ "$T1_HAS_SFS" == "true" ]]; then
     components+=("surf-free-skill available")
   else
@@ -501,7 +501,7 @@ compute_max_tier() {
 # tier_label <tier-number> → nome descritivo do tier
 tier_label() {
   case "$1" in
-    1) echo "full AI-powered multi-provider search (surf-skill)" ;;
+    1) echo "full AI-powered multi-provider search (surf-agent-skill)" ;;
     2) echo "Brave Search API (legacy, subscription-based)" ;;
     3) echo "DuckDuckGo keyless (limited, no API key needed)" ;;
     *) echo "NONE — no search available" ;;
@@ -552,11 +552,11 @@ human_output() {
   local max_tier vtext
 
   # Cabeçalho
-  echo "=== deep-orchestrator Search Status ==="
+  echo "=== deep-orchestrator-agent-skill Search Status ==="
 
   # Tier 1
   printf "%-${COL1_WIDTH}s %-${COL2_WIDTH}s %s\n" \
-    "Tier 1 (surf-skill):" \
+    "Tier 1 (surf-agent-skill):" \
     "$(status_icon "$T1_STATUS") $T1_STATUS" \
     "$T1_DETAIL"
 
@@ -628,7 +628,7 @@ json_output() {
     '{
       tiers: {
         "1": {
-          name: "surf-skill",
+          name: "surf-agent-skill",
           status: $t1_status,
           detail: $t1_detail,
           surf_search_normal: $t1_has_ssn,
@@ -679,7 +679,7 @@ main() {
     exit 2
   fi
 
-  # --- Tier 1: surf-skill ---
+  # --- Tier 1: surf-agent-skill ---
   check_tier1_surf_skill
 
   if (( FAIL_FAST )) && [[ "$T1_STATUS" == "AVAILABLE" ]]; then

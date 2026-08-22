@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # =============================================================================
-# search.sh — Unified search wrapper for deep-orchestrator
+# search.sh — Unified search wrapper for deep-orchestrator-agent-skill
 # -----------------------------------------------------------------------------
 # Smart wrapper com cadeia de fallback automática:
-#   Tier 1: surf-skill (multi-provider AI-powered) — BEST
+#   Tier 1: surf-agent-skill (multi-provider AI-powered) — BEST
 #   Tier 2: Brave Search API (direct, via search_brave_api sourced) — GOOD
 #   Tier 3: DuckDuckGo Instant Answer API (keyless) — conectividade garantida,
 #           cobertura limitada a instant answers (não é busca full-text)
@@ -56,7 +56,7 @@ usage() {
   cat <<EOF
 Uso: $SCRIPT_NAME [OPTS] "<query>"
 
-Smart search wrapper do deep-orchestrator (fallback automático).
+Smart search wrapper do deep-orchestrator-agent-skill (fallback automático).
 
 ARGUMENTOS
   "<query>"                 A pergunta/tópico a pesquisar (obrigatório,
@@ -349,13 +349,13 @@ json_report() {
      | with_entries(select(.value != null))'
 }
 
-# --- Tier 1: surf-skill -------------------------------------------------------
+# --- Tier 1: surf-agent-skill -------------------------------------------------------
 # Retorna 0 e imprime resultados em stdout se bem-sucedido.
 # Retorna não-zero se falhar (mensagens de erro em stderr).
 try_surf_skill() {
   local surf_bin="surf-search-normal"
   if ! command -v "$surf_bin" &>/dev/null; then
-    echo "[search.sh] Tier 1 (surf-skill) não encontrado no PATH, pulando Tier 1." >&2
+    echo "[search.sh] Tier 1 (surf-agent-skill) não encontrado no PATH, pulando Tier 1." >&2
     return 1
   fi
 
@@ -396,7 +396,7 @@ try_surf_skill() {
   set -e
 
   if [[ $surf_rc -ne 0 ]]; then
-    echo "[search.sh] Tier 1 (surf-skill) retornou exit code $surf_rc" >&2
+    echo "[search.sh] Tier 1 (surf-agent-skill) retornou exit code $surf_rc" >&2
     rm -f "$surf_out_file"
     return 1
   fi
@@ -414,7 +414,7 @@ try_surf_skill() {
       end_ms="$(now_ms)"
       start_ms="${_search_start_ms:-$end_ms}"
       duration_ms=$(( end_ms - start_ms ))
-      json_report "$results" "$duration_ms" "surf-skill" "$answer"
+      json_report "$results" "$duration_ms" "surf-agent-skill" "$answer"
     else
       echo "AVISO: saída do Tier 1 não é JSON válido (com --json); repassando cru." >&2
       echo "$raw"
@@ -667,11 +667,11 @@ main() {
   _search_start_ms="$(now_ms)"
   export _search_start_ms
 
-  # --- Tier 1: surf-skill (a própria função decide se o binário existe) ---
+  # --- Tier 1: surf-agent-skill (a própria função decide se o binário existe) ---
   if try_surf_skill; then
     return 0
   fi
-  echo "[search.sh] Tier 1 (surf-skill) falhou, caindo para Tier 2..." >&2
+  echo "[search.sh] Tier 1 (surf-agent-skill) falhou, caindo para Tier 2..." >&2
 
   # --- Tier 2: Brave API ---
   if [[ -n "${BRAVE_API_KEY:-}" ]]; then

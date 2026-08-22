@@ -4,7 +4,7 @@
 # -----------------------------------------------------------------------------
 # O problema: cada agente lê skills de um lugar diferente, e alguns IMPORTAM POR
 # CÓPIA. Uma cópia congela a versão do dia da importação — verificado nesta
-# máquina: ~/.jcode/skills/deep-orchestrator estava em 3.1.0 enquanto a skill
+# máquina: ~/.jcode/skills/deep-orchestrator-agent-skill estava em 3.1.0 enquanto a skill
 # viva já estava em 3.4.0. Rodar a skill por lá executava um orquestrador de
 # duas versões atrás, sem as fases novas. Este script substitui cópia por
 # SYMLINK, e symlink não envelhece.
@@ -23,20 +23,20 @@
 #   ~/.pi/agent/skills/          pi     (skills globais, sempre confiáveis)
 #
 # GARANTIAS DE SEGURANÇA — este script mexe em $HOME, então:
-#   • toca EXCLUSIVAMENTE a entrada <destino>/deep-orchestrator; nenhuma outra
+#   • toca EXCLUSIVAMENTE a entrada <destino>/deep-orchestrator-agent-skill; nenhuma outra
 #     skill do usuário é lida, movida ou apagada;
 #   • se o destino JÁ É a casa da skill (quem clonou direto em
-#     ~/.claude/skills/deep-orchestrator), não faz nada: sem essa guarda, o
+#     ~/.claude/skills/deep-orchestrator-agent-skill), não faz nada: sem essa guarda, o
 #     script moveria a skill viva e criaria um link para si mesma (ELOOP),
 #     em silêncio, a partir de um hook;
 #   • um symlink só é dado como bem-sucedido depois de LER através dele
 #     (<destino>/scripts precisa existir); caso contrário a cópia é restaurada;
 #   • só substitui um diretório depois de CONFIRMAR que ele é uma cópia desta
-#     mesma skill (tem SKILL.md com `name: deep-orchestrator`). Qualquer outra
+#     mesma skill (tem SKILL.md com `name: deep-orchestrator-agent-skill`). Qualquer outra
 #     coisa é preservada e reportada — nunca há rm -rf às cegas;
 #   • não cria o diretório-pai de um agente que não existe: quem não usa jcode
 #     não ganha um ~/.jcode;
-#   • a cópia substituída é preservada em <destino>/deep-orchestrator.bak-<data>
+#   • a cópia substituída é preservada em <destino>/deep-orchestrator-agent-skill.bak-<data>
 #     na primeira vez, para que nada seja destruído sem rede de segurança.
 #
 # Exit codes:
@@ -47,7 +47,7 @@
 
 set -uo pipefail
 
-SKILL_NAME="deep-orchestrator"
+SKILL_NAME="deep-orchestrator-agent-skill"
 QUIET=0
 DRY_RUN=0
 STRICT=0
@@ -73,7 +73,7 @@ SKILL_HOME=$(cd "$_self_dir/.." && pwd -P 2>/dev/null || true)
   || { warn "sync-global-skill.sh: SKILL_HOME inválido ($SKILL_HOME)"; exit 2; }
 
 # O alvo do link é o diretório que CONTÉM o SKILL.md. Nesta skill o SKILL.md da
-# raiz é um symlink para .claude/skills/deep-orchestrator/SKILL.md, e é a raiz
+# raiz é um symlink para .claude/skills/deep-orchestrator-agent-skill/SKILL.md, e é a raiz
 # que carrega scripts/, prompts/ e templates/ — então a raiz é o alvo certo.
 SOURCE="$SKILL_HOME"
 [ -e "$SOURCE/SKILL.md" ] \
@@ -137,7 +137,7 @@ link_into() {
   if [ -e "$dest" ]; then
   # O DESTINO É A PRÓPRIA CASA DA SKILL? Não encoste.
   # Este é o caso do README: quem instala clonando direto em
-  # ~/.claude/skills/deep-orchestrator (ou em ~/.agents/skills/...) faz
+  # ~/.claude/skills/deep-orchestrator-agent-skill (ou em ~/.agents/skills/...) faz
   # dest == SOURCE. Sem esta guarda, o ramo de "cópia antiga" moveria a skill
   # VIVA para .bak-<data> e criaria um symlink apontando para o caminho que
   # acabou de esvaziar: um link para si mesmo. O `ln` teria sucesso, o rollback

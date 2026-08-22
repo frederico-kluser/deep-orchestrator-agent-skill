@@ -1,4 +1,4 @@
-# Plano de Produto — deep-orchestrator v3.2 → v4
+# Plano de Produto — deep-orchestrator-agent-skill v3.2 → v4
 
 **7 Decisões de Engenharia Priorizadas** | Data: 2026-08-03 | Base: pesquisa multi-agente com revisão adversarial (~1.300 fontes)
 
@@ -6,7 +6,7 @@
 
 ## Sumário executivo
 
-O deep-orchestrator (v3.1.0) já entrega o pacote raro de **worktree isolation + revisão adversarial + testing subwave** em um único fluxo autônomo (ANALYZE → PLAN → EXECUTE-ONDA ilimitado → COMMIT-FINAL). O plano abaixo responde à pergunta "de suporte a tudo que usamos" com 7 decisões ordenadas por impacto × urgência:
+O deep-orchestrator-agent-skill (v3.1.0) já entrega o pacote raro de **worktree isolation + revisão adversarial + testing subwave** em um único fluxo autônomo (ANALYZE → PLAN → EXECUTE-ONDA ilimitado → COMMIT-FINAL). O plano abaixo responde à pergunta "de suporte a tudo que usamos" com 7 decisões ordenadas por impacto × urgência:
 
 | # | Decisão | Timeline | Esforço | Impacto |
 |---|---------|----------|---------|---------|
@@ -66,7 +66,7 @@ O deep-orchestrator (v3.1.0) já entrega o pacote raro de **worktree isolation +
 
 - **Decisão:** Adotar o dual padrão do mercado — **SKILL.md** (capacidades on-demand) + **AGENTS.md** (contexto sempre-on de projeto) — e migrar as ~20 skills do usuário, corrigindo os 7 problemas de portabilidade detectados. Para Claude Code (única ferramenta que não lê AGENTS.md nativamente), injetar `@AGENTS.md` no CLAUDE.md.
 - **Evidência:** SKILL.md é adotado por 25-30+ produtos (formato universal); AGENTS.md por 20+ ferramentas sob a Linux Foundation; Claude Code é a única exceção na leitura nativa de AGENTS.md [14]. Auditoria: 7 skills com problemas (1 YAML quebrado, 2 com underscore no nome, 4 com description >1024 chars); migração estimada em 1-2 dias [15].
-- **Ação concreta:** corrigir o frontmatter YAML quebrado; renomear underscores para kebab-case; encurtar descriptions para ≤1024 chars (validar com lint de frontmatter em CI); gerar AGENTS.md de projeto (ou `@AGENTS.md` no CLAUDE.md); documentar o dual no README do deep-orchestrator como padrão a propagar nos repositórios-alvo.
+- **Ação concreta:** corrigir o frontmatter YAML quebrado; renomear underscores para kebab-case; encurtar descriptions para ≤1024 chars (validar com lint de frontmatter em CI); gerar AGENTS.md de projeto (ou `@AGENTS.md` no CLAUDE.md); documentar o dual no README do deep-orchestrator-agent-skill como padrão a propagar nos repositórios-alvo.
 - **Esforço:** 2-3 dias (baixo).
 - **Timeline:** **v3.2**.
 
@@ -98,7 +98,7 @@ O deep-orchestrator (v3.1.0) já entrega o pacote raro de **worktree isolation +
 |------|----------------------|------|------------|
 | Worktree isolation | Virou commodity: Gemini CLI, Loop Engineer, WLP, girelay, Koi, hort, Unstoppable Code; "Isolate" (base JJ) mostra que worktrees quebram com 4+ agentes [9] | Pacote **integrado** worktree + adversarial + testing em um fluxo autônomo que commita sem perguntar | Não vender worktree; vender o loop completo e a autonomia |
 | Test no loop | Loop Engineer tem TEST gated (ANALYZE → PLAN → IMPLEMENT → TEST → REVIEW → DECIDE); @pi-agents/orchid tem tester dedicado — ambos **seriais** [10] | Testing subwaves **assíncronas paralelas** (vs single-shot serial) — potencialmente único [10] | Aprofundar (D3): sharding paralelo + re-delegação por falha |
-| Revisão adversarial | Ausente nos 10 frameworks principais; externamente robusto como **cola externa** (ai-jury, Comfy 4 labs/8 reviews/PR, MMAR, rev4nchist, Aris) [11] | deep-orchestrator já tem adversarial **nativo**, mas abaixo do padrão externo | Fechar o gap (D3): jury cross-vendor e multi-review opcionais nativos |
+| Revisão adversarial | Ausente nos 10 frameworks principais; externamente robusto como **cola externa** (ai-jury, Comfy 4 labs/8 reviews/PR, MMAR, rev4nchist, Aris) [11] | deep-orchestrator-agent-skill já tem adversarial **nativo**, mas abaixo do padrão externo | Fechar o gap (D3): jury cross-vendor e multi-review opcionais nativos |
 | Handoff estruturado | Structured notes reduzem custo em só 29-44% [1] | Trace bruto reduz 57-59% [1]; híbrido frontmatter+markdown+trace é o ponto ótimo | Adotar schema híbrido (D4) |
 
 **Resumo:** o único diferencial potencialmente inimitável hoje é o testing subwave assíncrono paralelo; o adversarial nativo é o gap mais curto de fechar; worktree isoladamente não vale mais como argumento de venda.

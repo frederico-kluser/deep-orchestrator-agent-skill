@@ -74,7 +74,7 @@ THIRD_BEFORE=$(git -C "$LAB/wtThird" rev-parse --abbrev-ref HEAD)
 "$WT" new feature onda1-cache >/dev/null || bad "A6 new onda1-cache"
 "$WT" new feature onda1-schema >/dev/null || bad "A6 new onda1-schema"
 chk "A6 filhas em CHILD_ROOT" "$(ls "$CHILD_ROOT" | tr '\n' ' ')" "onda1-cache onda1-schema "
-chk "A4 gstatus esconde estado" "$(gstatus | grep -c deep-orchestrator)" "0"
+chk "A4 gstatus esconde estado" "$(gstatus | grep -c deep-orchestrator-agent-skill)" "0"
 chk "A4 add -A puro não pega filha" "$(cd "$BASE_DIR" && git add -A --dry-run 2>&1 | grep -c 'embedded git')" "0"
 git -C "$BASE_DIR" reset -q 2>/dev/null
 
@@ -187,7 +187,7 @@ git -C wtA config --local core.excludesFile "$LAB/global-ignore"
 env17=$( (cd wtA && "$CTX" --quiet --new-run) | tail -1 ); . "$env17"
 touch "$BASE_DIR/x.swp"
 chk "A17 arquivo globalmente ignorado não aparece" "$(gstatus | grep -c 'x.swp')" "0"
-chk "A17 estado da skill continua escondido" "$(gstatus | grep -c 'deep-orchestrator')" "0"
+chk "A17 estado da skill continua escondido" "$(gstatus | grep -c 'deep-orchestrator-agent-skill')" "0"
 rm -f "$BASE_DIR/x.swp"; git -C wtA config --local --unset core.excludesFile
 
 echo "=== A18/A19: verify distingue vazamento nosso de trabalho do usuário ==="
@@ -215,7 +215,7 @@ git -C "$CHILD_ROOT/onda9-commit" add -A -- ':(exclude,top).deep-orchestrator' \
   && git -C "$CHILD_ROOT/onda9-commit" commit -qm "wip"
 chk "A20 raiz-de-mundo intacta" "$(git -C "$BASE_DIR" rev-parse HEAD)" "$head_antes"
 chk "A20 commit foi para o branch da filha" "$(git -C "$CHILD_ROOT/onda9-commit" log --oneline -1 --format=%s)" "wip"
-chk "A20 estado da skill não entrou no commit" "$(git -C "$CHILD_ROOT/onda9-commit" show --name-only --format= HEAD | grep -c deep-orchestrator)" "0"
+chk "A20 estado da skill não entrou no commit" "$(git -C "$CHILD_ROOT/onda9-commit" show --name-only --format= HEAD | grep -c deep-orchestrator-agent-skill)" "0"
 "$WT" mark onda9-commit MERGED >/dev/null; "$WT" remove onda9-commit >/dev/null 2>&1; "$WT" drop-branch onda9-commit >/dev/null 2>&1
 
 echo "=== A22a: undo com edição tracked do usuário no baseline → revert preserva a edição ==="

@@ -1,8 +1,8 @@
-# ECC Prompts — Adaptados para deep-orchestrator
+# ECC Prompts — Adaptados para deep-orchestrator-agent-skill
 
 Templates de prompt extraídos e adaptados do **ECC — Everything Claude Code** (https://github.com/affaan-m/ECC, MIT): um sistema massivo de otimização de harness de agentes com 67 agents, 281 skills, 94 commands, hooks, Memory Vault, Continuous Learning e AgentShield.
 
-Cada template abaixo é uma peça reutilizável do fluxo de engenharia do ECC — `plan -> test -> implement -> review -> verify -> remember -> improve` — adaptada para o deep-orchestrator (orquestrador multi-agente com worktrees isoladas, squash-merge com gate, revisão adversarial e handoffs entre ondas). Use-os em prompts de delegação de sub-agentes, templates internos do orquestrador ou como base para skills (ver `ecc-skills.md`).
+Cada template abaixo é uma peça reutilizável do fluxo de engenharia do ECC — `plan -> test -> implement -> review -> verify -> remember -> improve` — adaptada para o deep-orchestrator-agent-skill (orquestrador multi-agente com worktrees isoladas, squash-merge com gate, revisão adversarial e handoffs entre ondas). Use-os em prompts de delegação de sub-agentes, templates internos do orquestrador ou como base para skills (ver `ecc-skills.md`).
 
 Princípios do ECC que guiam todos os templates:
 
@@ -53,7 +53,7 @@ Slots compartilhados com o subagent-prompt-template do SKILL.md (mesmos valores,
 **Prompt:**
 
 ```markdown
-Você é {{ROLE}}, um agente especializado operando dentro do deep-orchestrator.
+Você é {{ROLE}}, um agente especializado operando dentro do deep-orchestrator-agent-skill.
 
 ## Identidade
 {{ROLE_DESCRIPTION}}
@@ -468,4 +468,4 @@ revisão adversarial, handoffs entre ondas):
 - Handoff do orquestrador com tudo o que o próximo agente precisa saber
 ```
 
-**Exemplo de uso:** Esta wave: `{{REPO_URL}} = https://github.com/affaan-m/ECC`, `{{OUR_CONTEXT}} = "deep-orchestrator: orquestrador multi-agente em worktrees isoladas"`, `{{OUTPUT_DIR}} = prompts/`. Resultado esperado: `prompts/ecc-prompts.md` (templates) e `prompts/ecc-skills.md` (skills portadas) — exatamente os artefatos deste diretório.
+**Exemplo de uso:** Esta wave: `{{REPO_URL}} = https://github.com/affaan-m/ECC`, `{{OUR_CONTEXT}} = "deep-orchestrator-agent-skill: orquestrador multi-agente em worktrees isoladas"`, `{{OUTPUT_DIR}} = prompts/`. Resultado esperado: `prompts/ecc-prompts.md` (templates) e `prompts/ecc-skills.md` (skills portadas) — exatamente os artefatos deste diretório.

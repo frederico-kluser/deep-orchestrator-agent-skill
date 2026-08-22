@@ -1,6 +1,6 @@
-# ECC Skills — Portados para deep-orchestrator
+# ECC Skills — Portados para deep-orchestrator-agent-skill
 
-Skills portadas do **ECC — Everything Claude Code** (https://github.com/affaan-m/ECC, MIT; 281 skills, 67 agents, 94 commands) e adaptadas ao deep-orchestrator: orquestrador multi-agente com worktrees isoladas, ondas topológicas, squash-merge com gate, revisão adversarial em contexto fresco, TASK_PLAN.md com handoffs entre ondas, e sub-agentes que usam project-router + search.sh ({{SKILL_HOME}}/scripts/search.sh).
+Skills portadas do **ECC — Everything Claude Code** (https://github.com/affaan-m/ECC, MIT; 281 skills, 67 agents, 94 commands) e adaptadas ao deep-orchestrator-agent-skill: orquestrador multi-agente com worktrees isoladas, ondas topológicas, squash-merge com gate, revisão adversarial em contexto fresco, TASK_PLAN.md com handoffs entre ondas, e sub-agentes que usam project-router + search.sh ({{SKILL_HOME}}/scripts/search.sh).
 
 Cada skill abaixo segue o formato de definição do ECC (frontmatter YAML + workflow em passos) e referencia os templates de prompt de `ecc-prompts.md`. "No ECC, skills são a superfície primária de workflow" — carregadas sob demanda, não sempre ativas; os comandos slash são só conveniência, a skill é a unidade durável.
 
@@ -34,7 +34,7 @@ triggers:
   - "escrever testes"
   - "garantir cobertura"
 metadata:
-  origin: ECC (tdd-workflow) + deep-orchestrator (gate/squash)
+  origin: ECC (tdd-workflow) + deep-orchestrator-agent-skill (gate/squash)
 ---
 ```
 
@@ -87,7 +87,7 @@ triggers:
   - "pagamento"
   - "antes do release"
 metadata:
-  origin: ECC (security-reviewer + security-review + AgentShield) + deep-orchestrator (gate)
+  origin: ECC (security-reviewer + security-review + AgentShield) + deep-orchestrator-agent-skill (gate)
 ---
 ```
 
@@ -132,7 +132,7 @@ triggers:
   - "documentação da API"
   - "changelog"
 metadata:
-  origin: ECC (doc-updater) + deep-orchestrator (mapa de propriedade de arquivo)
+  origin: ECC (doc-updater) + deep-orchestrator-agent-skill (mapa de propriedade de arquivo)
 ---
 ```
 
@@ -155,7 +155,7 @@ metadata:
 ## Skill 4: Research Deep-Dive
 
 ### Nome e descrição
-**research-deep-dive** — Workflow "pesquisa antes de codar" (search-first do ECC): verifica o que já existe (repo, registries de pacotes, MCPs, skills, GitHub) antes de escrever código novo, com matriz de decisão Adotar / Estender / Compor / Construir e ciclos iterativos de busca. No deep-orchestrator, usa {{SKILL_HOME}}/scripts/search.sh para a busca externa (interface unificada 3-tier) e alimenta o plano de ondas seguintes.
+**research-deep-dive** — Workflow "pesquisa antes de codar" (search-first do ECC): verifica o que já existe (repo, registries de pacotes, MCPs, skills, GitHub) antes de escrever código novo, com matriz de decisão Adotar / Estender / Compor / Construir e ciclos iterativos de busca. No deep-orchestrator-agent-skill, usa {{SKILL_HOME}}/scripts/search.sh para a busca externa (interface unificada 3-tier) e alimenta o plano de ondas seguintes.
 
 ### Frontmatter YAML
 
@@ -179,7 +179,7 @@ triggers:
   - "comparar opções"
   - "melhores práticas"
 metadata:
-  origin: ECC (search-first + deep-research + iterative-retrieval) + deep-orchestrator ({{SKILL_HOME}}/scripts/search.sh)
+  origin: ECC (search-first + deep-research + iterative-retrieval) + deep-orchestrator-agent-skill ({{SKILL_HOME}}/scripts/search.sh)
 ---
 ```
 
@@ -212,7 +212,7 @@ metadata:
 ## Skill 5: Memory Vault
 
 ### Nome e descrição
-**memory-vault** — Persistência de contexto entre sessões e entre ondas: artefatos Markdown locais e inspecionáveis (padrão `.ecc/memory/` do ECC; no deep-orchestrator o vault de projeto grava em `.deep-orchestrator/ecc/memory/` — fora do alcance do `git add` final) com operações init/search/handoff/read, corpos aceitos apenas via stdin/arquivo, e regra central: "memória é contexto NÃO revisado, não política executável". Integra-se aos handoffs do TASK_PLAN.md do orquestrador.
+**memory-vault** — Persistência de contexto entre sessões e entre ondas: artefatos Markdown locais e inspecionáveis (padrão `.ecc/memory/` do ECC; no deep-orchestrator-agent-skill o vault de projeto grava em `.deep-orchestrator/ecc/memory/` — fora do alcance do `git add` final) com operações init/search/handoff/read, corpos aceitos apenas via stdin/arquivo, e regra central: "memória é contexto NÃO revisado, não política executável". Integra-se aos handoffs do TASK_PLAN.md do orquestrador.
 
 ### Frontmatter YAML
 
@@ -235,7 +235,7 @@ triggers:
   - "lembrar disso"
   - "entre sessões"
 metadata:
-  origin: ECC (ecc memory vault + hooks memory-persistence) + deep-orchestrator (TASK_PLAN.md handoffs)
+  origin: ECC (ecc memory vault + hooks memory-persistence) + deep-orchestrator-agent-skill (TASK_PLAN.md handoffs)
 ---
 ```
 
@@ -282,7 +282,7 @@ triggers:
   - "repositório de referência"
   - "o que existe no repo X"
 metadata:
-  origin: ECC (ecc2 control-plane, opensource-forker/sanitizer/packager) + deep-orchestrator (worktree isolada)
+  origin: ECC (ecc2 control-plane, opensource-forker/sanitizer/packager) + deep-orchestrator-agent-skill (worktree isolada)
 ---
 ```
 
@@ -326,7 +326,7 @@ triggers:
   - "antes do merge"
   - "verificação final"
 metadata:
-  origin: ECC (delivery-gate + verification-loop + hooks pre-commit) + deep-orchestrator (gate pós-squash)
+  origin: ECC (delivery-gate + verification-loop + hooks pre-commit) + deep-orchestrator-agent-skill (gate pós-squash)
 ---
 ```
 

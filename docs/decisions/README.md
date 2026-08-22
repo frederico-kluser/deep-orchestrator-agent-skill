@@ -1,8 +1,8 @@
-# Decisões de produto — deep-orchestrator (histórico)
+# Decisões de produto — deep-orchestrator-agent-skill (histórico)
 
 **Origem:** artefatos da pesquisa multi-agente de 2026-08-03 (2 ondas, ~1.300
 fontes, revisão adversarial) que planejava a versão "v3.2" do
-deep-orchestrator com 7 decisões priorizadas por impacto × urgência.
+deep-orchestrator-agent-skill com 7 decisões priorizadas por impacto × urgência.
 `RESEARCH_PLAN.md` é o plano da pesquisa; `RESEARCH_ANSWER.md` é a resposta
 final com as 7 decisões (D1-D7), evidências e fontes.
 
@@ -17,7 +17,7 @@ RRF + Tavily/Exa), e nada no repositório referenciava o material. A migração
 | Decisão | Status na v3.2 real | Observação |
 |---|---|---|
 | D1 — Router de modelos 3-tier (Qwen3-Coder → DeepSeek V4-Flash → Claude) | NÃO implementada | Sem `config/router.yaml` nem módulo de roteamento no repo; a seleção de modelo continua externa (harness do usuário). As menções a "router" no repo são o project-router de repositórios-alvo, conceito distinto |
-| D2 — Busca multi-provider (Adapter + RRF k=60 + Tavily/Exa) | SUPERADA pela v3.2 real | A v3.2 implementou a cadeia 3-tier interna (surf-skill → Brave Search API → DuckDuckGo keyless) via `scripts/search.sh` + `scripts/search-parallel.sh` — arquitetura diferente, sem Tavily/Exa nem RRF, e sem provedor novo (decisão D3 do plano de melhorias) |
+| D2 — Busca multi-provider (Adapter + RRF k=60 + Tavily/Exa) | SUPERADA pela v3.2 real | A v3.2 implementou a cadeia 3-tier interna (surf-agent-skill → Brave Search API → DuckDuckGo keyless) via `scripts/search.sh` + `scripts/search-parallel.sh` — arquitetura diferente, sem Tavily/Exa nem RRF, e sem provedor novo (decisão D3 do plano de melhorias) |
 | D3 — Loop de qualidade nativo (testing subwaves assíncronas + adversarial) | IMPLEMENTADA (núcleo) | Subwaves assíncronas TESTING (`test-ondaN-*`) e VALIDATION (`val-ondaN-*`) + revisão adversarial do diff integrado, tudo no fluxo da skill; jury cross-vendor (parte v4 do plano) não |
 | D4 — Handoff híbrido schema v1 (frontmatter + markdown + trace bruto) | PARCIAL | Handoffs estruturados e separação de planos existem no fluxo; o schema v1 com frontmatter YAML parseável + trace bruto anexado não foi adotado integralmente (sem WAVE_LOG.md na skill) |
 | D5 — Plataforma de skills (SKILL.md + AGENTS.md dual) | PARCIAL | O formato SKILL.md foi adotado (este repositório é o exemplo, com frontmatter YAML e restrição de tools); o AGENTS.md dual não existe no repo |

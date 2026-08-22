@@ -689,44 +689,44 @@ SYNC="$SKILL/scripts/sync-global-skill.sh"
 newcase r5
 mkdir -p "$HOME/.claude/skills"
 # cenário do README: a skill INSTALADA É o destino (clone direto).
-cp -r "$SKILL" "$HOME/.claude/skills/deep-orchestrator"
-out=$("$HOME/.claude/skills/deep-orchestrator/scripts/sync-global-skill.sh" 2>&1); rc=$?
+cp -r "$SKILL" "$HOME/.claude/skills/deep-orchestrator-agent-skill"
+out=$("$HOME/.claude/skills/deep-orchestrator-agent-skill/scripts/sync-global-skill.sh" 2>&1); rc=$?
 chk "R5 exit 0" "$rc" "0"
 has "R5 reconhece que o destino é a própria casa" "$out" "É a própria casa da skill"
 chk "R5 a skill continua legível (sem ELOOP)" \
-  "$([ -r "$HOME/.claude/skills/deep-orchestrator/SKILL.md" ] && echo sim || echo nao)" "sim"
+  "$([ -r "$HOME/.claude/skills/deep-orchestrator-agent-skill/SKILL.md" ] && echo sim || echo nao)" "sim"
 chk "R5 scripts/ continua alcançável" \
-  "$([ -d "$HOME/.claude/skills/deep-orchestrator/scripts" ] && echo sim || echo nao)" "sim"
+  "$([ -d "$HOME/.claude/skills/deep-orchestrator-agent-skill/scripts" ] && echo sim || echo nao)" "sim"
 chk "R5 nenhum .bak criado" \
-  "$(ls -d "$HOME/.claude/skills"/deep-orchestrator.bak-* 2>/dev/null | wc -l | tr -d ' ')" "0"
+  "$(ls -d "$HOME/.claude/skills"/deep-orchestrator-agent-skill.bak-* 2>/dev/null | wc -l | tr -d ' ')" "0"
 # Irmão do R5: um symlink CORRETO também resolve para $SOURCE. Ele NÃO pode ser
 # anunciado como "é a própria casa" — é o caso mais comum e a mensagem errada
 # mascararia o que o script de fato fez.
 newcase r5b
 mkdir -p "$HOME/.agents/skills"
-ln -sfn "$SKILL" "$HOME/.agents/skills/deep-orchestrator"
+ln -sfn "$SKILL" "$HOME/.agents/skills/deep-orchestrator-agent-skill"
 out=$("$SYNC" 2>&1)
 has "R5b symlink correto é anunciado como symlink" "$out" "symlink já aponta para a casa da skill"
 hasnt "R5b e NÃO como 'a própria casa'" "$out" "É a própria casa da skill"
 
 # R6 (P2) — cópia velha VIRA symlink, e só é aceita se der para ler através.
 newcase r6
-mkdir -p "$HOME/.jcode/skills/deep-orchestrator"
-printf -- '---\nname: deep-orchestrator\n---\nvelho\n' > "$HOME/.jcode/skills/deep-orchestrator/SKILL.md"
+mkdir -p "$HOME/.jcode/skills/deep-orchestrator-agent-skill"
+printf -- '---\nname: deep-orchestrator-agent-skill\n---\nvelho\n' > "$HOME/.jcode/skills/deep-orchestrator-agent-skill/SKILL.md"
 out=$("$SKILL/scripts/sync-global-skill.sh" 2>&1)
 has "R6 cópia trocada por symlink" "$out" "jcode: CÓPIA"
 chk "R6 destino é symlink" \
-  "$([ -L "$HOME/.jcode/skills/deep-orchestrator" ] && echo sim || echo nao)" "sim"
+  "$([ -L "$HOME/.jcode/skills/deep-orchestrator-agent-skill" ] && echo sim || echo nao)" "sim"
 chk "R6 e resolve para a casa da skill" \
-  "$(cd "$HOME/.jcode/skills/deep-orchestrator" && pwd -P)" "$SKILL"
+  "$(cd "$HOME/.jcode/skills/deep-orchestrator-agent-skill" && pwd -P)" "$SKILL"
 chk "R6 backup da cópia preservado" \
-  "$(ls -d "$HOME/.jcode/skills"/deep-orchestrator.bak-* 2>/dev/null | wc -l | tr -d ' ')" "1"
+  "$(ls -d "$HOME/.jcode/skills"/deep-orchestrator-agent-skill.bak-* 2>/dev/null | wc -l | tr -d ' ')" "1"
 # diretório de terceiro NUNCA é tocado
-mkdir -p "$HOME/.pi/agent/skills/deep-orchestrator"
-printf -- '---\nname: outra-coisa\n---\n' > "$HOME/.pi/agent/skills/deep-orchestrator/SKILL.md"
+mkdir -p "$HOME/.pi/agent/skills/deep-orchestrator-agent-skill"
+printf -- '---\nname: outra-coisa\n---\n' > "$HOME/.pi/agent/skills/deep-orchestrator-agent-skill/SKILL.md"
 out=$("$SKILL/scripts/sync-global-skill.sh" 2>&1)
 chk "R6 diretório alheio preservado" \
-  "$([ -f "$HOME/.pi/agent/skills/deep-orchestrator/SKILL.md" ] && echo sim || echo nao)" "sim"
+  "$([ -f "$HOME/.pi/agent/skills/deep-orchestrator-agent-skill/SKILL.md" ] && echo sim || echo nao)" "sim"
 has "R6 e reportado, não apagado" "$out" "PRESERVADO"
 
 echo "=== DC4: com o portão DESLIGADO, a FASE 2.5 é inerte ==="

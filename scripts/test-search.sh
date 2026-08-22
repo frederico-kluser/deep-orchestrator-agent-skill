@@ -117,7 +117,7 @@ chk "T3 answer do surf no envelope" "$(echo "$out" | jq -r '.answer')" "resposta
 chk "T3 url extraída de sources" "$(echo "$out" | jq -r '.results[0].url')" "https://surf.example/1"
 chk "T3 source marcado como surf" "$(echo "$out" | jq -r '.results[0].source')" "surf"
 chk "T3 total_results" "$(echo "$out" | jq -r '.total_results')" "1"
-chk "T3 diagnostics.provider" "$(echo "$out" | jq -r '.diagnostics.provider')" "surf-skill"
+chk "T3 diagnostics.provider" "$(echo "$out" | jq -r '.diagnostics.provider')" "surf-agent-skill"
 
 echo "=== T4: --max-evolutions implementado no Tier 2 (loop de evolução) ==="
 newcase t4

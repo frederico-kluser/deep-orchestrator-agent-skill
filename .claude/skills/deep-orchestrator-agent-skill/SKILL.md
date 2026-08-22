@@ -1,5 +1,5 @@
 ---
-name: deep-orchestrator
+name: deep-orchestrator-agent-skill
 description: >-
   Orquestrador autônomo multi-agente. NUNCA escreve código — planeja, divide
   em ONDAS paralelas (teto DO_MAX_PARALLEL, default 50 — replanejadas a cada
@@ -13,7 +13,7 @@ description: >-
   2.5): quando o usuário PEDE UM PLANO, ele vai ao Plannotator (instalado
   sozinho se faltar) e cada anotação REGERA o plano num Plannotator NOVO, até
   aprovar; sem pedido de plano a autonomia segue total. Invocação:
-  /deep-orchestrator [plan=on|off] [mp=N] [wt=<nome>] [no-stop] <tarefa>.
+  /deep-orchestrator-agent-skill [plan=on|off] [mp=N] [wt=<nome>] [no-stop] <tarefa>.
   Triggers: "faça
   um plano", "quero aprovar o plano antes", "orquestre isso", "divida essa
   tarefa", "resolva do início ao fim", "não me pergunte nada".
@@ -49,7 +49,7 @@ metadata:
   version: "3.5.0"
   created: "2026-08-02"
   updated: "2026-08-21"
-  skill-home: "exemplo: ~/Projects/deep-orchestrator — a resolução real é dinâmica na FASE 0 (do-context.sh → $SKILL_HOME)"   # casa da skill (scripts/, prompts/, templates/) — NÃO é o projeto-alvo
+  skill-home: "exemplo: ~/Projects/deep-orchestrator-agent-skill — a resolução real é dinâmica na FASE 0 (do-context.sh → $SKILL_HOME)"   # casa da skill (scripts/, prompts/, templates/) — NÃO é o projeto-alvo
   based-on: "playbook-modernizar-legado-agentes-paralelos"
 ---
 
@@ -187,7 +187,7 @@ metadata:
       <body>Antes de criar worktrees para QUALQUER onda, execute
         "$SKILL_HOME/scripts/check-search-credits.sh" --fail-fast. O sistema de
         busca tem 3 tiers:
-        <strong>Tier 1:</strong> surf-skill (surf-search-normal) — multi-provider
+        <strong>Tier 1:</strong> surf-agent-skill (surf-search-normal) — multi-provider
         AI-powered (Tavily + Parallel + Brave + DDG + Wikipedia) com AI planner.
         <strong>Tier 2:</strong> Brave Search API direta — via função
         search_brave_api() sourceada do brave-search.sh.
@@ -451,7 +451,7 @@ metadata:
           que fica FORA do projeto-alvo, e $SKILL_HOME só passa a existir DEPOIS
           que o script grava o ENV_FILE — por isso a busca e a execução não podem
           ser separadas em duas chamadas (o shell do harness não persiste):
-          <cmd>DO_CTX=$(for d in "${CLAUDE_SKILL_DIR:-}" "${CLAUDE_SKILL_DIR:-}/../../.." "$HOME/.agents/skills/deep-orchestrator" "$HOME/.claude/skills/deep-orchestrator/../../.."; do [ -x "$d/scripts/do-context.sh" ] &amp;&amp; { echo "$d/scripts/do-context.sh"; break; }; done); [ -n "$DO_CTX" ] || { echo "PARE: do-context.sh nao encontrado"; exit 1; }; "$DO_CTX"</cmd>
+          <cmd>DO_CTX=$(for d in "${CLAUDE_SKILL_DIR:-}" "${CLAUDE_SKILL_DIR:-}/../../.." "$HOME/.agents/skills/deep-orchestrator-agent-skill" "$HOME/.claude/skills/deep-orchestrator-agent-skill/../../.."; do [ -x "$d/scripts/do-context.sh" ] &amp;&amp; { echo "$d/scripts/do-context.sh"; break; }; done); [ -n "$DO_CTX" ] || { echo "PARE: do-context.sh nao encontrado"; exit 1; }; "$DO_CTX"</cmd>
           Se nada for encontrado, PARE e informe o usuário — sem os scripts não
           há como garantir a contenção.</step>
         <step order="2"><strong>ANOTE O ENV_FILE.</strong> A ÚLTIMA linha da saída
@@ -1538,7 +1538,7 @@ Siga estas instruções EXATAMENTE.
 2. **PESQUISA NA INTERNET:** Se sua tarefa exigir informação externa
    (APIs, documentação, bibliotecas, comparações), use
    `{{SKILL_HOME}}/scripts/search.sh` (path absoluto, já resolvido pelo
-   orquestrador) — a interface UNIFICADA de busca do deep-orchestrator.
+   orquestrador) — a interface UNIFICADA de busca do deep-orchestrator-agent-skill.
    Parâmetros: --task, --goal, --insights, --deliverable, --brief-file,
    --count, --json, --max-evolutions N, --dev-mode (afeta só o Tier 2/Brave).
    Para MÚLTIPLAS buscas, NUNCA chame search.sh em loop — monte o lote (uma
@@ -1549,7 +1549,7 @@ Siga estas instruções EXATAMENTE.
    leitura). Prefira
    documentação oficial e fontes primárias; desconfie de listicles/SEO farms.
    O script implementa fallback automático em 3 tiers:
-   <strong>Tier 1:</strong> surf-skill (multi-provider AI-powered) →
+   <strong>Tier 1:</strong> surf-agent-skill (multi-provider AI-powered) →
    <strong>Tier 2:</strong> Brave Search API direta →
    <strong>Tier 3:</strong> DuckDuckGo Instant Answer (não requer chave;
    disponível enquanto houver rede — mas é Instant Answer, cobertura
@@ -2253,7 +2253,7 @@ justificativas.
       </testing-subwaves>
     </example>
     <example id="ex2" task="Fluxo com PORTÃO DE APROVAÇÃO DO PLANO (R10 / FASE 2.5)">
-      <invocation>/deep-orchestrator faça um plano para migrar o módulo de
+      <invocation>/deep-orchestrator-agent-skill faça um plano para migrar o módulo de
         pagamentos para a nova API e me deixe aprovar antes</invocation>
       <gate-resolution>FASE 0, passo 0.5: sem prefixo plan=; sem gatilho
         negativo; gatilhos positivos "faça um plano" e "me deixe aprovar antes"
@@ -2291,11 +2291,11 @@ justificativas.
         vive sob $DO_STATE e some com ele no fim — por isso a tabela de
         revisões é copiada para o relatório final ANTES da limpeza.</trail>
       <counter-example>A MESMA tarefa invocada como
-        <code>/deep-orchestrator migre o módulo de pagamentos para a nova API,
+        <code>/deep-orchestrator-agent-skill migre o módulo de pagamentos para a nova API,
         não me pergunte nada</code> resolve DO_PLAN_APPROVAL=0 pelo gatilho
         negativo: nenhum navegador abre, a FASE 2.5 é pulada inteira e o
         comportamento é o autônomo de sempre. E
-        <code>/deep-orchestrator plan=off faça um plano e execute</code>
+        <code>/deep-orchestrator-agent-skill plan=off faça um plano e execute</code>
         também dá 0 — o prefixo explícito vence o gatilho positivo.</counter-example>
     </example>
   </examples>
@@ -2318,7 +2318,7 @@ justificativas.
     worktree nasce antes do APROVADO. Feedback do portão é correção do PLANO,
     nunca tarefa de implementação. Sem pedido de plano, essa fase não existe e
     a autonomia é a de sempre.
-    E lembre-se: o sistema de busca 3-tier (surf-skill → Brave → DDG keyless) é
+    E lembre-se: o sistema de busca 3-tier (surf-agent-skill → Brave → DDG keyless) é
     verificado ANTES de cada onda via check-search-credits.sh. O Tier 3 (DDG
     keyless) não requer chave — disponível enquanto houver rede — mas é Instant
     Answer, cobertura limitada (não é busca full-text): qualidade reduzida mas
@@ -2346,8 +2346,8 @@ justificativas.
         sanitização contra whitelist (test, lint, typecheck, coverage).
         Busca em camadas (ver R7): Tier 0 é a pesquisa NATIVA do harness
         quando disponível (WebSearch/WebFetch no Claude Code); search.sh é a
-        interface unificada com fallback automático Tier 1 surf-skill → Tier 2
-        Brave API → Tier 3 DDG keyless. O surf-skill foi o provedor original
+        interface unificada com fallback automático Tier 1 surf-agent-skill → Tier 2
+        Brave API → Tier 3 DDG keyless. O surf-agent-skill foi o provedor original
         (v3.0.0), substituído por busca Brave interna e REINTEGRADO como
         Tier 1 na v3.3.0 — decisão D3: nenhum provedor novo entra na cadeia.
         Sub-agentes no Claude Code são NATIVOS (pesquisa profunda, 25 claims

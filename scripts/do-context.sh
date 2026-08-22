@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# do-context.sh — FASE 0 do deep-orchestrator: DELIMITA A RAIZ-DE-MUNDO
+# do-context.sh — FASE 0 do deep-orchestrator-agent-skill: DELIMITA A RAIZ-DE-MUNDO
 # -----------------------------------------------------------------------------
 # Descobre onde o orquestrador tem permissão de existir e grava tudo num arquivo
 # de estado que TODA chamada Bash posterior deve sourcear.
@@ -307,7 +307,7 @@ fi
 # HEAD destacado, indistinguível de um branch chamado HEAD.
 BASE_BRANCH=$(git branch --show-current 2>/dev/null || true)
 [ -n "$BASE_BRANCH" ] || BASE_BRANCH=$(git symbolic-ref -q --short HEAD 2>/dev/null || true)
-[ -n "$BASE_BRANCH" ] || die 4 "HEAD destacado — o deep-orchestrator exige um branch de integração.
+[ -n "$BASE_BRANCH" ] || die 4 "HEAD destacado — o deep-orchestrator-agent-skill exige um branch de integração.
   Resolva dentro desta worktree com:  git switch -c <nome-do-branch>"
 
 git rev-parse --verify --quiet HEAD >/dev/null \
@@ -484,7 +484,7 @@ if [ "$DO_PLAN_APPROVAL" = 1 ]; then
 fi
 
 cat > "$ENV_FILE" <<EOF
-# deep-orchestrator — estado da execução $RUN_ID. Sourceie em TODA chamada Bash.
+# deep-orchestrator-agent-skill — estado da execução $RUN_ID. Sourceie em TODA chamada Bash.
 MODE='$MODE'
 BASE_DIR='$BASE_DIR'
 BASE_BRANCH='$BASE_BRANCH'

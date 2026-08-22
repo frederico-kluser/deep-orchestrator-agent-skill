@@ -72,7 +72,7 @@ usage() {
   cat <<EOF
 Uso: $SCRIPT_NAME [OPTS]
 
-Verificador pré-fase do deep-orchestrator. Resolve o executável do Plannotator,
+Verificador pré-fase do deep-orchestrator-agent-skill. Resolve o executável do Plannotator,
 confere a versão e SONDA a capacidade (annotate --gate --json) sem abrir
 navegador nem iniciar servidor. Com --install, instala o binário quando ausente.
 

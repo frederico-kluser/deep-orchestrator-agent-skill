@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# do-wt.sh — ciclo de vida das worktrees-filhas do deep-orchestrator
+# do-wt.sh — ciclo de vida das worktrees-filhas do deep-orchestrator-agent-skill
 # -----------------------------------------------------------------------------
 # Toda operação destrutiva do orquestrador passa por aqui, porque toda operação
 # destrutiva do git é GLOBAL ao repositório: `git worktree list` enxerga a
@@ -79,7 +79,7 @@ gassert() {
 }
 err() { printf '%s\n' "$*" >&2; }
 
-LOCK_REASON="deep-orchestrator run=$RUN_ID"
+LOCK_REASON="deep-orchestrator-agent-skill run=$RUN_ID"
 # Lock de exclusão mútua sobre o owned.tsv (F4-07.1) — ver seção de registro.
 LOCK_FILE="$OWNED.lock"
 
