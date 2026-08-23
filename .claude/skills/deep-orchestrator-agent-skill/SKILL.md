@@ -46,10 +46,10 @@ allowed-tools:
 model: inherit
 effort: xhigh
 metadata:
-  version: "3.5.1"
+  version: "3.6.0"
   created: "2026-08-02"
-  updated: "2026-08-22"
-  skill-home: "exemplo: ~/Projects/deep-orchestrator-agent-skill — a resolução real é dinâmica na FASE 0 (do-context.sh → $SKILL_HOME)"   # casa da skill (scripts/, prompts/, templates/) — NÃO é o projeto-alvo
+  updated: "2026-08-23"
+  skill-home: "exemplo: ~/Projects/deep-orchestrator-agent-skill — a resolução real é dinâmica na FASE 0 (do-context.sh → $SKILL_HOME)"   # casa da skill (scripts/, prompts/) — NÃO é o projeto-alvo
   based-on: "playbook-modernizar-legado-agentes-paralelos"
 ---
 
@@ -77,7 +77,14 @@ metadata:
         (a) os arquivos de estado sob $DO_STATE (TASK_PLAN.md, env, owned.tsv,
         baselines e o $PLAN_DOC do PORTÃO DE APROVAÇÃO — tudo sob $DO_STATE,
         que a FASE 4 apaga); (b) os stubs/contratos do COMMIT PREP de onda
-        (fase 3, passo 1); (c) o EXPLAINER.html do COMMIT-FINAL.
+        (fase 3, passo 1); (c) o EXPLAINER.html do COMMIT-FINAL, em duas
+        situações: o ARQUIVO DE FATOS da execução sob
+        $DO_STATE/explainer/fatos.md (estado descartável, excluído da história)
+        e, APENAS em DEGRADAÇÃO (o fluxo do sub-agente explicador falhou após 3
+        tentativas), um EXPLAINER.html mínimo auto-contido gravado via Bash
+        (echo/cat) na raiz da RAIZ-DE-MUNDO com a degradação registrada no
+        relatório — o orquestrador NUNCA escreve o HTML à mão quando o fluxo
+        normal funciona: ele DELEGA a geração a um sub-agente explicador.
         Fora delas, se você sentir vontade de escrever
         código, PARE — isso significa que você deveria estar CRIANDO UM
         SUB-AGENTE.</body>
@@ -1339,10 +1346,10 @@ metadata:
                 <substep><strong>BARREIRA:</strong> Aguarde TODOS os agentes de
                   teste da última onda terminarem.
                   MICRO-OTIMIZAÇÃO (F3-10): enquanto a barreira espera, você
-                  PODE adiantar o gate PARCIAL do estado SEM os testes e o
-                  RASCUNHO do EXPLAINER — o gate final (passo 3) e o EXPLAINER
-                  final (passo 4) só rodam após o merge dos testes, mantendo a
-                  sequência.</substep>
+                  PODE adiantar o gate PARCIAL do estado sem os testes e o
+                  ARQUIVO DE FATOS da execução (fonte do EXPLAINER) — o gate
+                  final (passo 3) e o EXPLAINER final (passo 4) só rodam após o
+                  merge dos testes, mantendo a sequência.</substep>
                 <substep><strong>REVISÃO DE TESTES:</strong> Revisores
                   adversariais frescos para cada agente de teste (mesmo
                   protocolo do passo 6 da EXECUTE-ONDA, adaptado para diffs de
@@ -1415,19 +1422,58 @@ metadata:
           no TASK_PLAN.md (GATE_BUILD/GATE_TEST/GATE_LINT; FASE 1 passo 9,
           F3-03), com cwd em $BASE_DIR</step>
         <step order="4"><strong>HTML EXPLAINER (antes do commit — ele precisa
-          entrar nele):</strong> gere o explainer do que foi feito (de-para de
-          TODAS as mudanças: antes/depois de cada arquivo, decisões e
-          justificativas) com o gerador oficial, a partir do template
-          <path>$SKILL_HOME/templates/html-explainer.html</path> (leitura;
-          $SKILL_HOME é somente leitura):
-          <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$SKILL_HOME/scripts/generate-explainer.sh" --version "&lt;versão&gt;" --date "&lt;data&gt;" --branch "$BASE_BRANCH" --task-summary "&lt;resumo da tarefa&gt;" --total-waves &lt;N&gt; --total-agents &lt;N&gt; --total-commits &lt;N&gt; [--waves-table "&lt;arquivo&gt;"] [--files-table "&lt;arquivo&gt;"] [--commits-list "&lt;arquivo&gt;"] [--before-after "&lt;arquivo&gt;"] [--impact "&lt;arquivo&gt;"] [--capabilities "&lt;arquivo&gt;"] [--decisions "&lt;arquivo&gt;"] [--timeline "&lt;arquivo&gt;"] --output "$BASE_DIR/EXPLAINER.html"</cmd>
-          Os 7 tokens são OBRIGATÓRIOS (erro claro + exit != 0 se faltar); os
-          8 slots recebem arquivos com o conteúdo HTML de cada seção (gere-os
-          sob $DO_STATE/explainer/ — descartáveis; conteúdo de slot não pode
-          conter "{{"). Slot sem arquivo mantém o bloco demo do template,
-          anotado como não preenchido. Salve em
-          <path>$BASE_DIR/EXPLAINER.html</path> — a raiz da RAIZ-DE-MUNDO,
-          jamais um path derivado de <cmd>--git-common-dir</cmd></step>
+          entrar nele):</strong> o orquestrador NUNCA escreve o HTML à mão — ele
+          DELEGA a geração do explainer a um SUB-AGENTE explicador FRESCO,
+          seguindo o fluxo da skill <code>html-explainer-agent-skill</code>:
+          <substeps>
+            <substep><strong>PREPARAR O ARQUIVO DE FATOS:</strong> antes de
+              disparar, o orquestrador grava o ARQUIVO DE FATOS da execução sob
+              <path>$DO_STATE/explainer/fatos.md</path> (limite inferido:
+              <code>mkdir -p</code> + <cmd>'cat &gt; $DO_STATE/explainer/fatos.md'</cmd>
+              via Bash — estado descartável, excluído da história, permitido a
+              um orquestrador pela exceção R1-c). O arquivo contém: resumo da
+              tarefa; tabela ondas × worktrees × arquivos; commits squash; as
+              decisões autônomas; os vereditos de validação (gates); a
+              cobertura; e a timeline da execução.</substep>
+            <substep><strong>DISPARAR O EXPLICADOR:</strong> dispare um
+              sub-agente explicador fresco em BACKGROUND, com o prompt do
+              template <code>&lt;explainer-agent-template&gt;</code> (item 5
+              dos templates), colando INLINE os fatos da execução OU passando o
+              path <path>$DO_STATE/explainer/fatos.md</path> (o sub-agente pode
+              ler $BASE_DIR como referência — nunca escrever fora da worktree
+              dele; o destino da escrita é $BASE_DIR/EXPLAINER.html). Use o
+              modelo FORTE quando o harness permitir — tiering da síntese final
+              (F3-09).</substep>
+            <substep><strong>FLUXO DA SKILL:</strong> o explicador segue a
+              skill <code>html-explainer-agent-skill</code> — leitor declarado;
+              portão de complexidade; brief didático com Resposta em uma frase;
+              tabela fechada de Buzzwords; Figuras com afirmação na legenda e
+              toda aresta rotulada; Segmentos com título; andaime dobrado em
+              <code>&lt;details&gt;</code> — e renderiza o HTML final com
+              <code>visual-explainer</code> /
+              <code>plannotator-visual-explainer</code> (rota "visual
+              explainer", tokens de tema do Plannotator), com diagramas Mermaid
+              no shell canônico (<code>diagram-shell</code> + zoom) e página
+              self-contained.</substep>
+            <substep><strong>SEM LIMITE DE TEMPO:</strong> a geração do
+              explainer NÃO tem timeout — o explicador pode demorar o quanto
+              precisar; nenhum <cmd>timeout</cmd>/<cmd>--max-time</cmd> envolve
+              a geração do explainer.</substep>
+            <substep><strong>ENTREGA NO LUGAR:</strong> o artefato final é
+              salvo em <path>$BASE_DIR/EXPLAINER.html</path> — a raiz da
+              RAIZ-DE-MUNDO, jamais um path derivado de
+              <cmd>--git-common-dir</cmd>. A UI de anotação do Plannotator é
+              OPCIONAL e nunca substitui o arquivo.</substep>
+            <substep><strong>CONFERIR E SEGUIR:</strong> o orquestrador confere
+              o arquivo (existe, não vazio, HTML completo) e segue para o passo
+              5.</substep>
+            <substep><strong>DEGRADAÇÃO (fallback):</strong> se o explicador
+              falhar, aplique a degradation <code>subagent-failure</code>
+              (máx 3 tentativas na mesma dispensa). Esgotadas, o orquestrador
+              grava via Bash (exceção R1-c, echo/cat) um EXPLAINER.html mínimo
+              auto-contido com os fatos do relatório e registra a degradação no
+              relatório final. NUNCA recriar o gerador/template antigos.</substep>
+          </substeps></step>
         <step order="5">Se tudo verde, commite o que RESTA — e apenas o que é
           seu:
           <cmd>. '&lt;ENV_FILE&gt;' &amp;&amp; "$DO_WT" stage-delta &amp;&amp; gwt commit -m "&lt;mensagem descritiva&gt;"</cmd>
@@ -1904,6 +1950,72 @@ arquivo:linha de cada falha. Nunca invente PASS/FAIL.
 ]]>
   </validation-agent-template>
 
+  <explainer-agent-template>
+    <![CDATA[
+Você é um sub-agente ESPECIALIZADO EM EXPLICAÇÃO DIDÁTICA. Sua ÚNICA missão é
+gerar o arquivo $BASE_DIR/EXPLAINER.html desta execução, seguindo a skill
+`html-explainer-agent-skill` e o render `visual-explainer` /
+`plannotator-visual-explainer`.
+
+## MISSÃO
+- Produzir a explicação didática do que foi feito nesta execução, com
+  diagramas, buzzwords definidas onde aparecem e o andaime calibrado pelo leitor.
+- Renderizar o HTML final com `visual-explainer` / `plannotator-visual-explainer`
+  (rota "visual explainer", tokens de tema do Plannotator), com diagramas
+  Mermaid no shell canônico (`diagram-shell` + zoom) e página self-contained.
+- Salvar o artefato EM $BASE_DIR/EXPLAINER.html — no lugar, na raiz da
+  RAIZ-DE-MUNDO (nunca um path derivado de --git-common-dir).
+
+## FONTE PRIMÁRIA (os fatos — 0 inventado)
+- O conteúdo dos fatos da execução: {{FATOS}} (inline OU o path do arquivo de
+  fatos $DO_STATE/explainer/fatos.md, quando passado pelo orquestrador).
+- TUDO o que estiver no EXPLAINER.html DEVE vir desses fatos. Não invente
+  fatos, números, decisões ou vereditos: o que não estiver nos fatos não é
+  adicionado. $BASE_DIR pode ser lido como referência de contexto, jamais como
+  fonte de "melhorias" não suportadas pelos fatos.
+
+## REGRAS
+- SEM LIMITE DE TEMPO: esta geração não tem timeout — você pode demorar o
+  quanto precisar. Nenhum `timeout`/`--max-time` deve envolver a geração.
+- NÃO abra a UI do Plannotator como requisito de entrega: o ARQUIVO vem primeiro
+  (salvo em $BASE_DIR/EXPLAINER.html); a UI de anotação é OPCIONAL e nunca
+  substitui o arquivo.
+- Escreva APENAS no arquivo de destino ($BASE_DIR/EXPLAINER.html) e em
+  temporários seus (ex.: $DO_STATE/explainer/ ou /tmp) — NUNCA fora da worktree
+  de destino nem no código do repo.
+- NÃO modifique código do repositório. Você gera a explicação, não edita o projeto.
+- 0 INVENTADO: os fatos vêm do arquivo de fatos fornecido; nada de conteúdo
+  alucinado, números falsos, decisões ou vereditos que não estejam lá.
+- AUTONOMIA TOTAL: não pergunte ao usuário. Infira com confiança e assuma
+  leitor "misto/desconhecido" (trate como novato com dobradura) quando o nível
+  não for declarado.
+
+## VERIFICAÇÕES PRÉ-ENTREGA
+- Arquivo salvo no destino certo: $BASE_DIR/EXPLAINER.html (existe, não vazio).
+- HTML completo: `<!DOCTYPE html>` e `</html>` presentes; CSS embutido; favicon
+  self-contained.
+- Estrutura didática coerente (parece o html-explainer): leitor declarado,
+  tabela de buzzwords fechada, figuras com legenda-afirmação e arestas
+  rotuladas, segmentos com título, andaime dobrado em <details>.
+- ≥1 figura com legenda-afirmação (cada figura carrega uma afirmação).
+- Sem "{{" residual e sem placeholder nenhum.
+
+## FORMATO DE RESPOSTA
+
+## O que fiz
+[resumo do que foi gerado]
+
+## Arquivo gerado
+[$BASE_DIR/EXPLAINER.html — caminho exato]
+
+## Premissas assumidas
+[leitor assumido, decisões didáticas, qualquer inferência]
+
+## Bloqueios
+[Nenhum / descrição]
+]]>
+  </explainer-agent-template>
+
   <final-report-template>
     <![CDATA[
 ## Tarefa concluída
@@ -1977,9 +2089,9 @@ quer nova execução para os refinamentos.]
 
 ## HTML Explainer
 O arquivo EXPLAINER.html foi gerado em $BASE_DIR/EXPLAINER.html — a raiz da
-raiz-de-mundo — a partir de $SKILL_HOME/templates/html-explainer.html, com o
-de-para de todas as mudanças: antes/depois de cada arquivo, decisões tomadas e
-justificativas.
+raiz-de-mundo — pelo fluxo `html-explainer-agent-skill` (brief didático +
+render `visual-explainer`), sem limite de tempo, salvo no lugar como artefato
+de execução. Degradação (fallback mínimo pelo orquestrador, exceção R1-c): [nenhuma | registrar aqui].
 ]]>
   </final-report-template>
 
