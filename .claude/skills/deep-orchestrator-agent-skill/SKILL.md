@@ -12,7 +12,11 @@ description: >-
   e nunca escreve no projeto principal. PORTÃO DE APROVAÇÃO DO PLANO (FASE
   2.5): quando o usuário PEDE UM PLANO, ele vai ao Plannotator (instalado
   sozinho se faltar) e cada anotação REGERA o plano num Plannotator NOVO, até
-  aprovar; sem pedido de plano a autonomia segue total. Invocação:
+  aprovar; sem pedido de plano a autonomia segue total. EXPLAINER final
+  didático (v3.6.0): gerado por sub-agente seguindo a skill
+  html-explainer-agent-skill (brief didático + render visual-explainer/Plannotator,
+  sem limite de tempo, salvo em EXPLAINER.html no lugar); Plannotator instalado
+  automaticamente se ausente (scripts/check-plannotator.sh --install). Invocação:
   /deep-orchestrator-agent-skill [plan=on|off] [mp=N] [wt=<nome>] [no-stop] <tarefa>.
   Triggers: "faça
   um plano", "quero aprovar o plano antes", "orquestre isso", "divida essa

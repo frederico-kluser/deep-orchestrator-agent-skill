@@ -45,6 +45,7 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 
 - **HTML Explainer v3.6.0 (novo fluxo)**: o EXPLAINER.html do COMMIT-FINAL deixa de ser gerado pelo script `scripts/generate-explainer.sh` + template `templates/html-explainer.html` (ambos REMOVIDOS). Agora o orquestrador delega a um sub-agente que segue a skill `html-explainer-agent-skill` (brief didático: leitor, portão de complexidade, buzzwords, figuras com afirmação na legenda e arestas rotuladas, andaime dobrado) e renderiza com `visual-explainer`/`plannotator-visual-explainer` — SEM limite de tempo (a geração pode demorar o quanto precisar) e SALVANDO NO LUGAR em `EXPLAINER.html` na raiz da raiz-de-mundo (a UI do Plannotator é opcional e nunca substitui o arquivo). Degradação documentada: se o fluxo falhar, o orquestrador grava um EXPLAINER.html mínimo via Bash (exceção R1-c) e registra no relatório.
 - Contrato de instalação atualizado: `scripts/check-install.sh` não exige mais `generate-explainer.sh` nem `templates/`.
+- **Plannotator como runtime do EXPLAINER (auto-instalado)**: o novo fluxo do EXPLAINER usa o backend de render/anotação do Plannotator — o `html-explainer-agent-skill` delega a renderização ao `plannotator-visual-explainer` (tokens de tema do Plannotator aplicados ao arquivo final). O binário é instalado automaticamente quando ausente (`scripts/check-plannotator.sh --install`, modo `--minimal` → só `~/.local/bin`; mínima 0.19.1) e foi verificado na máquina de referência em v0.27.6. A entrega continua sendo o ARQUIVO `EXPLAINER.html` salvo no lugar — a UI de anotação é opcional e nunca substitui o arquivo.
 
 ## Novidades na v3.5.1
 
@@ -210,6 +211,7 @@ deep-orchestrator-agent-skill/
 - **`surf-search-normal` (surf-agent-skill)** — **OPCIONAL**: habilita o Tier 1 (multi-provider AI-powered). Ausente, a busca cai direto para os Tiers 2/3
 - `curl` e `jq` (usados pelos scripts de busca)
 - `project-router` skill resolvido a partir da raiz-de-mundo (`<raiz>/.claude/skills/project-router/` ou `<raiz>/.agents/skills/project-router/`). Ausente, o sub-agente registra no handoff e segue — não cai para o repositório principal nem para `~/.claude`
+- **Plannotator** — **AUTO-INSTALADO** se ausente (`scripts/check-plannotator.sh --install`; binário `--minimal` em `~/.local/bin`, mínimo 0.19.1). Usado pela UI de anotação do EXPLAINER final (opcional — o arquivo é a entrega) e pelo PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5). Verificado na v3.6.0 em 0.27.6.
 
 ### Dependências
 
