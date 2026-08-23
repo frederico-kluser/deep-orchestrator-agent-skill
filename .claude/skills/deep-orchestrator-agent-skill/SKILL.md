@@ -451,7 +451,7 @@ metadata:
           que fica FORA do projeto-alvo, e $SKILL_HOME só passa a existir DEPOIS
           que o script grava o ENV_FILE — por isso a busca e a execução não podem
           ser separadas em duas chamadas (o shell do harness não persiste):
-          <cmd>DO_CTX=$(for d in "${CLAUDE_SKILL_DIR:-}" "${CLAUDE_SKILL_DIR:-}/../../.." "$HOME/.agents/skills/deep-orchestrator-agent-skill" "$HOME/.claude/skills/deep-orchestrator-agent-skill/../../.."; do [ -x "$d/scripts/do-context.sh" ] &amp;&amp; { echo "$d/scripts/do-context.sh"; break; }; done); [ -n "$DO_CTX" ] || { echo "PARE: do-context.sh nao encontrado"; exit 1; }; "$DO_CTX"</cmd>
+          <cmd>DO_CTX=$(for d in "${CLAUDE_SKILL_DIR:-}" "${CLAUDE_SKILL_DIR:-}/../../.." "$HOME/.agents/skills/deep-orchestrator-agent-skill" "${DSH_HOME:-$HOME/.dsh}/skills/deep-orchestrator-agent-skill" "$HOME/.claude/skills/deep-orchestrator-agent-skill/../../.."; do [ -x "$d/scripts/do-context.sh" ] &amp;&amp; { echo "$d/scripts/do-context.sh"; break; }; done); [ -n "$DO_CTX" ] || { echo "PARE: do-context.sh nao encontrado"; exit 1; }; "$DO_CTX"</cmd>
           Se nada for encontrado, PARE e informe o usuário — sem os scripts não
           há como garantir a contenção.</step>
         <step order="2"><strong>ANOTE O ENV_FILE.</strong> A ÚLTIMA linha da saída

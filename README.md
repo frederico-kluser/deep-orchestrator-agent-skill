@@ -16,6 +16,16 @@ A única exceção — e ela só existe quando você pede — é o **PORTÃO DE 
 | **`$MAIN_ROOT`** | O checkout principal do repositório. Em MODO CONTIDO é **zona proibida**. |
 | **WORKTREE-FILHA** | Uma worktree por sub-agente, criada sob `$CHILD_ROOT`, com branch `$BRANCH_NS/<nome>`. |
 
+## Instalação (o contrato)
+
+A skill é distribuída como um repositório git; a **casa da skill (`$SKILL_HOME`)** é a **raiz** do repositório — o diretório que contém `SKILL.md`, `scripts/`, `prompts/` e `templates/`. Instalação incompleta = FASE 0 aborta com `PARE: do-context.sh nao encontrado`.
+
+- O `SKILL.md` da raiz é um **symlink** para `./.claude/skills/deep-orchestrator-agent-skill/SKILL.md` (padrão Claude Code). Desde a v3.5.1, `scripts/`, `prompts/` e `templates/` também são espelhados **por symlink** dentro de `.claude/skills/deep-orchestrator-agent-skill/` — assim **qualquer** dos dois alvos (a raiz ou a pasta `.claude`) é uma casa válida, e um harness que resolva `SKILL_HOME` para a pasta interna não fica sem scripts.
+- **Instalar** (publica por symlink para todos os agentes conhecidos — Claude Code, `~/.agents`, jcode, pi): `./scripts/sync-global-skill.sh` (opções: `--dry-run`, `--strict`, `--quiet`). Manualmente: `ln -s /caminho/do/repo ~/.agents/skills/deep-orchestrator-agent-skill` (a raiz do repo, não a pasta interna).
+- **DeepSeek Harness (DSH)**: descobre skills em `$DSH_AGENTS_HOME/skills` (default `~/.agents`) e `$DSH_HOME/skills` (default `~/.dsh`). A FASE 0 resolve nessas duas raízes — o caminho de instalação do DSH pode ser `~/.agents/skills` (compartilhado com pi/jcode/opencode) **ou** `~/.dsh/skills`.
+- **Verificar** uma instalação: `./scripts/check-install.sh [--root <dir>]` — exit 0 = completo (SKILL.md + ferramentas executáveis + prompts + template), 1 = faltando itens, 2 = uso inválido. Rode depois de qualquer instalação/atualização.
+- Um clone legado por **cópia** (ex.: `~/.local/share/deep-orchestrator/`) congela a versão do dia — prefira o symlink (`sync-global-skill.sh` converte cópias em symlinks automaticamente, preservando backup em `.bak-<data>`).
+
 ## MODO CONTIDO
 
 Se a skill for invocada com o cwd **dentro de uma git worktree vinculada**, ela entra em MODO CONTIDO e trata essa worktree como raiz-de-mundo:
