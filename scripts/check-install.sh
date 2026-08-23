@@ -6,17 +6,16 @@
 # ($SKILL_HOME) é o diretório que CONTÉM SKILL.md e precisa carregar:
 #   • scripts/   — as ferramentas executáveis do ciclo de orquestração
 #                  (do-context.sh é o mínimo para a FASE 0 não abortar);
-#   • prompts/   — os templates de prompt (ECC, busca, portão);
-#   • templates/ — o template do HTML Explainer.
+#   • prompts/   — os templates de prompt (ECC, busca, portão).
 # Uma instalação incompleta (ex.: só o SKILL.md, sem scripts/) faz a FASE 0
 # abortar com "PARE: do-context.sh nao encontrado". Este script detecta esse
 # estado ANTES de qualquer execução.
 #
 # Layout aceito (qualquer um dos dois resolvidos como $SKILL_HOME):
-#   • a RAIZ do repositório (SKILL.md real ou symlink + scripts/ + prompts/
-#     + templates/), que é o alvo do sync-global-skill.sh; ou
+#   • a RAIZ do repositório (SKILL.md real ou symlink + scripts/ + prompts/),
+#     que é o alvo do sync-global-skill.sh; ou
 #   • a pasta .claude/skills/deep-orchestrator-agent-skill/ (padrão Claude
-#     Code), que espelha scripts/, prompts/ e templates/ por symlink para a
+#     Code), que espelha scripts/ e prompts/ por symlink para a
 #     raiz — também é uma casa válida desde a v3.5.1.
 #
 # Uso:
@@ -27,7 +26,7 @@
 #     --quiet       só o exit code (0 completo · 1 faltando · 2 erro de uso).
 #
 # Exit codes:
-#   0 = instalação COMPLETA (SKILL.md + ferramentas + prompts + templates)
+#   0 = instalação COMPLETA (SKILL.md + ferramentas + prompts)
 #   1 = instalação INCOMPLETA (itens faltando listados na saída)
 #   2 = erro de uso / raiz inválida
 # =============================================================================
@@ -98,7 +97,6 @@ check "scripts/ search-parallel.sh"   "$ROOT/scripts/search-parallel.sh" x
 check "scripts/ check-search-credits.sh" "$ROOT/scripts/check-search-credits.sh" x
 check "scripts/ check-plannotator.sh" "$ROOT/scripts/check-plannotator.sh" x
 check "scripts/ plan-approval.sh"     "$ROOT/scripts/plan-approval.sh" x
-check "scripts/ generate-explainer.sh" "$ROOT/scripts/generate-explainer.sh" x
 check "scripts/ sync-global-skill.sh" "$ROOT/scripts/sync-global-skill.sh" x
 
 # --- 3. Prompts ---------------------------------------------------------------
@@ -106,9 +104,6 @@ check "prompts/ ecc-prompts.md"       "$ROOT/prompts/ecc-prompts.md"
 check "prompts/ ecc-skills.md"        "$ROOT/prompts/ecc-skills.md"
 check "prompts/ search-prompts.md"    "$ROOT/prompts/search-prompts.md"
 check "prompts/ plan-approval-prompts.md" "$ROOT/prompts/plan-approval-prompts.md"
-
-# --- 4. Template ----------------------------------------------------------------
-check "templates/ html-explainer.html" "$ROOT/templates/html-explainer.html"
 
 if [ "$JSON" = 1 ]; then
   if [ "${#MISSING[@]}" = 0 ]; then
@@ -128,7 +123,7 @@ fi
   printf 'RESULTADO: instalação INCOMPLETA — %d item(ns) faltando:\n' "${#MISSING[@]}"
   printf '  - %s\n' "${MISSING[@]}"
   printf 'Correção: aponte o symlink da skill para a RAIZ do repositório (ou garanta\n'
-  printf 'scripts/, prompts/ e templates/ ao lado do SKILL.md) — depois rode este\n'
+  printf 'scripts/ e prompts/ ao lado do SKILL.md) — depois rode este\n'
   printf 'script de novo. A FASE 0 aborta com "PARE: do-context.sh nao encontrado"\n'
   printf 'enquanto esta verificação não passar.\n'
 }

@@ -1,6 +1,6 @@
-# deep-orchestrator-agent-skill v3.5.1
+# deep-orchestrator-agent-skill v3.6.0
 
-![Versão](https://img.shields.io/badge/version-3.5.1-00d4ff)
+![Versão](https://img.shields.io/badge/version-3.6.0-00d4ff)
 
 Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda (`scripts/search.sh`: surf-agent-skill → Brave Search API → DuckDuckGo keyless, com `check-search-credits.sh` e lotes via `search-parallel.sh`), e commita tudo ao final **sem perguntar nada ao usuário**.
 
@@ -10,7 +10,7 @@ A única exceção — e ela só existe quando você pede — é o **PORTÃO DE 
 
 | Termo | O que é |
 |-------|---------|
-| **`$SKILL_HOME`** | A **casa da skill**: `scripts/`, `prompts/`, `templates/`. Fica fora do projeto-alvo e é **somente leitura/execução** durante uma execução. Caminhos escritos como `$SKILL_HOME/...` são daqui; caminhos sem prefixo são do repositório-alvo. |
+| **`$SKILL_HOME`** | A **casa da skill**: `scripts/` e `prompts/`. Fica fora do projeto-alvo e é **somente leitura/execução** durante uma execução. Caminhos escritos como `$SKILL_HOME/...` são daqui; caminhos sem prefixo são do repositório-alvo. |
 | **RAIZ-DE-MUNDO (`$BASE_DIR`)** | `git rev-parse --show-toplevel` no diretório de invocação. Se você invocou dentro de uma git worktree vinculada, é a **worktree** — não o projeto principal. É a fronteira de escrita. |
 | **`$BASE_BRANCH`** | O branch em HEAD na raiz-de-mundo. É o **único** alvo de integração. Nunca é resolvido por convenção (main/master). |
 | **`$MAIN_ROOT`** | O checkout principal do repositório. Em MODO CONTIDO é **zona proibida**. |
@@ -18,12 +18,12 @@ A única exceção — e ela só existe quando você pede — é o **PORTÃO DE 
 
 ## Instalação (o contrato)
 
-A skill é distribuída como um repositório git; a **casa da skill (`$SKILL_HOME`)** é a **raiz** do repositório — o diretório que contém `SKILL.md`, `scripts/`, `prompts/` e `templates/`. Instalação incompleta = FASE 0 aborta com `PARE: do-context.sh nao encontrado`.
+A skill é distribuída como um repositório git; a **casa da skill (`$SKILL_HOME`)** é a **raiz** do repositório — o diretório que contém `SKILL.md`, `scripts/` e `prompts/`. Instalação incompleta = FASE 0 aborta com `PARE: do-context.sh nao encontrado`.
 
-- O `SKILL.md` da raiz é um **symlink** para `./.claude/skills/deep-orchestrator-agent-skill/SKILL.md` (padrão Claude Code). Desde a v3.5.1, `scripts/`, `prompts/` e `templates/` também são espelhados **por symlink** dentro de `.claude/skills/deep-orchestrator-agent-skill/` — assim **qualquer** dos dois alvos (a raiz ou a pasta `.claude`) é uma casa válida, e um harness que resolva `SKILL_HOME` para a pasta interna não fica sem scripts.
+- O `SKILL.md` da raiz é um **symlink** para `./.claude/skills/deep-orchestrator-agent-skill/SKILL.md` (padrão Claude Code). Desde a v3.5.1, `scripts/` e `prompts/` são espelhados **por symlink** dentro de `.claude/skills/deep-orchestrator-agent-skill/` — assim **qualquer** dos dois alvos (a raiz ou a pasta `.claude`) é uma casa válida, e um harness que resolva `SKILL_HOME` para a pasta interna não fica sem scripts. `templates/` existiu até a v3.6.0 e foi removido.
 - **Instalar** (publica por symlink para todos os agentes conhecidos — Claude Code, `~/.agents`, jcode, pi): `./scripts/sync-global-skill.sh` (opções: `--dry-run`, `--strict`, `--quiet`). Manualmente: `ln -s /caminho/do/repo ~/.agents/skills/deep-orchestrator-agent-skill` (a raiz do repo, não a pasta interna).
 - **DeepSeek Harness (DSH)**: descobre skills em `$DSH_AGENTS_HOME/skills` (default `~/.agents`) e `$DSH_HOME/skills` (default `~/.dsh`). A FASE 0 resolve nessas duas raízes — o caminho de instalação do DSH pode ser `~/.agents/skills` (compartilhado com pi/jcode/opencode) **ou** `~/.dsh/skills`.
-- **Verificar** uma instalação: `./scripts/check-install.sh [--root <dir>]` — exit 0 = completo (SKILL.md + ferramentas executáveis + prompts + template), 1 = faltando itens, 2 = uso inválido. Rode depois de qualquer instalação/atualização.
+- **Verificar** uma instalação: `./scripts/check-install.sh [--root <dir>]` — exit 0 = completo (SKILL.md + ferramentas executáveis + prompts), 1 = faltando itens, 2 = uso inválido. Rode depois de qualquer instalação/atualização.
 - Um clone legado por **cópia** (ex.: `~/.local/share/deep-orchestrator/`) congela a versão do dia — prefira o symlink (`sync-global-skill.sh` converte cópias em symlinks automaticamente, preservando backup em `.bak-<data>`).
 
 ## MODO CONTIDO
@@ -40,6 +40,11 @@ Se a skill for invocada com o cwd **dentro de uma git worktree vinculada**, ela 
 O único vestígio compartilhado aceito é o registro administrativo das filhas em `$GIT_COMMON_DIR/worktrees/`, que o próprio git cria e é inevitável.
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
+
+## Novidades na v3.6.0
+
+- **HTML Explainer v3.6.0 (novo fluxo)**: o EXPLAINER.html do COMMIT-FINAL deixa de ser gerado pelo script `scripts/generate-explainer.sh` + template `templates/html-explainer.html` (ambos REMOVIDOS). Agora o orquestrador delega a um sub-agente que segue a skill `html-explainer-agent-skill` (brief didático: leitor, portão de complexidade, buzzwords, figuras com afirmação na legenda e arestas rotuladas, andaime dobrado) e renderiza com `visual-explainer`/`plannotator-visual-explainer` — SEM limite de tempo (a geração pode demorar o quanto precisar) e SALVANDO NO LUGAR em `EXPLAINER.html` na raiz da raiz-de-mundo (a UI do Plannotator é opcional e nunca substitui o arquivo). Degradação documentada: se o fluxo falhar, o orquestrador grava um EXPLAINER.html mínimo via Bash (exceção R1-c) e registra no relatório.
+- Contrato de instalação atualizado: `scripts/check-install.sh` não exige mais `generate-explainer.sh` nem `templates/`.
 
 ## Novidades na v3.5.1
 
@@ -94,7 +99,7 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 - **Verificação de créditos** antes de cada onda (`$SKILL_HOME/scripts/check-brave-credits.sh`) — sem créditos, o orquestrador para e informa o usuário (única exceção à autonomia total). **SUPERADA na v3.3.0**: o verificador agora é `check-search-credits.sh` (3 tiers; exit 2 = TODOS os tiers fora) — `check-brave-credits.sh` está DEPRECATED.
 - **ECC Prompts integrados** — 7 templates de prompt (`$SKILL_HOME/prompts/ecc-prompts.md`) + 7 skills portados do ECC (`$SKILL_HOME/prompts/ecc-skills.md`), incluindo Security Review (AgentShield), Planning Prompt (Plan First) e Prompt Defense Baseline.
 - **Prompts de busca para dev** (`$SKILL_HOME/prompts/search-prompts.md`) — 8 categorias de busca, sistema de evolução de perguntas (question evolution) e prompts por domínio.
-- **HTML Explainer** automático ao final de cada execução (`$SKILL_HOME/templates/html-explainer.html`) — de-para de todas as mudanças em 6 abas, salvo como `EXPLAINER.html` na raiz da worktree em que a skill foi invocada.
+- **HTML Explainer** automático ao final de cada execução (`$SKILL_HOME/templates/html-explainer.html`) — de-para de todas as mudanças em 6 abas, salvo como `EXPLAINER.html` na raiz da worktree em que a skill foi invocada (mecânica substituída na v3.6.0 — ver Novidades na v3.6.0).
 
 ## Como funciona
 
@@ -113,7 +118,7 @@ ANALYZE  →  PLAN  →  EXECUTE-ONDA (repeat, ILIMITADO)  →  COMMIT-FINAL
 | 2 | **PLAN** | Decompõe a tarefa em sub-tarefas atômicas, identifica o grafo de dependências, organiza em ondas topológicas (número NÃO fixo — o plano é um ponto de partida), define o mapa de propriedade de arquivos, batiza cada worktree, escreve os prompts de delegação, publica o TASK_PLAN.md |
 | 2.5 | **APROVAR O PLANO** | *Só quando `PLAN_APPROVAL=1`.* Garante o Plannotator na máquina (`check-plannotator.sh --install`), escreve o plano legível em `$PLAN_DOC` e roda `plan-approval.sh round`: aprovado → FASE 3; anotado → **regera o plano e abre um Plannotator NOVO** (até `DO_PLAN_MAX_REVISIONS`); fechado/timeout/orçamento → para limpo, sem nenhuma worktree criada. Desligado (o default), a fase é pulada inteira |
 | 3 | **EXECUTE-ONDA** | Para cada onda: verificação de tiers de busca (`check-search-credits.sh`) → commit prep (se necessário) → cria worktrees → dispara agentes em paralelo (escalonado) → barreira → **recálculo dinâmico (REVISOR DE PLANO)** → revisão adversarial → squash-merge um a um (gate em snapshot `int-ondaN-*`, em background; limpeza aguarda o verde de cada snapshot) → remoção APENAS das worktrees-filhas e branches desta execução, por nome registrado → prova de contenção → handoff para a próxima onda. Repete até o REVISOR DE PLANO declarar CONVERGÊNCIA |
-| 4 | **COMMIT-FINAL** | Remove o TASK_PLAN.md, roda o gate completo (o trio GATE_BUILD/GATE_TEST/GATE_LINT da FASE 1), commita **apenas o que esta execução produziu** (a sujeira preexistente do usuário é preservada), varredura final restrita à lista nominal registrada, **gera o EXPLAINER.html** (a partir do template `$SKILL_HOME/templates/html-explainer.html`) e produz o relatório final |
+| 4 | **COMMIT-FINAL** | Remove o TASK_PLAN.md, roda o gate completo (o trio GATE_BUILD/GATE_TEST/GATE_LINT da FASE 1), commita **apenas o que esta execução produziu** (a sujeira preexistente do usuário é preservada), varredura final restrita à lista nominal registrada, **gera o EXPLAINER.html** pelo fluxo `html-explainer-agent-skill` (sub-agente delegado, sem limite de tempo, salvo em `EXPLAINER.html` na raiz) e produz o relatório final |
 
 ### Regras fundamentais
 
@@ -174,7 +179,7 @@ Fontes primárias: [subagents](https://code.claude.com/docs/en/subagents) · [ag
 ```
 deep-orchestrator-agent-skill/
 ├── README.md                    # Este arquivo
-├── SKILL.md                     # Definição do skill v3.5.1 (frontmatter YAML + XML do orquestrador)
+├── SKILL.md                     # Definição do skill v3.6.0 (frontmatter YAML + XML do orquestrador)
 ├── scripts/
 │   ├── README.md                # Índice de todos os scripts e o fluxo de busca 3-tier
 │   ├── do-context.sh            # FASE 0 — delimita a raiz-de-mundo e grava o estado
@@ -187,7 +192,6 @@ deep-orchestrator-agent-skill/
 │   ├── sync-global-skill.sh     # publica a skill por symlink para todos os agentes
 │   ├── brave-search.sh          # fonte da função search_brave_api() — Tier 2
 │   ├── check-brave-credits.sh   # (DEPRECATED) — use check-search-credits.sh
-│   ├── generate-explainer.sh    # gera o EXPLAINER.html a partir do template (COMMIT-FINAL)
 │   ├── test-contencao.sh        # testes de regressão do MODO CONTIDO (85 asserções)
 │   ├── test-search.sh           # testes da cadeia de busca 3-tier (64 asserções)
 │   └── test-plan-approval.sh    # testes do portão de aprovação (111 asserções, mockado)
@@ -196,8 +200,6 @@ deep-orchestrator-agent-skill/
 │   ├── ecc-skills.md            # 7 skills ECC portados
 │   ├── search-prompts.md        # Prompts de busca otimizados para dev
 │   └── plan-approval-prompts.md # Templates da FASE 2.5 (documento, feedback, regeração)
-└── templates/
-    └── html-explainer.html      # Template do HTML explainer (6 abas, Bootstrap 5)
 ```
 
 ## Requisitos
@@ -220,9 +222,9 @@ Uma worktree recém-criada **não** herda `node_modules`, `.venv` ou `target`: s
 git clone <repo-url> ~/Projects/deep-orchestrator-agent-skill
 
 # Adicione ao seu projeto como skill — copie o diretório INTEIRO,
-# pois scripts/, prompts/ e templates/ são referenciados pelo SKILL.md
+# pois scripts/ e prompts/ são referenciados pelo SKILL.md
 mkdir -p .claude/skills/deep-orchestrator-agent-skill
-cp -r SKILL.md scripts prompts templates .claude/skills/deep-orchestrator-agent-skill/
+cp -r SKILL.md scripts prompts .claude/skills/deep-orchestrator-agent-skill/
 
 # Este bloco é setup MANUAL do usuário, executado UMA VEZ, fora de qualquer
 # execução da skill — NUNCA por um sub-agente. A skill não se auto-instala no
@@ -328,6 +330,8 @@ O orquestrador vai:
 Ao final, o histórico do **branch da raiz-de-mundo** (o branch da worktree em que a skill foi invocada; `main`/`master` apenas quando a invocação foi na árvore principal) terá 3 commits squash de feature — um por sub-agente —, um squash commit por worktree de teste das testing subwaves (até 3 por subwave; `test-onda1-*`, `test-onda2-*`), os fixes das validation subwaves (`val-ondaN-*`) e o commit final com o `EXPLAINER.html`. Nenhuma worktree-filha nem branch desta execução sobra; worktrees e branches pré-existentes de outras sessões não são tocados.
 
 ## Versão
+
+**3.6.0** — HTML Explainer novo fluxo: fim do gerador/template antigos (scripts/generate-explainer.sh + templates/html-explainer.html removidos); geração delegada a sub-agente seguindo html-explainer-agent-skill + visual-explainer, sem limite de tempo, salvo em EXPLAINER.html no lugar; contrato de instalação (check-install.sh) atualizado.
 
 **3.5.0** — flag `no-stop` (DO_NO_STOP): remove o teto de 10 ondas por execução (ondas ilimitadas até a convergência); validação/export/resumo no `do-context.sh` + guarda anti-stale no caminho DO_REUSE; documentada no SKILL.md (frontmatter + FASE 0 + repeat + REPLAN + relatório) e no README.
 

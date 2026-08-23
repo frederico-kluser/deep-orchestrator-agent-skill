@@ -25,7 +25,7 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 | Script | Proposito |
 |--------|-----------|
 | `sync-global-skill.sh` | Publica a skill para todos os agentes da maquina por SYMLINK: ${CLAUDE_CONFIG_DIR:-~/.claude}/skills, ~/.agents/skills (pi/jcode/opencode), ~/.jcode/skills e ~/.pi/agent/skills. Existe porque alguns agentes importam skills POR COPIA, e copia congela a versao do dia da importacao (verificado: ~/.jcode/skills/deep-orchestrator-agent-skill ficou em 3.1.0 com a skill viva em 3.4.0 -- rodar por la executava um orquestrador de duas versoes atras). Toca EXCLUSIVAMENTE a entrada `deep-orchestrator-agent-skill`; so substitui um diretorio depois de confirmar que ele tem SKILL.md com `name: deep-orchestrator-agent-skill`; guarda a copia antiga em `.bak-<data>`; nao cria diretorio-pai de agente que nao existe. Chamado pelo hook SessionStart do Claude Code. Opcoes: --quiet, --dry-run, --strict. Exit 0 sempre (1 so com --strict). |
-| `check-install.sh` | Prova de que UMA INSTALACAO da skill esta COMPLETA: verifica o contrato de instalacao num diretorio (SKILL.md com `name:` correto + ferramentas executaveis `scripts/{do-context,do-wt,search,search-parallel,check-search-credits,check-plannotator,plan-approval,generate-explainer,sync-global-skill}.sh` + `prompts/{ecc-prompts,ecc-skills,search-prompts,plan-approval-prompts}.md` + `templates/html-explainer.html`). Aceita a raiz do repo OU a pasta `.claude/skills/...` (que espelha scripts/prompts/templates por symlink). `--root <dir>` (default: a propria casa da skill), `--json`, `--quiet`. Exit 0 completo · 1 faltando itens · 2 uso. Detecta o estado "so SKILL.md, sem scripts" que faz a FASE 0 abortar com "PARE: do-context.sh nao encontrado". |
+| `check-install.sh` | Prova de que UMA INSTALACAO da skill esta COMPLETA: verifica o contrato de instalacao num diretorio (SKILL.md com `name:` correto + ferramentas executaveis `scripts/{do-context,do-wt,search,search-parallel,check-search-credits,check-plannotator,plan-approval,sync-global-skill}.sh` + `prompts/{ecc-prompts,ecc-skills,search-prompts,plan-approval-prompts}.md`). Aceita a raiz do repo OU a pasta `.claude/skills/...` (que espelha scripts/prompts por symlink). `--root <dir>` (default: a propria casa da skill), `--json`, `--quiet`. Exit 0 completo · 1 faltando itens · 2 uso. Detecta o estado "so SKILL.md, sem scripts" que faz a FASE 0 abortar com "PARE: do-context.sh nao encontrado". |
 
 ## Busca (search)
 
@@ -41,7 +41,7 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 
 | Script | Proposito | FASE |
 |---|---|---|
-| `generate-explainer.sh` | Gera o EXPLAINER.html a partir de templates/html-explainer.html: 7 tokens obrigatorios (--version, --date, --branch, --task-summary, --total-waves, --total-agents, --total-commits) + 8 slots via arquivo (--waves-table, --files-table, --commits-list, --before-after, --impact, --capabilities, --decisions, --timeline); blocos begin/end substituidos inteiros; demo neutralizado quando sem arquivo; zero {{ residual no output; exit 0/1/2. Usado no COMMIT-FINAL passo 4. | FASE 4 |
+| `—` | **[v3.6.0]** A geração do EXPLAINER.html é DELEGADA a sub-agente (fluxo html-explainer-agent-skill — brief didático + render visual-explainer; sem limite de tempo; salvo em $BASE_DIR/EXPLAINER.html). Não há script dedicado. O passo 4 do COMMIT-FINAL no SKILL.md descreve o ritual. | FASE 4 |
 
 ## Testes
 
