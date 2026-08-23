@@ -1,17 +1,14 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="plannotator-theme" content="host">
-<title>Como o EXPLAINER do deep-orchestrator passou a ser gerado na v3.6.0?</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%235537eb'/%3E%3Cpath d='M18 40V24l14-8 14 8v16l-14 8-14-8Z' fill='none' stroke='%23ffffff' stroke-width='4' stroke-linejoin='round'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%23fbbf24'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<title>Por que o EXPLAINER da v3.6.0 agora passa pelo Plannotator?</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%235537eb'/%3E%3Cpath d='M9 9h7a7 7 0 0 1 0 14H9z' fill='none' stroke='white' stroke-width='2.4'/%3E%3Cpath d='M16 9h7a7 7 0 0 1 0 14h-7z' fill='white' opacity='.55'/%3E%3C/svg%3E">
 <style>
-  /* ============ PALETTE — Plannotator tokens ============ */
   :root {
+    /* Plannotator tokens (defaults standalone; o meta plannotator-theme sobrescreve quando embutido) */
     --background: oklch(0.97 0.005 260);
     --foreground: oklch(0.18 0.02 260);
     --card: oklch(1 0 0);
@@ -33,6 +30,7 @@
     --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
     --font-display: ui-serif, Georgia, 'Times New Roman', serif;
+    color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -50,808 +48,586 @@
       --destructive: oklch(0.65 0.20 25);
       --success: oklch(0.72 0.17 150);
       --warning: oklch(0.75 0.15 85);
+      color-scheme: dark;
     }
   }
 
-  /* ============ BASE ============ */
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
-    background-color: var(--background);
+    margin: 0;
+    background: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
-    line-height: 1.65;
-    -webkit-font-smoothing: antialiased;
+    font-size: 16px;
+    line-height: 1.6;
   }
-  .container { max-width: 960px; margin: 0 auto; padding: 48px 24px 96px; }
-  @media (max-width: 700px) { .container { padding: 24px 16px 72px; } }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px 72px; }
 
-  h1, h2, h3 { text-wrap: balance; font-family: var(--font-display); letter-spacing: -0.015em; }
-  h1 { font-size: 38px; line-height: 1.15; margin: 8px 0 20px; }
-  h2 { font-size: 26px; margin: 0 0 16px; }
-  h2 .seg-num { font-family: var(--font-mono); font-weight: 500; color: var(--muted-foreground); margin-right: 10px; font-size: 18px; }
-  h3 { font-size: 19px; margin: 0 0 10px; }
-  p { max-width: 65ch; margin-bottom: 14px; font-size: 15px; }
-  strong { font-weight: 600; }
-  a { color: var(--primary); text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  /* Header / hero */
+  header.page {
+    padding: 56px 0 28px;
+    border-bottom: 1px solid var(--border);
+  }
   .eyebrow {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--primary);
-    margin-bottom: 8px;
-    font-weight: 600;
+    color: var(--muted-foreground);
+    margin: 0 0 14px;
   }
-  .subtitle { color: var(--muted-foreground); font-family: var(--font-mono); font-size: 13px; margin-top: -14px; margin-bottom: 36px; }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.9rem, 4.6vw, 3rem);
+    line-height: 1.15;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    max-width: 18em;
+  }
+  .meta {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--muted-foreground);
+    margin: 0;
+  }
+  .meta span { display: inline-block; }
+  .meta .sep { margin: 0 8px; opacity: .5; }
 
-  section { margin-bottom: 56px; }
-
-  /* ============ ANSWER HERO ============ */
-  .answer-card {
-    background: color-mix(in oklab, var(--primary) 6%, var(--card));
+  /* Resposta em uma frase — primeira coisa visível */
+  .answer {
+    margin-top: 30px;
+    background: color-mix(in oklab, var(--primary) 7%, var(--card));
     border: 1.5px solid var(--primary);
     border-radius: var(--radius);
-    box-shadow: 0 4px 24px color-mix(in oklab, var(--primary) 10%, transparent);
-    padding: 26px 28px;
-    margin-bottom: 36px;
+    padding: 22px 24px;
   }
-  .answer-card h1 { margin: 0 0 14px; font-size: 30px; }
-  .answer-card .answer-lead {
+  .answer .label {
     font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.12em;
+    font-size: 12px;
+    letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--primary);
-    font-weight: 700;
-    margin-bottom: 10px;
+    display: block;
+    margin-bottom: 8px;
   }
-  .answer-card p { margin-bottom: 0; font-size: 17px; line-height: 1.6; }
+  .answer p { margin: 0; font-size: 1.06rem; }
 
-  .meta-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 40px; }
-  .meta-chip {
+  /* Sections */
+  section { margin-top: 52px; }
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.7rem;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  section > .lead { color: var(--muted-foreground); margin: 0 0 22px; max-width: 62ch; }
+
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.22rem;
+    margin: 34px 0 10px;
+  }
+
+  p { max-width: 68ch; }
+  ul, ol { max-width: 66ch; }
+  li { margin: 6px 0; }
+  code {
     font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--card);
-    color: var(--muted-foreground);
+    font-size: 0.9em;
+    background: var(--code-bg);
+    border-radius: 5px;
+    padding: 0.12em 0.35em;
   }
-  .meta-chip b { color: var(--foreground); font-weight: 600; }
+  a { color: var(--primary); }
 
-  /* ============ CARDS ============ */
-  .ve-card {
-    background: var(--card);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px 22px;
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.93rem;
+    margin: 18px 0 6px;
+    overflow-wrap: break-word;
   }
-  .ve-card--recessed { background: var(--muted); border-color: transparent; }
-  .grid { display: grid; gap: 16px; }
-  .grid-2 { grid-template-columns: 1fr 1fr; }
-  @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
-
-  /* ============ TABLES ============ */
-  .table-wrap { overflow-x: auto; border: 1.5px solid var(--border); border-radius: var(--radius); }
-  table { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--card); }
-  th, td { text-align: left; padding: 10px 14px; vertical-align: top; border-bottom: 1px solid var(--border); }
-  thead th {
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
     font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
+    font-size: 0.8rem;
+    letter-spacing: .06em;
     text-transform: uppercase;
     color: var(--muted-foreground);
     background: var(--muted);
   }
+  th:first-child { border-top-left-radius: 8px; }
+  th:last-child { border-top-right-radius: 8px; }
   tr:last-child td { border-bottom: none; }
-  td code, p code, li code, thead th code {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    background: var(--code-bg);
-    padding: 1px 5px;
-    border-radius: 4px;
-  }
-  .num { font-variant-numeric: tabular-nums; }
 
-  /* ============ MERMAID SHELL ============ */
-  .diagram-shell { position: relative; margin: 8px 0 10px; }
-  .diagram-shell__hint {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--muted-foreground);
-    margin-bottom: 8px;
-    opacity: 0.75;
+  .scroll-x { overflow-x: auto; }
+
+  /* Cards grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
   }
-  .mermaid-wrap {
-    position: relative;
+  .card {
     background: var(--card);
     border: 1.5px solid var(--border);
     border-radius: var(--radius);
-    padding: 32px 20px;
-    overflow: auto;
-    margin-bottom: 12px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 380px;
-    cursor: grab;
+    padding: 18px;
   }
-  .mermaid-wrap.is-panning { cursor: grabbing; user-select: none; }
-  .zoom-controls {
-    position: absolute; top: 8px; right: 8px; z-index: 10;
-    display: flex; gap: 2px;
+  .card .k {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    margin: 0 0 6px;
+  }
+  .card .v { font-size: 1.02rem; margin: 0; color: var(--card-foreground); }
+
+  /* Figure / diagram shell */
+  figure { margin: 26px 0 10px; padding: 0; }
+  .diagram-shell {
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
     background: var(--card);
+    overflow: hidden;
+  }
+  .diagram-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--muted);
+    flex-wrap: wrap;
+  }
+  .diagram-toolbar .hint {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted-foreground);
+    margin-left: auto;
+  }
+  .diagram-toolbar button {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 4px 10px;
     border: 1px solid var(--border);
-    border-radius: 6px; padding: 2px;
+    background: var(--card);
+    color: var(--foreground);
+    border-radius: 6px;
+    cursor: pointer;
   }
-  .zoom-controls button {
-    width: 28px; height: 28px; border: none; background: transparent;
-    color: var(--muted-foreground); font-family: var(--font-mono); font-size: 14px;
-    cursor: pointer; border-radius: 4px;
+  .diagram-toolbar button:hover { border-color: var(--primary); color: var(--primary); }
+  .diagram-toolbar button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+  .mermaid-wrap { position: relative; }
+  .mermaid-viewport {
+    overflow: auto;
+    max-height: 560px;
+    cursor: grab;
+    padding: 18px;
   }
-  .zoom-controls button:hover { background: var(--border); color: var(--foreground); }
-  .zoom-label {
-    font-family: var(--font-mono); font-size: 10px; color: var(--muted-foreground);
-    padding: 0 8px; white-space: nowrap; display: flex; align-items: center;
+  .mermaid-viewport.dragging { cursor: grabbing; }
+  .mermaid-canvas { min-width: min-content; transform-origin: top left; }
+  .mermaid-canvas svg { margin: 0 auto; display: block; }
+  figcaption {
+    margin: 14px 2px 0;
+    font-size: 0.95rem;
+    color: var(--muted-foreground);
+    border-left: 3px solid var(--primary);
+    padding-left: 12px;
   }
-  .mermaid-viewport { position: relative; overflow: hidden; width: 100%; min-height: 320px; }
-  .mermaid-canvas { position: absolute; top: 0; left: 0; }
-  .mermaid .nodeLabel { font-family: var(--font-sans) !important; font-size: 15px !important; font-weight: 500; }
-  .mermaid .edgeLabel { font-family: var(--font-mono) !important; font-size: 12px !important; }
-  .mermaid .edgeLabel .edgeLabel { background-color: transparent !important; }
+  figcaption .claim { color: var(--foreground); font-weight: 600; }
 
-  figure { margin: 0 0 8px; }
-  figure > figcaption {
-    font-size: 13.5px; margin: 6px 0 0; padding: 10px 14px;
-    background: var(--muted); border-left: 3px solid var(--primary);
-    border-radius: 0 var(--radius) var(--radius) 0;
+  /* details / dobradura */
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--primary);
+    margin: 22px 0 8px;
   }
-  figcaption .claim { font-weight: 600; }
-
-  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 2px 0 12px; }
-  .legend-item { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted-foreground); }
-  .legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
-
-  /* ============ CALLOUT / SIGNAL ============ */
-  .callout {
-    background: var(--card); border: 1.5px solid var(--border);
-    border-left: 4px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0;
-    padding: 16px 20px; margin: 18px 0; font-size: 14px;
-  }
-  .callout .callout-label {
-    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
-    text-transform: uppercase; color: var(--accent); font-weight: 700; display: block; margin-bottom: 6px;
-  }
-  .callout code, .callout em { font-style: italic; }
-
-  ul { margin: 0 0 14px 0; padding-left: 22px; max-width: 65ch; }
-  li { margin-bottom: 8px; font-size: 14.5px; }
-  .pill-list { list-style: none; padding-left: 0; margin: 0; }
-  .pill-list li { margin-bottom: 10px; padding-left: 24px; position: relative; }
-  .pill-list li::before {
-    content: "»"; position: absolute; left: 4px; color: var(--primary); font-weight: 700;
-  }
-
-  /* ============ DETAILS / DOBRADO ============ */
-  details {
-    background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius);
-    padding: 0; margin-bottom: 14px; overflow: hidden;
-  }
-  details > summary {
-    cursor: pointer; padding: 14px 18px; font-weight: 600; font-size: 15px;
-    list-style: none; position: relative;
-  }
-  details > summary::-webkit-details-marker { display: none; }
-  details > summary::after {
-    content: "▸"; position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-    color: var(--primary); transition: transform 0.15s ease;
-  }
-  details[open] > summary::after { transform: translateY(-50%) rotate(90deg); }
-  details .details-body { padding: 4px 18px 18px; border-top: 1px solid var(--border); }
-  .dobrado-label {
-    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--muted-foreground); font-weight: 600;
+  summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 4px; }
+  details { border: 1px dashed var(--border); border-radius: var(--radius); padding: 4px 18px 16px; margin: 20px 0; }
+  details[open] { border-style: solid; }
+  details > .inner { margin-top: 10px; }
+  details > .inner pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--foreground);
   }
 
-  /* ============ FOOTER ============ */
-  footer {
-    margin-top: 24px; padding-top: 20px; border-top: 1.5px solid var(--border);
-    font-family: var(--font-mono); font-size: 11.5px; color: var(--muted-foreground);
+  .note {
+    background: var(--muted);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    font-size: 0.94rem;
+    margin: 18px 0;
   }
-  .aging { color: var(--warning); font-weight: 500; }
 
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { scroll-behavior: auto !important; }
+  @media (max-width: 560px) {
+    .diagram-toolbar .hint { display: none; }
+    .grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
-<div class="container">
+<div class="wrap">
 
-  <p class="eyebrow">deep-orchestrator-agent-skill · execução 20260823-172242-2682189</p>
-  <h1>Como o EXPLAINER do deep-orchestrator passou a ser gerado na v3.6.0?</h1>
+  <header class="page">
+    <p class="eyebrow">deep-orchestrator-agent-skill · v3.6.0 · execução 20260823-175129</p>
+    <h1>Por que o EXPLAINER da v3.6.0 agora passa pelo Plannotator?</h1>
+    <p class="meta"><span>execução 20260823-175129-2804543</span><span class="sep">·</span><span>válido para a versão v3.6.0</span><span class="sep">·</span><span>documentado em 2026-08-23</span></p>
+  </header>
 
-  <div class="meta-strip">
-    <span class="meta-chip">conteúdo vale para <b>v3.6.0</b></span>
-    <span class="meta-chip">gerado em <b>2026-08-23</b></span>
-    <span class="meta-chip">de v3.5.1 &rarr; v3.6.0</span>
-    <span class="meta-chip">2 ondas · 3 worktrees</span>
-    <span class="meta-chip">3 squash-commits</span>
+  <div class="answer" role="region" aria-label="Resposta em uma frase">
+    <span class="label">Resposta em uma frase</span>
+    <p>Porque, na v3.6.0, o <code>EXPLAINER.html</code> deixou de ser gerado por um script fixo e passou a ser uma <strong>explicação didática delegada a um sub-agente</strong>, e o Plannotator é o <strong>runtime de render/anotação</strong> cujos tokens de tema a skill de render aplica ao arquivo final — instalado automaticamente quando falta.</p>
   </div>
 
-  <!-- ============================ RESPOSTA ============================ -->
-  <section id="resposta">
-    <div class="answer-card">
-      <div class="answer-lead">Resposta em uma frase</div>
-      <h1>O EXPLAINER.html do passo final deixou de ser criado por script&#43;template antigos (v3.5.1) e, na v3.6.0, é gerado por um sub-agente que segue a skill html-explainer-agent-skill, renderiza com visual-explainer e salva o arquivo no lugar em <code>$BASE_DIR/EXPLAINER.html</code> — sem limite de tempo e com a UI do Plannotator opcional.</h1>
-    </div>
-
-    <p>A mudança não é &ldquo;trocar um arquivo&rdquo;: é uma troca de <strong>arquitetura de geração</strong>. O que era fonte de verdade (gerador + template com slots) virou <strong>delegação</strong> a uma skill que decide a didática antes de desenhar. Este documento mostra o fluxo novo, o que foi removido, como a execução foi organizada em ondas e como ela foi verificada — com os fatos exatos da rodada 20260823-172242-2682189.</p>
-  </section>
-
   <!-- ============================ LEITOR ============================ -->
-  <section id="leitor">
-    <h2>Leitor</h2>
-    <p>Leitor <strong>misto / desconhecido</strong> (quem lê o EXPLAINER é quem abre o relatório final da skill — pode ser novato no fluxo interno ou um mantenedor experiente). Como a evidência diz para errar para <strong>mais</strong> andaime quando há dúvida, o documento trata o leitor como <strong>novato</strong> e dobra o passo a passo para o experiente pular.</p>
-    <div class="grid grid-2">
-      <div class="ve-card">
-        <h3>Você já sabe</h3>
-        <ul>
-          <li>Em linhas gerais o que é uma skill de codificação multi-fases.</li>
-          <li>Que repositórios de código têm branches e commits.</li>
-          <li><code>v3.5.1</code> usava um gerador de HTML diferente.</li>
-        </ul>
+  <section aria-labelledby="leitor-h">
+    <h2 id="leitor-h">Leitor</h2>
+    <div class="grid">
+      <div class="card">
+        <p class="k">Nível</p>
+        <p class="v"><strong>misto / desconhecido</strong> → tratado como novato</p>
       </div>
-      <div class="ve-card">
-        <h3>Você ainda não sabe</h3>
-        <ul>
-          <li>O que é uma <strong>onda</strong> e uma <strong>worktree</strong> na orquestração.</li>
-          <li>Como o passo 4 (o <code>COMMIT-FINAL</code>) produz o EXPLAINER hoje.</li>
-          <li>O que é o <strong>brief didático</strong> e por que ele precede o HTML.</li>
-          <li>O que substituiu o gerador e por que a UI do Plannotator ficou opcional.</li>
-        </ul>
+      <div class="card">
+        <p class="k">Já sabe</p>
+        <p class="v">Que há um orquestrador multi-agente e que cada execução gera um EXPLAINER.</p>
+      </div>
+      <div class="card">
+        <p class="k">Não sabe</p>
+        <p class="v">O que mudou no fluxo do EXPLAINER nem por que o Plannotator entrou como runtime.</p>
       </div>
     </div>
-
-    <h3 style="margin-top:22px">Portão de complexidade</h3>
-    <p>Complexidade de <strong>alta interatividade</strong>: o assunto só faz sentido como um todo (fluxo novo <em>+</em> remoção do gerador <em>+</em> contrato de instalação <em>+</em> testes). Portanto <strong>arsenal completo</strong>: figuras com afirmação, tabelas, segmentação e sinalização. Não é quest&atilde;o de decoreba de definição, então não há quiz de recuperação.</p>
+    <p>Como o leitor é misto ou desconhecido, este documento constrói o conteúdo para o novato, com o andaime (passo a passo) recolhível em <a href="#dobrado">&lt;details&gt;</a> para quem já conhece o orquestrador pular.</p>
   </section>
 
-  <!-- ============================ BUZZWORDS ============================ -->
-  <section id="buzzwords">
-    <h2>Buzzwords</h2>
-    <p>Cada termo abaixo é definido na primeira ocorrência no corpo do documento (sentença <em>ou</em> figura). A tabela é fechada: nada de &ldquo;definir conforme necessário&rdquo;.</p>
-    <div class="table-wrap">
+  <!-- ============================ O QUE MUDOU ============================ -->
+  <section aria-labelledby="mudou-h">
+    <h2 id="mudou-h">O que mudou — o de-para</h2>
+    <p class="lead">Uma linha do antes e do depois, em números e em figura.</p>
+
+    <div class="scroll-x">
       <table>
-        <thead><tr><th>Termo</th><th>Onde aparece primeiro</th><th>Definição (≤20 palavras)</th></tr></thead>
+        <thead>
+          <tr><th>Aspecto</th><th>Antes (rota por script)</th><th>Depois (v3.6.0)</th></tr>
+        </thead>
         <tbody>
-          <tr><td><code>COMMIT-FINAL</code></td><td>Portão de complexidade</td><td>Passo que fecha a execução: integra tudo por squash e gera o EXPLAINER.html.</td></tr>
-          <tr><td>html-explainer-agent-skill</td><td>Figura 1</td><td>Skill que escreve o brief didático (leitor, buzzwords, figuras) antes de renderizar.</td></tr>
-          <tr><td>visual-explainer</td><td>Figura 1</td><td>Skill de renderização que compõe o HTML final a partir do brief.</td></tr>
-          <tr><td>plannotator-visual-explainer</td><td>Figura 1</td><td>Skill de tema/render que aplica os tokens visuais do Plannotator ao HTML.</td></tr>
-          <tr><td>Plannotator (UI de anotação)</td><td>Figura 1</td><td>Janela opcional para anotar o HTML; nunca substitui o arquivo salvo em disco.</td></tr>
-          <tr><td>brief didático</td><td>Figura 1</td><td>Documento que declara leitor, portão, buzzwords e figuras antes do HTML.</td></tr>
-          <tr><td><code>$BASE_DIR</code> (raiz-de-mundo)</td><td>Resposta em uma frase</td><td>Fronteira de escrita da execução; o artefato final é salvo exatamente aqui.</td></tr>
-          <tr><td>Onda</td><td>Segmento 3</td><td>Grupo de sub-agentes trabalhando em paralelo, cada um na sua worktree, na mesma rodada.</td></tr>
-          <tr><td>Worktree</td><td>Segmento 3</td><td>Cópia isolada do repositório com branch própria; cada sub-agente trabalha na sua.</td></tr>
-          <tr><td>Subwave</td><td>Segmento 7</td><td>Teste/validação que roda em paralelo com a onda seguinte, não numa onda própria.</td></tr>
-          <tr><td>Squash-merge</td><td>Segmento 4</td><td>Juntar todos os commits de uma worktree em um só ao integrar o branch.</td></tr>
-          <tr><td>Revisor adversarial</td><td>Segmento 5</td><td>Sub-agente que procura defeitos na entrega antes de ela ser integrada.</td></tr>
-          <tr><td>REVISOR DE PLANO</td><td>Segmento 5</td><td>Avaliador que decide entre replanear e declarar convergência.</td></tr>
-          <tr><td>Gate</td><td>Segmento 6</td><td>Verificação obrigatória (build/teste/lint) antes de aceitar uma integração.</td></tr>
-          <tr><td>Repo MOCK</td><td>Segmento 7</td><td>Repositório descartável, fora do alvo, onde o fluxo é testado de ponta a ponta sem risco.</td></tr>
-          <tr><td>R1 / R1-c</td><td>Segmento 1</td><td>Regra 1: o orquestrador nunca escreve HTML à mão; exceção R1-c só em degradação via Bash.</td></tr>
-          <tr><td>Dogfood</td><td>Segmento 7</td><td>Usar o próprio produto: o novo fluxo gera o EXPLAINER desta execução.</td></tr>
+          <tr><td>Quem escreve a explicação</td><td>Script <code>generate-explainer.sh</code> + template fixo <code>templates/html-explainer.html</code></td><td>Sub-agente delegado seguindo a <code>html-explainer-agent-skill</code> (brief didático)</td></tr>
+          <tr><td>Renderização</td><td>Template pronto embutido no script</td><td><code>visual-explainer</code> / <code>plannotator-visual-explainer</code>, com tokens de tema do Plannotator</td></tr>
+          <tr><td>Runtime Plannotator</td><td>Não existia no fluxo</td><td>Binário auto-instalado se ausente (<code>scripts/check-plannotator.sh --install</code>, v0.27.6 verificada)</td></tr>
+          <tr><td>Entrega</td><td>Arquivo salvo pelo script</td><td>Arquivo <code>EXPLAINER.html</code> salvo <strong>no lugar</strong>, no fim do COMMIT-FINAL</td></tr>
+          <tr><td>Tempo</td><td>Geração síncrona do script</td><td>Sem limite de tempo (a explicação pode demorar o que precisar)</td></tr>
         </tbody>
       </table>
     </div>
+
+    <p class="note"><strong>O que não mudou:</strong> a entrega continua sendo o arquivo <code>EXPLAINER.html</code> salvo na raiz; a UI de anotação do Plannotator é opcional e nunca substitui o arquivo.</p>
   </section>
 
   <!-- ============================ FIGURA 1 ============================ -->
-  <section id="figura1">
-    <h2>Figura 1 — O fluxo novo, de ponta a ponta</h2>
-    <p>A afirmação desta figura: <em>na v3.6.0 o EXPLAINER.html nasce de um sub-agente que decide a didática e salva o arquivo no lugar — não de um script que preenche um template.</em></p>
+  <section aria-labelledby="fig1-h">
+    <h2 id="fig1-h">O novo fluxo do EXPLAINER</h2>
+    <p class="lead">Quatro etapas encadeadas trocam o script fixo por uma explicação construída sob regras didáticas.</p>
+
+    <p>O caminho crítico está no <strong class="crit">passo de renderização</strong>: é onde o Plannotator entra — se a skill de render não estiver disponível e destravada, o arquivo não sai. A figura abaixo marca essa etapa em destaque; o texto volta a apontá-lo no segmento <a href="#runtime">O runtime do Plannotator</a>.</p>
 
     <figure>
-      <div class="diagram-shell" role="img" aria-label="Fluxo novo da geração do EXPLAINER na v3.6.0: orquestrador delega a um sub-agente explicador, que segue a html-explainer-agent-skill, escreve o brief didático, renderiza com visual-explainer e salva o arquivo em $BASE_DIR/EXPLAINER.html; a UI do Plannotator é opcional.">
-        <p class="diagram-shell__hint">Ctrl/Cmd + roda para zoom · arrasta para mover · duplo clique para encaixar</p>
+      <div class="diagram-shell" role="img" aria-label="Fluxograma do novo fluxo do EXPLAINER na v3.6.0: o COMMIT-FINAL delega a um sub-agente, que segue a html-explainer-agent-skill para escrever o brief didático, que é renderizado por visual-explainer e plannotator-visual-explainer com tokens de tema do Plannotator, gerando o EXPLAINER.html salvo no lugar. O passo de renderização é o gargalo.">
+        <div class="diagram-toolbar">
+          <button type="button" class="zoom-in">＋</button>
+          <button type="button" class="zoom-out">－</button>
+          <button type="button" class="zoom-reset">reset</button>
+          <button type="button" class="zoom-expand">expandir</button>
+          <span class="hint">rolar p/ mover · Ctrl+scroll p/ zoom</span>
+        </div>
         <div class="mermaid-wrap">
-          <div class="zoom-controls">
-            <button type="button" data-action="zoom-in" title="Zoom in">+</button>
-            <button type="button" data-action="zoom-out" title="Zoom out">&minus;</button>
-            <button type="button" data-action="zoom-fit" title="Encaixar">&#8634;</button>
-            <button type="button" data-action="zoom-one" title="1:1">1:1</button>
-            <button type="button" data-action="zoom-expand" title="Abrir tamanho real">&#x26F6;</button>
-            <span class="zoom-label">Carregando…</span>
-          </div>
           <div class="mermaid-viewport">
-            <div class="mermaid mermaid-canvas"></div>
+            <div class="mermaid-canvas"><pre class="mermaid">
+flowchart TD
+  A["COMMIT-FINAL<br/>fase que encerra a execução"] -->|"delega a"| B["Sub-agente<br/>explicador"]
+  B -->|"segue"| C["html-explainer-agent-skill<br/>escreve o brief didático"]
+  C -->|"entrega o brief"| D["plannotator-visual-explainer<br/>aplica tokens de tema"]:::crit
+  D -->|"roteiriza"| E["visual-explainer<br/>compõe o HTML"]
+  E -->|"gera"| F["EXPLAINER.html<br/>salvo no lugar"]
+  classDef crit fill:#f7e7ff,stroke:#8a2be2,stroke-width:2.5px
+            </pre></div>
           </div>
         </div>
-        <figcaption><span class="claim">O fluxo novo salva o artefato em <code>$BASE_DIR/EXPLAINER.html</code> via delegação didática; a UI do Plannotator é opcional.</span></figcaption>
-        <script type="text/plain" class="diagram-source">
-flowchart TD
-  O[Orquestrador<br/>no passo 4] -->|"delega a um sub-agente"| SM[Sub-agente explicador]
-  SM -->|"carrega as skills"| H[html-explainer-agent-skill<br/>+ visual-explainer]
-  H -->|"escreve o brief"| B[Brief: leitor + buzzwords<br/>+ figuras]
-  B -->|"renderiza (delega)"| R[HTML self-contained]
-  R -->|"salva NO LUGAR"| F[raiz-de-mundo:<br/>$BASE_DIR/EXPLAINER.html]
-  F -.->|"opcional, não substitui o arquivo"| P[[Plannotator UI]]
-  classDef critical fill:#ffce54,stroke:#b07d00,stroke-width:2px,color:#3b2b00,font-weight:700;
-  class SM,B,R,F critical;
-        </script>
       </div>
+      <figcaption><span class="claim">Afirmação:</span> na v3.6.0, o EXPLAINER nasce de um sub-agente que segue a html-explainer-agent-skill e renderiza com o Plannotator — não mais de um script fixo.</figcaption>
     </figure>
-
-    <div class="callout">
-      <span class="callout-label">Caminho crítico</span>
-      O gargalo é a <strong>delegação ao sub-agente que segue a skill</strong> (nós em âmbar): é ela que destrava tudo — sem esse nó, o EXPLAINER voltaria a ser escrito à mão pelo orquestrador, exatamente o que a v3.6.0 veta (R1). A chegada <code>salva NO LUGAR</code> em <code>$BASE_DIR/EXPLAINER.html</code> é a ponta que garante a entrega mesmo sem a UI.
-    </div>
   </section>
 
   <!-- ============================ FIGURA 2 ============================ -->
-  <section id="figura2">
-    <h2>Figura 2 — O de-para: o que foi removido vs. o que foi adicionado</h2>
-    <p>Comparar opções é desenhar a <strong>diferença</strong>: a perna esquerda (removida) sumiu, a direita (nova) entrou. Todo o resto do <code>COMMIT-FINAL</code> continua igual.</p>
-
+  <section aria-labelledby="fig2-h">
+    <h2 id="fig2-h">Antes × depois, a diferença</h2>
+    <p class="lead">Comparar é desenhar o que cada rota adiciona — uma rota nova no lugar da antiga.</p>
+    <p>Três artefatos foram <strong>removidos</strong>: o script <code>generate-explainer.sh</code>, o template <code>html-explainer.html</code> e a pasta <code>templates/</code>. No lugar, entram a delegação didática e o runtime Plannotator.</p>
     <figure>
-      <div class="diagram-shell" role="img" aria-label="Comparação: v3.5.1 usava generate-explainer.sh mais template html-explainer.html preenchendo slots para criar o EXPLAINER.html; v3.6.0 remove esses dois e delega a um sub-agente que segue html-explainer-agent-skill, renderiza com visual-explainer e salva o arquivo no lugar.">
-        <p class="diagram-shell__hint">Ctrl/Cmd + roda para zoom · arrasta para mover · duplo clique para encaixar</p>
+      <div class="diagram-shell" role="img" aria-label="Diagrama de antes e depois: a rota antiga gerava o EXPLAINER.html direto de um script e template fixos, sem Plannotator; a rota nova gera o mesmo arquivo passando por um sub-agente didático e pelo runtime Plannotator auto-instalado; a saída é a mesma.">
+        <div class="diagram-toolbar">
+          <button type="button" class="zoom-in">＋</button>
+          <button type="button" class="zoom-out">－</button>
+          <button type="button" class="zoom-reset">reset</button>
+          <button type="button" class="zoom-expand">expandir</button>
+          <span class="hint">rolar p/ mover · Ctrl+scroll p/ zoom</span>
+        </div>
         <div class="mermaid-wrap">
-          <div class="zoom-controls">
-            <button type="button" data-action="zoom-in" title="Zoom in">+</button>
-            <button type="button" data-action="zoom-out" title="Zoom out">&minus;</button>
-            <button type="button" data-action="zoom-fit" title="Encaixar">&#8634;</button>
-            <button type="button" data-action="zoom-one" title="1:1">1:1</button>
-            <button type="button" data-action="zoom-expand" title="Abrir tamanho real">&#x26F6;</button>
-            <span class="zoom-label">Carregando…</span>
-          </div>
           <div class="mermaid-viewport">
-            <div class="mermaid mermaid-canvas"></div>
+            <div class="mermaid-canvas"><pre class="mermaid">
+flowchart LR
+  subgraph ANTES["Antes — rota por script"]
+    direction LR
+    X1["generate-explainer.sh<br/>+ template fixo"] -->|"gera direto"| O1["EXPLAINER.html"]
+  end
+  subgraph DEPOIS["Depois — v3.6.0"]
+    direction LR
+    A1["sub-agente<br/>didático"] -->|"renderiza"| B1["Plannotator runtime<br/>auto-instalado"]:::crit
+    B1 -->|"gera"| O2["EXPLAINER.html"]
+  end
+  classDef crit fill:#f7e7ff,stroke:#8a2be2,stroke-width:2.5px
+            </pre></div>
           </div>
         </div>
-        <figcaption><span class="claim">A virada 3.5.1&rarr;3.6.0 é tirar o gerador&#43;template (removidos) e colocar delegação didática que <em>salva no lugar</em>; nada mais no COMMIT-FINAL muda.</span></figcaption>
-        <script type="text/plain" class="diagram-source">
-flowchart LR
-  ANTES[generate-explainer.sh<br/>+ template html-explainer.html] -->|"preenchia os slots"| A1[EXPLAINER.html v3.5.1]
-  A1 -.->|"removido na v3.6.0"| X[(removido)]
-  O2[Orquestrador] -->|"delega (R1)"| SM2[Sub-agente explicador]
-  SM2 -->|"segue html-explainer-agent-skill"| R2[visual-explainer /<br/>plannotator-visual-explainer]
-  R2 -->|"salva no lugar"| F2[raiz-de-mundo:<br/>$BASE_DIR/EXPLAINER.html]
-  classDef critical fill:#ffce54,stroke:#b07d00,stroke-width:2px,color:#3b2b00,font-weight:700;
-  class SM2,R2,F2 critical;
-        </script>
       </div>
+      <figcaption><span class="claim">Afirmação:</span> as duas rotas entregam o mesmo <code>EXPLAINER.html</code>; o que difere é o caminho — antes script fixo sem Plannotator, depois delegação didática com Plannotator auto-instalado.</figcaption>
     </figure>
-
-    <div class="callout">
-      <span class="callout-label">Caminho crítico</span>
-      O ponto que muda o contrato está nos <strong>nós em âmbar</strong>: quem gera o HTML agora é uma <strong>skill</strong> (não um script próprio da skill) e quem entrega é o <strong>arquivo salvo no lugar</strong> — a UI de anotação não é o canal de entrega.
-    </div>
   </section>
 
   <!-- ============================ FIGURA 3 ============================ -->
-  <section id="figura3">
-    <h2>Figura 3 — Ondas, worktrees e a integração</h2>
-    <p>A afirmação: <em>duas ondas (três worktrees) confluem por squash-merge em três commits, cada um com gate limpo.</em></p>
-
+  <section aria-labelledby="fig3-h">
+    <h2 id="fig3-h">O contrato de instalação do Plannotator</h2>
+    <p class="lead">Quatro peças têm de existir para a entrega acontecer — e o script de auto-instalação garante as quatro.</p>
+    <p>O <code>check-plannotator.sh --install</code> instala o binário em modo <code>--minimal</code> quando falta (mínima 0.19.1). Nesta execução o Plannotator <strong>já estava</strong> instalado em <strong>v0.27.6</strong> e o setup <strong>já estava pronto</strong> — nada precisou ser instalado; só foi documentado.</p>
     <figure>
-      <div class="diagram-shell" role="img" aria-label="Na onda 1, a worktree onda1-skillmd-explainer entrega o SKILL.md v3.6.0 e a worktree onda1-limpieza-explainer remove o gerador e atualiza a documentação; na onda 2, onda2-fix-docs-stale remove referências velhas; tudo é integrado por squash-merge com gates verdes em três commits.">
-        <p class="diagram-shell__hint">Ctrl/Cmd + roda para zoom · arrasta para mover · duplo clique para encaixar</p>
+      <div class="diagram-shell" role="img" aria-label="Diagrama do contrato de instalação do Plannotator: o check-plannotator.sh --install (modo --minimal) garante quatro peças — o binário plannotator, a skill plannotator-visual-explainer, a skill visual-explainer e o destrave da invocação pelo modelo — que juntas permitem compor e salvar o EXPLAINER.html; o destrave é o passo crítico.">
+        <div class="diagram-toolbar">
+          <button type="button" class="zoom-in">＋</button>
+          <button type="button" class="zoom-out">－</button>
+          <button type="button" class="zoom-reset">reset</button>
+          <button type="button" class="zoom-expand">expandir</button>
+          <span class="hint">rolar p/ mover · Ctrl+scroll p/ zoom</span>
+        </div>
         <div class="mermaid-wrap">
-          <div class="zoom-controls">
-            <button type="button" data-action="zoom-in" title="Zoom in">+</button>
-            <button type="button" data-action="zoom-out" title="Zoom out">&minus;</button>
-            <button type="button" data-action="zoom-fit" title="Encaixar">&#8634;</button>
-            <button type="button" data-action="zoom-one" title="1:1">1:1</button>
-            <button type="button" data-action="zoom-expand" title="Abrir tamanho real">&#x26F6;</button>
-            <span class="zoom-label">Carregando…</span>
-          </div>
           <div class="mermaid-viewport">
-            <div class="mermaid mermaid-canvas"></div>
+            <div class="mermaid-canvas"><pre class="mermaid">
+flowchart TD
+  S["check-plannotator.sh --install<br/>modo --minimal"] -->|"garante"| B1["binário plannotator<br/>~/.local/bin"]
+  S -->|"garante"| R1["plannotator-visual-explainer<br/>skill de render"]
+  S -->|"garante"| V1["visual-explainer<br/>skill de composição"]
+  S -->|"garante"| U1["destrave da invocação<br/>pelo modelo"]:::crit
+  B1 -->|"fornece o tema"| T1["tokens copiados<br/>para o EXPLAINER.html"]
+  R1 -->|"roteiriza"| V1
+  V1 -->|"compõe"| T1
+  U1 -->|"permite"| R1
+  classDef crit fill:#f7e7ff,stroke:#8a2be2,stroke-width:2.5px
+            </pre></div>
           </div>
         </div>
-        <figcaption><span class="claim">As três worktrees confluem, cada uma num squash-commit com gate limpo, na ordem onda 1 &rarr; onda 1 &rarr; onda 2.</span></figcaption>
-        <script type="text/plain" class="diagram-source">
-flowchart TD
-  subgraph W1[Onda 1 — entrega o fluxo novo]
-    WA[onda1-skillmd-explainer] -->|"SKILL.md v3.6.0"| F1[arquivo da skill]
-    WB[onda1-limpieza-explainer] -->|"remove gerador/template · docs"| F2[README + check-install]
-  end
-  subgraph W2[Onda 2 — REPLAN convergência]
-    WC[onda2-fix-docs-stale] -->|"remove refs stale"| F3[README + sync-global-skill]
-  end
-  F1 -->|"squash-merge"| C1[commit c332e29]
-  F2 -->|"squash-merge"| C2[commit 64763d9]
-  F3 -->|"squash-merge"| C3[commit 9e798ce]
-  C1 --> GATE[3 integrações<br/>com gate verde]
-  C2 --> GATE
-  C3 --> GATE
-  GATE -->|"revisado e convergido"| DONE[Done]
-  classDef critical fill:#ffce54,stroke:#b07d00,stroke-width:2px,color:#3b2b00,font-weight:700;
-  class WA,WB,WC critical;
-        </script>
       </div>
+      <figcaption><span class="claim">Afirmação:</span> nenhuma das quatro peças sobra — faltando o destrave, a skill de render não pode ser invocada pelo modelo e a entrega falha.</figcaption>
     </figure>
+    <p>O <strong class="crit">destrave</strong> é o passo crítico: a skill de render chega com <code>disable-model-invocation: true</code>; sem a linha removida (e o flag <code>allow_implicit_invocation</code> ajustado), a ordem "invoque a skill de render" vira uma ordem impossível de cumprir e o agente cairia no fallback de escrever HTML na mão — exatamente o que a v3.6.0 eliminou.</p>
+  </section>
 
-    <div class="callout">
-      <span class="callout-label">Caminho crítico</span>
-      As <strong>três worktrees</strong> (âmbar) são o eixo: é delas que saem os commits. O revisor adversarial aprovou os dois primeiros; o <strong>REVISOR DE PLANO</strong> pediu a onda 2 ao apontar referências velhas — por isso <code>9e798ce</code> existe.
+  <!-- ============================ BUZZWORDS ============================ -->
+  <section aria-labelledby="bz-h">
+    <h2 id="bz-h">Buzzwords</h2>
+    <p class="lead">Termos usados neste documento, com a definição ≤20 palavras e a primeira aparição. Cada um é também definido no ponto de uso no texto.</p>
+    <div class="scroll-x">
+      <table>
+        <thead><tr><th>Termo</th><th>Primeira aparição</th><th>Definição (≤20 palavras)</th></tr></thead>
+        <tbody>
+          <tr><td><code>html-explainer-agent-skill</code></td><td>O que mudou</td><td>Skill que escreve o brief didático e delega a renderização (não desenha HTML).</td></tr>
+          <tr><td><code>brief didático</code></td><td>Figura 1</td><td>Rascunho com leitor, figuras, buzzwords e andaime; define o conteúdo.</td></tr>
+          <tr><td><code>visual-explainer</code></td><td>O que mudou</td><td>Skill que compõe o HTML auto-contido final a partir do brief.</td></tr>
+          <tr><td><code>plannotator-visual-explainer</code></td><td>Figura 1</td><td>Skill de render que aplica os tokens de tema do Plannotator ao HTML.</td></tr>
+          <tr><td><code>Plannotator</code></td><td>Runtime</td><td>Binário local (servidor + UI de anotação); runtime de render/anotação do EXPLAINER.</td></tr>
+          <tr><td><code>runtime de render/anotação</code></td><td>Resposta</td><td>Backend que desenha o diagrama e abre para anotar o arquivo final.</td></tr>
+          <tr><td><code>tokens de tema</code></td><td>Figura 3</td><td>Variáveis CSS de cores e tipografia que a skill copia para o EXPLAINER.html.</td></tr>
+          <tr><td><code>check-plannotator.sh --install</code></td><td>O que mudou</td><td>Script que instala o Plannotator sozinho, em modo --minimal, quando falta.</td></tr>
+          <tr><td><code>--minimal</code></td><td>Contrato de instalação</td><td>Instala só o binário em ~/.local/bin, sem tocar configurações de outros agentes.</td></tr>
+          <tr><td><code>v0.27.6</code></td><td>Estado verificado</td><td>Versão do Plannotator confirmada na máquina (mínima exigida: 0.19.1).</td></tr>
+          <tr><td><code>onda</code></td><td>O orquestrador rodou</td><td>Lote de sub-agentes trabalhando em paralelo numa fase da execução.</td></tr>
+          <tr><td><code>worktree</code></td><td>O orquestrador rodou</td><td>Checkout git isolado; um por sub-agente, para não misturar entregas.</td></tr>
+          <tr><td><code>squash-merge</code></td><td>O orquestrador rodou</td><td>Merge que junta vários commits de um sub-agente em um só.</td></tr>
+          <tr><td><code>gate</code></td><td>O orquestrador rodou</td><td>Checagem (build/teste/lint) que barra uma entrega se falhar.</td></tr>
+          <tr><td><code>COMMIT-FINAL</code></td><td>Figura 1</td><td>Fase que fecha a execução: gate final, gera o EXPLAINER e o commit.</td></tr>
+          <tr><td><code>dogfooding</code></td><td>O orquestrador rodou</td><td>Usar o próprio produto no desenvolvimento — aqui, o EXPLAINER gerado pelo fluxo novo.</td></tr>
+          <tr><td><code>frontmatter</code></td><td>O about da skill</td><td>Bloco YAML no topo do SKILL.md com os metadados públicos da skill.</td></tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
   <!-- ============================ SEGMENTOS ============================ -->
-  <section id="segmentos">
-    <h2>Segmentos</h2>
+  <section aria-labelledby="seg-h">
+    <h2 id="seg-h">Segmentos</h2>
+    <p class="lead">O que esta execução tocou e por quê — em passos com título próprio.</p>
 
-    <h2 style="font-size:22px"><span class="seg-num">1</span>O que a tarefa pedia</h2>
-    <p>Mudar o EXPLAINER do <code>COMMIT-FINAL</code> para <strong>não</strong> usar mais o gerador/template antigos e passar a usar o <em>valor</em> da skill html-explainer-agent-skill: explanação didática com diagramas, <strong>sem limite de tempo</strong>, salvando <strong>no lugar</strong> em <code>$BASE_DIR/EXPLAINER.html</code>. A instrução também vedava tocar em mais nada do repositório além do artefato e determinava testar num repositório MOCK antes de integrar.</p>
-    <ul class="pill-list">
-      <li><strong>R1 observado</strong>: o orquestrador não escreve o HTML à mão — delega. A exceção R1-c (fallback mínimo via Bash) só dispararia em degradação e ficaria registrada no relatório; não disparou.</li>
-      <li><strong>Interpretação registrada</strong> (decisão 1): &ldquo;não criar mais&rdquo; = parar de usar <code>generate-explainer.sh</code> + <code>templates/html-explainer.html</code> (ambos <strong>removidos</strong>); o EXPLAINER continua sendo gerado, agora pelo fluxo da skill.</li>
+    <h3 id="estado">1 · Estado verificado: o Plannotator já estava pronto</h3>
+    <p>A tarefa pedia "instalar o plannotator se não tiver". A checagem da máquina mostrou que <strong>nada precisava ser instalado</strong>:</p>
+    <ul>
+      <li>Binário em <code>/home/ondokai/.local/bin/plannotator</code>, <strong>v0.27.6</strong> (mínima exigida <strong>0.19.1</strong>); o probe <code>plannotator annotate</code> imprime o usage e sai rc 0, sem abrir navegador.</li>
+      <li>Setup html-explainer <strong>PRONTO</strong>: binário OK, skills <code>visual-explainer</code> e <code>plannotator-visual-explainer</code> OK, invocação pelo modelo liberada, <strong>7/7 agent skill dirs</strong> com as duas skills.</li>
     </ul>
+    <p>O requisito foi conferido e a auto-instalação documentada para o caso de ausência futura.</p>
 
-    <h2 style="font-size:22px"><span class="seg-num">2</span>De-para: de v3.5.1 a v3.6.0</h2>
-    <p>Antes (<code>v3.5.1</code>), o EXPLAINER saía de um <strong>script</strong> (<code>scripts/generate-explainer.sh</code>) que preenchia um <strong>template</strong> (<code>templates/html-explainer.html</code>) — um molde fixo com muitos pontos variáveis. Depois (<code>v3.6.0</code>), ele sai de uma <strong>skill didática</strong>: um sub-agente decide leitor, buzzwords e figuras e delega a renderização. A Figura 2 mostra exatamente essa diferença.</p>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th></th><th>v3.5.1</th><th>v3.6.0</th></tr></thead>
-        <tbody>
-          <tr><td><strong>Como o HTML é feito</strong></td><td>Script próprio <code>generate-explainer.sh</code> preenche <code>templates/html-explainer.html</code> (molde fixo).</td><td>Sub-agente segue <code>html-explainer-agent-skill</code> (brief didático) e renderiza com <code>visual-explainer</code>.</td></tr>
-          <tr><td><strong>Fonte de verdade</strong></td><td>Template com campos pr&eacute;-definidos.</td><td>Brief didático (leitor, portão, buzzwords, figuras) escrito antes do HTML.</td></tr>
-          <tr><td><strong>Tempo de geração</strong></td><td>Tempo limitado (timeout).</td><td><strong>Sem limite de tempo</strong> — o explicador demora o que precisar.</td></tr>
-          <tr><td><strong>Onde o artefato vai</strong></td><td>Gerado em caminho próprio.</td><td><strong>Salvo no lugar</strong> em <code>$BASE_DIR/EXPLAINER.html</code>; a UI do Plannotator é <strong>opcional</strong> e nunca substitui o arquivo.</td></tr>
-          <tr><td><strong>Artefatos removidos</strong></td><td>Estavam presentes.</td><td><code>scripts/generate-explainer.sh</code>, <code>templates/</code> e o symlink <code>.claude/.../templates</code> <strong>removidos</strong>.</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <h3 id="runtime">2 · O runtime do Plannotator (o caminho crítico)</h3>
+    <p><strong>Plannotator</strong> é o runtime de render/anotação: um binário local que sobe um servidor e abre a UI de anotação. No fluxo novo, a skill de render <code>plannotator-visual-explainer</code> aplica os <strong>tokens de tema</strong> do Plannotator ao arquivo final. Este é o <strong class="crit">gargalo</strong> apontado na <a href="#fig1-h">Figura 1</a>: sem render, não existe EXPLAINER.</p>
 
-    <h2 style="font-size:22px"><span class="seg-num">3</span>Ondas, worktrees e arquivos</h2>
-    <p>Uma <strong>onda</strong> é uma rodada de sub-agentes em paralelo; cada sub-agente tem uma <strong>worktree</strong> — uma cópia isolada do repositório com branch própria — e não pisa fora dela. Esta execução teve 2 ondas e 3 worktrees, e a Figura 3 já mostra a confluência.</p>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Onda</th><th>Worktree</th><th>O que entregou</th><th>Arquivos</th></tr></thead>
-        <tbody>
-          <tr>
-            <td class="num">1</td>
-            <td><code>onda1-skillmd-explainer</code></td>
-            <td>SKILL.md v3.6.0: passo 4 reescrito (delega a sub-agente que segue html-explainer-agent-skill + visual-explainer; sem limite de tempo; salva em <code>$BASE_DIR/EXPLAINER.html</code> no lugar); R1(c) atualizado; novo template <code>explainer-agent-template</code>; final-report &ldquo;## HTML Explainer&rdquo; atualizado; frontmatter <code>3.6.0 / 2026-08-23</code>.</td>
-            <td><code>.claude/skills/deep-orchestrator-agent-skill/SKILL.md</code></td>
-          </tr>
-          <tr>
-            <td class="num">1</td>
-            <td><code>onda1-limpieza-explainer</code></td>
-            <td>Remove o gerador/template antigos e atualiza a documentação para o fluxo novo.</td>
-            <td><code>README.md</code> · <code>scripts/README.md</code> · <code>scripts/check-install.sh</code> &hellip; removidos: <code>scripts/generate-explainer.sh</code>, <code>templates/html-explainer.html</code>, <code>.claude/.../templates</code>.</td>
-          </tr>
-          <tr>
-            <td class="num">2</td>
-            <td><code>onda2-fix-docs-stale</code></td>
-            <td>Fix de consistência pós-merge: o bullet &ldquo;HTML Explainer&rdquo; da seção Novidades v3.0.0 deixa de citar o caminho morto; o comentário de <code>sync-global-skill.sh</code> para de mencionar <code>templates/</code>.</td>
-            <td><code>README.md</code> · <code>scripts/sync-global-skill.sh</code></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <h3 id="autoinstala">3 · Auto-instalação, quando faltar</h3>
+    <p>Se o binário faltar em outro ambiente, <code>scripts/check-plannotator.sh --install</code> o instala em modo <code>--minimal</code> — só <code>~/.local/bin</code>, mínimo 0.19.1, sem <code>sudo</code>, sem <code>npm -g</code>, e nunca sobrescreve uma instalação existente.</p>
 
-    <h2 style="font-size:22px"><span class="seg-num">4</span>Commits (história final)</h2>
-    <p>Cada worktree virou um commit por <strong>squash-merge</strong> — os commits internos da worktree colapsam em um só. A ordem final:</p>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Commit</th><th>Worktree</th><th>Resumo</th></tr></thead>
-        <tbody>
-          <tr><td class="num"><code>c332e29</code></td><td><code>onda1-skillmd-explainer</code></td><td>SKILL.md v3.6.0 — novo fluxo do EXPLAINER (delegação html-explainer-agent-skill, sem limite de tempo, salvo no lugar) + template <code>explainer-agent-template</code>.</td></tr>
-          <tr><td class="num"><code>64763d9</code></td><td><code>onda1-limpieza-explainer</code></td><td>v3.6.0 — remove gerador/template antigos do EXPLAINER, atualiza README/scripts-README/check-install.</td></tr>
-          <tr><td class="num"><code>9e798ce</code></td><td><code>onda2-fix-docs-stale</code></td><td>Remove refs stale a <code>templates/</code> (bullet README v3.0.0 + comentário <code>sync-global-skill.sh</code>).</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <h3 id="docs">4 · Docs e about atualizados</h3>
+    <p>O <code>README.md</code> ganhou bullet "Plannotator como runtime do EXPLAINER (auto-instalado)" nas <strong>Novidades v3.6.0</strong> e o item "Plannotator — AUTO-INSTALADO" em <strong>Requisitos</strong>. O "<strong>about</strong>" da skill (a <strong>description</strong> no frontmatter do <code>SKILL.md</code>) passou a descrever o EXPLAINER final didático v3.6.0 gerado por sub-agente seguindo a <code>html-explainer-agent-skill</code>, sem limite de tempo, salvo em <code>EXPLAINER.html</code> no lugar.</p>
 
-    <h2 style="font-size:22px"><span class="seg-num">5</span>Decisões autonomamente</h2>
-    <ul class="pill-list">
-      <li><strong>Sem questionar o usuário</strong>: a interpretação de &ldquo;não criar mais&rdquo;, &ldquo;sem limite de tempo&rdquo; e &ldquo;salvar no lugar&rdquo; foi registrada como decisão (1–3) — ver Segmento 1 para a decisão 1.</li>
-      <li><strong>Delegação é a regra</strong> (decisão 4): o orquestrador nunca escreve HTML à mão (R1), com fallback mínimo via Bash apenas em degradação (exceção R1-c), sempre registrado no relatório.</li>
-      <li><strong>REPLAN aceito</strong> (decisão 5): a onda 2 nasceu das refs velhas apontadas pelo revisor adversarial e pelo REVISOR DE PLANO, não de capricho.</li>
-      <li><strong><code>project-router</code> ausente</strong> (decisão 6): no repo não havia esse roteador; os sub-agentes prosseguiram sem ele (fato registrado, sem bloqueio).</li>
-      <li><strong>Busca não necessária</strong> (decisão 7): o Tier 1 de busca existia, mas a tarefa não exigiu pesquisa web.</li>
-    </ul>
-
-    <h2 style="font-size:22px"><span class="seg-num">6</span>Verificação (gates e revisão)</h2>
-    <ul class="pill-list">
-      <li><strong>Gates de snapshot verdes nas 3 integrações</strong>: <code>GATE_BUILD</code> = <code>bash -n</code> em <code>scripts/*.sh</code>; <code>GATE_TEST</code> = <code>scripts/check-install.sh --root &lt;snap&gt; --quiet</code>; <code>GATE_LINT</code> = sem linter dedicado no projeto (passa por vacuidade).</li>
-      <li><strong>Revisão adversarial individual</strong>: 2 APPROVE (SKILL.md; limpeza).</li>
-      <li><strong>REVISOR DE PLANO</strong>: convergência após 2 rodadas (por isso só 2 ondas).</li>
-      <li><strong>Contenção</strong>: <code>verify</code> OK ao fim de cada onda; trabalho 100% dentro da fronteira (MODE=normal, <code>$BASE_DIR</code>).</li>
-      <li><strong>Gate final</strong>: depois do merge dos testes (subwave), o gate final roda em <code>$BASE_DIR</code>.</li>
-    </ul>
-
-    <h2 style="font-size:22px"><span class="seg-num">7</span>Subwaves (estado no momento dos fatos: em voo)</h2>
-    <p><strong>Subwave</strong> = teste/validação que roda <em>junto</em> da onda seguinte, em vez de numa onda própria. Estavam em voo quando o relatório foi escrito:</p>
-    <ul class="pill-list">
-      <li><code>test-onda2-mock-explainer</code>: <strong>TESTE EM REPO MOCK</strong> do novo fluxo — repositório git descartável em <code>/tmp</code>, passo 4 executado de ponta a ponta, EXPLAINER.html gerado no lugar, <strong>asserts a–j</strong>. Processado no COMMIT-FINAL.</li>
-      <li><code>val-onda2-gate</code>: gate completo no estado integrado + revisor adversarial do diff integrado (diff <code>3a57638..HEAD</code>). Processado no COMMIT-FINAL.</li>
-    </ul>
-    <p>E esta própria página é o <strong>dogfood</strong>: o novo fluxo foi usado para gerar o EXPLAINER desta execução — um teste real do mecanismo que acabou de ser escrito.</p>
-
-    <h2 style="font-size:22px"><span class="seg-num">8</span>Timeline</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Quando</th><th>O que aconteceu</th></tr></thead>
-        <tbody>
-          <tr><td class="num">2026-08-23</td><td>FASE 0 concluída; ondas 1 e 2 concluídas (revisão + gates verdes + limpeza).</td></tr>
-          <tr><td class="num">2026-08-23</td><td>REPLAN CONVERGÊNCIA (REVISOR DE PLANO, 2 rodadas).</td></tr>
-          <tr><td class="num">2026-08-23</td><td>Subwaves disparadas (test-onda2 + val-onda2).</td></tr>
-          <tr><td class="num">2026-08-23</td><td>COMMIT-FINAL em andamento — dogfood do EXPLAINER pelo novo fluxo (&equiv; o que você lê agora).</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <h3 id="onda">5 · O orquestrador rodou e fechou</h3>
+    <p>Uma <strong>onda</strong> de docs (<code>onda1-about-plannotator</code>) foi integrada por <strong>squash-merge</strong> no commit <code>a02037f</code> com o <strong>gate</strong> de snapshot <strong>verde</strong> (GATE_BUILD <code>bash -n</code>; GATE_TEST <code>check-install --quiet</code>; sem linter dedicado). A testing subwave foi NO-OP e a validação rodou o gate completo no integrado. O <code>EXPLAINER.html</code> deste ciclo é o <strong>dogfooding</strong> #2 pelo fluxo novo (a execução usa a própria entrega que documenta). A versão ficou em <strong>v3.6.0</strong> (mudança documental) e o commit + push para o GitHub é o passo final da execução.</p>
   </section>
 
   <!-- ============================ DOBRADO ============================ -->
-  <section id="dobrado">
-    <h2>Dobrado — andaime para o novato (o experiente pula)</h2>
+  <section aria-labelledby="dobrado-h">
+    <h2 id="dobrado-h">Dobrado — o que quem já conhece o orquestrador pode pular</h2>
+    <p class="lead">Andaime para o novato, recolhível para o experiente.</p>
+    <p>Para quem já trabalha com o deep-orchestrator, o <a href="#seg-h">Segmento 5</a> já resume tudo: uma onda de docs, gate verde, commit a02037f. O passo a passo granular abaixo atende a quem está vendo o orquestrador pela primeira vez.</p>
 
     <details>
-      <summary>Passo a passo: o que é uma worktree e por que cada sub-agente tem a sua</summary>
-      <div class="details-body">
-        <p style="margin-top:12px">Um repositório git normal tem <em>uma</em> cópia dos arquivos e <em>um</em> branch em uso. Se dois sub-agentes editarem a <em>mesma</em> cópia ao mesmo tempo, eles se atropelam. Uma <strong>worktree</strong> é uma segunda cópia dos mesmos arquivos, apontando para um <strong>branch próprio</strong> — é como abrir duas janelas do mesmo projeto em pastas separadas, cada uma editando uma linha distinta. Cada agente só escreve na sua janela; no fim, as janelas são <strong>mescladas</strong> de volta numa só história (por squash-merge). A contaminação é evitada porque a fronteira de escrita é a raiz-de-mundo (<code>$BASE_DIR</code>), e cada worktree dela.</p>
-      </div>
-    </details>
-
-    <details>
-      <summary>O que o brief didático declara antes de qualquer HTML</summary>
-      <div class="details-body">
-        <p style="margin-top:12px">Antes de desenhar um único elemento, o sub-agente que segue <code>html-explainer-agent-skill</code> escreve o <strong>brief</strong>: (1) o leitor (nível, já sabe, não sabe); (2) o portão de complexidade; (3) a lista <strong>fechada</strong> de buzzwords com a definição de cada uma; (4) cada figura com <em>uma afirmação</em> na legenda e <em>toda aresta rotulada</em>; (5) os segmentos; (6) o que vai dobrado. Só então a renderização ocorre. A ideia: a explicação é <em>decidida</em> primeiro e <em>desenhada</em> depois — nunca o contrário.</p>
-      </div>
-    </details>
-
-    <details>
-      <summary>Por que a UI do Plannotator virou opcional</summary>
-      <div class="details-body">
-        <p style="margin-top:12px">Nas versões didáticas passadas, a entrega se dava pela <strong>janela de anotação</strong> do Plannotator (o usuário anota por cima e a anotação volta como feedback). Nesta versão, o contrato mudou: o <strong>arquivo <code>EXPLAINER.html</code> salvo em disco é a entrega</strong>, com a UI do Plannotator apenas um complemento opcional. Por quê? Porque um artefato <em>gravado no repositório</em> é reproduzível e versionável — a evidência da execução fica preservada e comitada, sem depender de uma janela que pode nem abrir em ambiente headless.</p>
-      </div>
-    </details>
-
-    <details>
-      <summary>Exemplo resolvido: como a decisão 3 responde &ldquo;salvar no lugar se possível&rdquo;</summary>
-      <div class="details-body">
-        <p style="margin-top:12px">A instrução pedia &ldquo;salvar no lugar <em>se possível</em>&rdquo;. A decisão 3 torna isso concreto: o artefato final é <code>$BASE_DIR/EXPLAINER.html</code>, gravado em disco; a UI de anotação do Plannotator é opcional e <em>nunca substitui o arquivo</em>. Logo, &ldquo;se possível&rdquo; é satisfeito no caso normal (grava o arquivo). A ressalva só existiria se o fluxo de render falhasse — aí o orquestrador gravaria um EXPLAINER mínimo via Bash (exceção R1-c) e marcaria isso no relatório, preservando a evidência mesmo degradada.</p>
+      <summary>Passo a passo do ciclo de orquestração (para o novato)</summary>
+      <div class="inner">
+        <ol>
+          <li><strong>FASE 1 — ANALYZE:</strong> lê a tarefa e mapeia a estrutura do repositório.</li>
+          <li><strong>FASE 2 — PLAN:</strong> decompõe a tarefa em sub-tarefas, cada uma na sua <strong>worktree</strong>, e em <strong>ondas</strong> paralelas.</li>
+          <li><strong>FASE 3 — EXECUTE-ONDA:</strong> dispara os sub-agentes, revisa adversarialmente e integra cada um por <strong>squash-merge</strong>, com o <strong>gate</strong> rodando em snapshot.</li>
+          <li><strong>FASE 4 — COMMIT-FINAL:</strong> roda o gate completo, registra só o que a execução produziu, <strong>gera o EXPLAINER.html</strong> pelo fluxo novo e entrega o relatório.</li>
+        </ol>
+        <p>Nesta execução só houve uma onda: a de documentação (<code>onda1-about-plannotator</code>), porque a instalação já estava pronta e o restante era redigir docs/about.</p>
+        <details>
+          <summary>Como o gate verde foi verificado (passo mecânico)</summary>
+          <div class="inner">
+<pre>GATE_BUILD → bash -n 15 scripts        # sintaxe dos scripts
+GATE_TEST  → check-install --quiet     # contrato de instalação completo
+GATE_LINT  → sem linter dedicado        # registrado como ausente</pre>
+          </div>
+        </details>
       </div>
     </details>
   </section>
 
   <!-- ============================ FORA ============================ -->
-  <section id="fora">
-    <h2>Fora — o que ficou de fora deste documento</h2>
-    <ul class="pill-list">
-      <li><strong>Subwave em voo</strong> como resultado final: os dois testes estavam em andamento quando os fatos foram escritos; este documento narra o estado registrado, não um &ldquo;fim&rdquo; que os fatos ainda não confirmam.</li>
-      <li><strong>Linha do tempo visual separada</strong>: as 4 linhas de timeline são curtas e legíveis em tabela; um diagrama só duplicaria a tabela (redundância).</li>
-      <li><strong>Reprodução integral dos asserts a–j do mock</strong>: basta saber da existência do teste e do que ele cobre; o passo a passo do mock não serve a este leitor.</li>
-      <li><strong>Decore/duplicado</strong>: sem ilustrações de adorno, sem repetir em prosa o que a tabela ou a figura já dizem.</li>
+  <section aria-labelledby="fora-h">
+    <h2 id="fora-h">Fora — o que este documento corta de propósito</h2>
+    <p class="lead">Cortado por duplicado ou decorativo, para não competir com o que está desenhado ou já dito.</p>
+    <ul>
+      <li><strong>Redescrição das figuras em prosa</strong> — o conteúdo de cada diagrama vive na própria figura (texto que só redesenha se apaga).</li>
+      <li><strong>Histórico completo de novidades das versões 3.0.0–3.5.1</strong> — fora do escopo desta execução; só o que a v3.6.0 mudou é relevante aqui.</li>
+      <li><strong>Layout narrativo com múltiplas abas</strong> — o marcador visual do template antigo (gerado por script) não existe mais; este é um artefato explícito v3.6.0.</li>
     </ul>
   </section>
 
-  <footer>
-    <span class="aging">Atenção, conteúdo datado:</span> este documento descreve a versão <b>v3.6.0</b> (2026-08-23) da skill. Fluxos, arquivos e commits citados podem mudar em versões posteriores. Confirme a versão antes de assumir que continua valendo.
+  <footer class="page">
+    <p>Artefato EXPLAINER html-explainer · válido para v3.6.0 (documentado em 2026-08-23) · execução 20260823-175129-2804543 · fontes: <code>.deep-orchestrator/run-20260823-175129-2804543/explainer/fatos.md</code> e <code>README.md</code>. Diagramas renderizados com Mermaid 11 nas paletas clara e escura.</p>
   </footer>
-
 </div>
 
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  import elkLayouts from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk/dist/mermaid-layout-elk.esm.min.mjs';
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+(function () {
+  const colorScheme = getComputedStyle(document.documentElement).colorScheme;
+  const isDark = colorScheme === 'dark'
+    || (colorScheme === 'normal' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
-  const config = {
-    fitPadding: 28, minHeight: 360, maxHeightPx: 960, maxHeightVh: 0.84,
-    maxInitialZoom: 1.8, minZoom: 0.08, maxZoom: 6.5, zoomStep: 0.14, readabilityFloor: 0.58
-  };
-  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-  let activeDrag = null;
-  addEventListener('mousemove', (e) => activeDrag?.onMove(e));
-  addEventListener('mouseup', () => { activeDrag?.onEnd(); activeDrag = null; });
-
-  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
-  const dv = isDark ? {
+  const themeVars = isDark ? {
     darkMode: true,
     primaryColor: '#1e242e', primaryTextColor: '#dadee5', primaryBorderColor: '#343b45',
     lineColor: '#9da5b2', secondaryColor: '#1e242e', secondaryTextColor: '#dadee5',
-    tertiaryColor: '#1e242e', tertiaryTextColor: '#dadee5', background: '#070b14'
+    tertiaryColor: '#1e242e', tertiaryTextColor: '#dadee5', background: '#070b14',
   } : {
     primaryColor: '#5537eb', primaryTextColor: '#ffffff', primaryBorderColor: '#d4d8de',
     lineColor: '#414853', secondaryColor: '#e1e5eb', secondaryTextColor: '#414853',
-    tertiaryColor: '#e1e5eb', tertiaryTextColor: '#414853', background: '#f3f5f9'
+    tertiaryColor: '#e1e5eb', tertiaryTextColor: '#414853', background: '#f3f5f9',
   };
 
-  mermaid.registerLayoutLoaders(elkLayouts);
-  mermaid.initialize({
-    startOnLoad: false, theme: 'base', look: 'classic',
-    themeVariables: {
-      ...dv,
+  window.mermaid.initialize({
+    startOnLoad: true,
+    securityLevel: 'loose',
+    theme: 'base',
+    themeVariables: Object.assign({}, themeVars, {
       fontFamily: "'Inter', system-ui, sans-serif",
       fontSize: '14px',
-      mainBkg: dv.primaryColor, nodeBorder: dv.primaryBorderColor,
-      clusterBkg: dv.secondaryColor, clusterBorder: dv.primaryBorderColor,
-      edgeLabelBackground: dv.background
-    },
-    flowchart: { curve: 'linear', padding: 12 }
+      labelTextColor: themeVars.secondaryTextColor,
+    }),
   });
 
-  const rerenderers = [];
-  function initDiagram(shell) {
+  // Diagram shell: zoom / pan / expand per figure
+  document.querySelectorAll('.diagram-shell').forEach(function (shell) {
     const wrap = shell.querySelector('.mermaid-wrap');
     const viewport = shell.querySelector('.mermaid-viewport');
     const canvas = shell.querySelector('.mermaid-canvas');
-    const source = shell.querySelector('.diagram-source');
-    const label = shell.querySelector('.zoom-label');
-    if (!wrap || !viewport || !canvas || !source || !label) return;
+    const btnIn = shell.querySelector('.zoom-in');
+    const btnOut = shell.querySelector('.zoom-out');
+    const btnReset = shell.querySelector('.zoom-reset');
+    const btnExpand = shell.querySelector('.zoom-expand');
 
-    let zoom = 1, fitMode = 'contain', panX = 0, panY = 0, svgW = 0, svgH = 0;
-    let sx = 0, sy = 0, spx = 0, spy = 0, touchDist = 0, touchCx = 0, touchCy = 0;
+    let scale = 1;
+    const clamp = v => Math.min(3, Math.max(0.4, v));
+    function apply() { canvas.style.transform = 'scale(' + scale + ')'; }
 
-    function constrainPan() {
-      const vpW = viewport.clientWidth, vpH = viewport.clientHeight;
-      const rW = svgW * zoom, rH = svgH * zoom, pad = config.fitPadding;
-      panX = (rW + pad * 2 <= vpW) ? (vpW - rW) / 2 : clamp(panX, vpW - rW - pad, pad);
-      panY = (rH + pad * 2 <= vpH) ? (vpH - rH) / 2 : clamp(panY, vpH - rH - pad, pad);
-    }
-    function applyTransform() {
-      const svg = canvas.querySelector('svg');
-      if (!svg || !svgW) return;
-      constrainPan();
-      svg.style.width = (svgW * zoom) + 'px';
-      svg.style.height = (svgH * zoom) + 'px';
-      canvas.style.transform = `translate(${panX}px, ${panY}px)`;
-      label.textContent = Math.round(zoom * 100) + '% \u2014 ' + fitMode;
-    }
-    function canPan() {
-      const rW = svgW * zoom, rH = svgH * zoom;
-      return rW + config.fitPadding * 2 > viewport.clientWidth || rH + config.fitPadding * 2 > viewport.clientHeight;
-    }
-    function computeSmartFit() {
-      const vpW = viewport.clientWidth, vpH = viewport.clientHeight;
-      const aW = Math.max(80, vpW - config.fitPadding * 2), aH = Math.max(80, vpH - config.fitPadding * 2);
-      const contain = Math.min(aW / svgW, aH / svgH);
-      let z = contain, mode = 'contain';
-      if (contain < config.readabilityFloor) {
-        const chartR = svgH / svgW, vpR = vpH / Math.max(vpW, 1);
-        if (chartR >= vpR) { z = aW / svgW; mode = 'width-priority'; }
-        else { z = aH / svgH; mode = 'height-priority'; }
-      }
-      return { zoom: clamp(z, config.minZoom, config.maxInitialZoom), mode };
-    }
-    function fitDiagram() {
-      if (!svgW) return;
-      const fit = computeSmartFit();
-      zoom = fit.zoom; fitMode = fit.mode;
-      panX = (viewport.clientWidth - svgW * zoom) / 2;
-      panY = (viewport.clientHeight - svgH * zoom) / 2;
-      applyTransform();
-    }
-    function setOneToOne() {
-      zoom = clamp(1, config.minZoom, config.maxZoom); fitMode = '1:1';
-      panX = (viewport.clientWidth - svgW * zoom) / 2;
-      panY = (viewport.clientHeight - svgH * zoom) / 2;
-      applyTransform();
-    }
-    function zoomAround(factor, cx, cy) {
-      const next = clamp(zoom * factor, config.minZoom, config.maxZoom);
-      const ratio = next / zoom;
-      panX = cx - ratio * (cx - panX); panY = cy - ratio * (cy - panY);
-      zoom = next; fitMode = 'custom'; applyTransform();
-    }
-    function readSvgNaturalSize(svg) {
-      let w = 0, h = 0;
-      if (svg.viewBox?.baseVal?.width > 0) { w = svg.viewBox.baseVal.width; h = svg.viewBox.baseVal.height; }
-      if (!w) { w = parseFloat(svg.getAttribute('width')) || 0; h = parseFloat(svg.getAttribute('height')) || 0; }
-      if (!w) { const b = svg.getBBox(); w = b.width; h = b.height; }
-      if (!w) { const r = svg.getBoundingClientRect(); w = r.width || 1000; h = r.height || 700; }
-      if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-      return { w, h };
-    }
-    function setAdaptiveHeight() {
-      if (!svgW) return;
-      const usableW = Math.max(280, wrap.getBoundingClientRect().width - 2);
-      const idealH = (svgH / svgW) * usableW + config.fitPadding * 2;
-      const maxVp = Math.floor(innerHeight * config.maxHeightVh);
-      const hardMax = Math.min(config.maxHeightPx, Math.max(config.minHeight + 40, maxVp));
-      wrap.style.height = Math.round(clamp(idealH, config.minHeight, hardMax)) + 'px';
-    }
-    function openInNewTab() {
-      const svg = canvas.querySelector('svg');
-      if (!svg) return;
-      const clone = svg.cloneNode(true);
-      clone.style.width = ''; clone.style.height = '';
-      const bg = dv.background;
-      const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Diagram</title><style>
-      body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-      background:${bg};padding:40px;box-sizing:border-box}svg{max-width:100%;max-height:90vh;height:auto}
-      </style></head><body>${clone.outerHTML}</body></html>`;
-      open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
-    }
-    async function render() {
-      try {
-        const code = source.textContent.trim();
-        if (!code) { label.textContent = 'Error: Empty source'; return; }
-        const id = 'diagram-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-        const { svg } = await mermaid.render(id, code);
-        const parsed = new DOMParser().parseFromString(svg, 'text/html');
-        const parsedSvg = parsed.body.querySelector('svg');
-        if (!parsedSvg) { label.textContent = 'Error: No SVG'; return; }
-        canvas.replaceChildren(document.adoptNode(parsedSvg));
-        const svgNode = canvas.querySelector('svg');
-        if (!svgNode) { label.textContent = 'Error: No SVG'; return; }
-        const size = readSvgNaturalSize(svgNode);
-        svgW = size.w; svgH = size.h;
-        svgNode.removeAttribute('width'); svgNode.removeAttribute('height');
-        svgNode.style.maxWidth = 'none'; svgNode.style.display = 'block';
-        setAdaptiveHeight(); fitDiagram();
-      } catch (err) {
-        console.error('Mermaid render failed:', err);
-        label.textContent = 'Error: ' + (err.message || 'Render failed');
-      }
-    }
-    const actions = {
-      'zoom-in': () => zoomAround(1 + config.zoomStep, viewport.clientWidth / 2, viewport.clientHeight / 2),
-      'zoom-out': () => zoomAround(1 / (1 + config.zoomStep), viewport.clientWidth / 2, viewport.clientHeight / 2),
-      'zoom-fit': fitDiagram, 'zoom-one': setOneToOne, 'zoom-expand': openInNewTab
-    };
-    Object.entries(actions).forEach(([action, handler]) =>
-      wrap.querySelector(`[data-action="${action}"]`)?.addEventListener('click', handler));
-    viewport.addEventListener('dblclick', fitDiagram);
-    viewport.addEventListener('wheel', (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        const rect = viewport.getBoundingClientRect();
-        const factor = e.deltaY < 0 ? 1 + config.zoomStep : 1 / (1 + config.zoomStep);
-        zoomAround(factor, e.clientX - rect.left, e.clientY - rect.top);
-        return;
-      }
-      if (canPan()) { e.preventDefault(); panX -= e.deltaX; panY -= e.deltaY; applyTransform(); }
-    }, { passive: false });
-    viewport.addEventListener('mousedown', (e) => {
-      if (e.target.closest('.zoom-controls') || !canPan()) return;
-      wrap.classList.add('is-panning');
-      sx = e.clientX; sy = e.clientY; spx = panX; spy = panY; e.preventDefault();
-      activeDrag = {
-        onMove: (ev) => { panX = spx + (ev.clientX - sx); panY = spy + (ev.clientY - sy); applyTransform(); },
-        onEnd: () => wrap.classList.remove('is-panning')
-      };
+    btnIn.addEventListener('click', () => { scale = clamp(scale * 1.2); apply(); });
+    btnOut.addEventListener('click', () => { scale = clamp(scale / 1.2); apply(); });
+    btnReset.addEventListener('click', () => { scale = 1; apply(); viewport.scrollTo(0, 0); });
+    btnExpand.addEventListener('click', () => {
+      document.fullscreenElement
+        ? document.exitFullscreen()
+        : (wrap.requestFullscreen && wrap.requestFullscreen());
     });
-    viewport.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 1) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; spx = panX; spy = panY; }
-      else if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        touchDist = Math.sqrt(dx * dx + dy * dy);
-        const r = viewport.getBoundingClientRect();
-        touchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
-        touchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
-      }
-    }, { passive: true });
-    viewport.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 1 && canPan()) {
-        if (touchDist > 0) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; spx = panX; spy = panY; touchDist = 0; }
-        e.preventDefault();
-        panX = spx + (e.touches[0].clientX - sx); panY = spy + (e.touches[0].clientY - sy); applyTransform();
-      } else if (e.touches.length === 2 && touchDist > 0) {
-        e.preventDefault();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        zoomAround(d / touchDist, touchCx, touchCy);
-        touchDist = d;
-      }
-    }, { passive: false });
-    new ResizeObserver(() => { if (svgW) { setAdaptiveHeight(); fitDiagram(); } }).observe(wrap);
-    rerenderers.push(render);
-    render();
-  }
 
-  document.querySelectorAll('.diagram-shell').forEach(initDiagram);
-  window.rerenderDiagrams = () => Promise.all(rerenderers.map((render) => render()));
+    // Ctrl/Cmd + scroll zoom
+    viewport.addEventListener('wheel', function (e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      scale = clamp(scale * (e.deltaY < 0 ? 1.1 : 0.9));
+      apply();
+    }, { passive: false });
+
+    // drag pan
+    let dragging = false, startX = 0, startY = 0, sx = 0, sy = 0;
+    viewport.addEventListener('mousedown', function (e) {
+      dragging = true;
+      startX = e.clientX; startY = e.clientY;
+      sx = viewport.scrollLeft; sy = viewport.scrollTop;
+      viewport.classList.add('dragging');
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      viewport.scrollLeft = sx - (e.clientX - startX);
+      viewport.scrollTop = sy - (e.clientY - startY);
+    });
+    window.addEventListener('mouseup', function () {
+      dragging = false;
+      viewport.classList.remove('dragging');
+    });
+  });
+})();
 </script>
 </body>
 </html>
