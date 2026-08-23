@@ -74,7 +74,7 @@ SKILL_HOME=$(cd "$_self_dir/.." && pwd -P 2>/dev/null || true)
 
 # O alvo do link é o diretório que CONTÉM o SKILL.md. Nesta skill o SKILL.md da
 # raiz é um symlink para .claude/skills/deep-orchestrator-agent-skill/SKILL.md, e é a raiz
-# que carrega scripts/, prompts/ e templates/ — então a raiz é o alvo certo.
+# que carrega scripts/ e prompts/ — então a raiz é o alvo certo.
 SOURCE="$SKILL_HOME"
 [ -e "$SOURCE/SKILL.md" ] \
   || { warn "sync-global-skill.sh: $SOURCE/SKILL.md não existe — nada a publicar"; exit 2; }

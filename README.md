@@ -99,7 +99,7 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 - **Verificação de créditos** antes de cada onda (`$SKILL_HOME/scripts/check-brave-credits.sh`) — sem créditos, o orquestrador para e informa o usuário (única exceção à autonomia total). **SUPERADA na v3.3.0**: o verificador agora é `check-search-credits.sh` (3 tiers; exit 2 = TODOS os tiers fora) — `check-brave-credits.sh` está DEPRECATED.
 - **ECC Prompts integrados** — 7 templates de prompt (`$SKILL_HOME/prompts/ecc-prompts.md`) + 7 skills portados do ECC (`$SKILL_HOME/prompts/ecc-skills.md`), incluindo Security Review (AgentShield), Planning Prompt (Plan First) e Prompt Defense Baseline.
 - **Prompts de busca para dev** (`$SKILL_HOME/prompts/search-prompts.md`) — 8 categorias de busca, sistema de evolução de perguntas (question evolution) e prompts por domínio.
-- **HTML Explainer** automático ao final de cada execução (`$SKILL_HOME/templates/html-explainer.html`) — de-para de todas as mudanças em 6 abas, salvo como `EXPLAINER.html` na raiz da worktree em que a skill foi invocada (mecânica substituída na v3.6.0 — ver Novidades na v3.6.0).
+- **HTML Explainer** automático ao final de cada execução (pelo template próprio da época — removido na v3.6.0) — de-para de todas as mudanças em 6 abas, salvo como `EXPLAINER.html` na raiz da worktree em que a skill foi invocada (mecânica substituída na v3.6.0 — ver Novidades na v3.6.0).
 
 ## Como funciona
 
