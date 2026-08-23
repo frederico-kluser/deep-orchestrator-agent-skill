@@ -1,6 +1,6 @@
-# deep-orchestrator-agent-skill v3.5.0
+# deep-orchestrator-agent-skill v3.5.1
 
-![Versão](https://img.shields.io/badge/version-3.5.0-00d4ff)
+![Versão](https://img.shields.io/badge/version-3.5.1-00d4ff)
 
 Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda (`scripts/search.sh`: surf-agent-skill → Brave Search API → DuckDuckGo keyless, com `check-search-credits.sh` e lotes via `search-parallel.sh`), e commita tudo ao final **sem perguntar nada ao usuário**.
 
@@ -40,6 +40,13 @@ Se a skill for invocada com o cwd **dentro de uma git worktree vinculada**, ela 
 O único vestígio compartilhado aceito é o registro administrativo das filhas em `$GIT_COMMON_DIR/worktrees/`, que o próprio git cria e é inevitável.
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
+
+## Novidades na v3.5.1
+
+- **Instalação à prova de alvo errado (bugfix do contrato)**: a pasta `.claude/skills/deep-orchestrator-agent-skill/` (padrão Claude Code) passou a **espelhar `scripts/`, `prompts/` e `templates/` por symlink** para a raiz — antes ela continha apenas o `SKILL.md`, e qualquer harness que resolvesse `$SKILL_HOME` para ela rodava FASE 0 e abortava com `PARE: do-context.sh nao encontrado` (era o estado da instalação do DSH após o rebrand). Agora **qualquer** alvo de instalação é uma casa válida, e instalações existentes apontadas para a pasta interna passam a funcionar sem repontar symlink.
+- **FASE 0 mais abrangente**: a busca do `do-context.sh` ganhou o candidato `${DSH_HOME:-$HOME/.dsh}/skills/deep-orchestrator-agent-skill` (raiz de skills do usuário no DeepSeek Harness).
+- **`scripts/check-install.sh`**: nova prova de instalação completa (SKILL.md + ferramentas executáveis + prompts + template; exit 0/1/2; `--root`, `--json`, `--quiet`) — detecta o estado "só SKILL.md, sem scripts" antes de qualquer execução.
+- **README**: nova seção "Instalação (o contrato)" com o layout aceito, o DSH (ambas as raízes) e o passo de verificação.
 
 ## Novidades na v3.5.0
 
@@ -167,7 +174,7 @@ Fontes primárias: [subagents](https://code.claude.com/docs/en/subagents) · [ag
 ```
 deep-orchestrator-agent-skill/
 ├── README.md                    # Este arquivo
-├── SKILL.md                     # Definição do skill v3.5.0 (frontmatter YAML + XML do orquestrador)
+├── SKILL.md                     # Definição do skill v3.5.1 (frontmatter YAML + XML do orquestrador)
 ├── scripts/
 │   ├── README.md                # Índice de todos os scripts e o fluxo de busca 3-tier
 │   ├── do-context.sh            # FASE 0 — delimita a raiz-de-mundo e grava o estado
