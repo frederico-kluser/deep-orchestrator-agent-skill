@@ -18,6 +18,10 @@
 - 2026-08-24 | antipattern | Keep-alives DSH orfaos (node -e setInterval) acumulam por onda e nunca morrem [id: LEARN-20260824-002]
 - 2026-08-24 | gotcha | tmpfs /tmp sem size= vale metade da RAM e resido de agentes enche-o -> OOM real [id: LEARN-20260824-003]
 - 2026-08-24 | fact | Servicos em restart loop corrompem o journal (evidencia OOM perdida) [id: LEARN-20260824-004]
+- 2026-08-24 | antipattern | send_message para sub-agente em voo pode não ser processado antes do fim do turno [id: LEARN-20260824-005]
+- 2026-08-24 | gotcha | Gate de integração com pipe | tail mascara o exit code do unittest [id: LEARN-20260824-006]
+- 2026-08-24 | fact | systemd: ExecStartPre com systemctl stop do próprio glob cancela o JOB_START [id: LEARN-20260824-007]
+- 2026-08-24 | gotcha | Testing subwave em paralelo com fix pode documentar comportamento pré-fix e quebrar o gate [id: LEARN-20260824-008]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -170,3 +174,59 @@ tags: [journal, diagnostico, oom]
 ## Servicos em restart loop corrompem o journal (evidencia OOM perdida)
 - **Observação:** synthmouse (67.020 restarts), ttyd@* (46.380) e librepods (14.633) com executaveis ausentes inundaram o journal a ponto de reter so ~1h18m de um boot de 1d15h — os detalhes de 11+ OOM kills do kernel foram perdidos. Contadores de cgroup (memory.events) sao a fonte de verdade resiliente.
 - **Ação:** Em diagnostico de OOM, usar /sys/fs/cgroup/*/memory.events e journalctl --list-boots ANTES de confiar no journal; sinalizar servicos em auto-restart como ruido.
+
+---
+id: LEARN-20260824-005
+date: "2026-08-24"
+type: antipattern
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [orquestracao, sub-agente, fix]
+---
+## send_message para sub-agente em voo pode não ser processado antes do fim do turno
+- **Observação:** Em fix-onda3-contrato, itens críticos do revisor (udev assíncrono, uninstall runtime) repassados via send_message NÃO foram incluídos — o agente terminou o turno com a mensagem "queued". O revisor do diff integrado confirmou os 2 HIGHs ausentes e foi preciso um fix novo.
+- **Ação:** Para escopo crítico, não confiar em send_message para agente que pode estar terminando: incluir tudo no prompt inicial ou criar sub-tarefa de fix separada; ao repassar itens, verificar no handoff final se foram citados.
+
+---
+id: LEARN-20260824-006
+date: "2026-08-24"
+type: gotcha
+confidence: high
+source: model-output
+status: active
+supersedes: ""
+tags: [gate, bash, unittest]
+---
+## Gate de integração com pipe | tail mascara o exit code do unittest
+- **Observação:** O comando de gate `python3 -m unittest ... | tail -3 && echo VERDE` retorna o exit do tail (0) mesmo com FAILED — o "VERDE" era impresso com a suíte vermelha; a detecção só veio pela leitura da saída completa.
+- **Ação:** Nos gates em background, capturar a saída completa e checar o rc real (ex.: `set -o pipefail` ou gravar a saída num arquivo e inspecionar); nunca depender do echo de confirmação encadeado após pipe.
+
+---
+id: LEARN-20260824-007
+date: "2026-08-24"
+type: fact
+confidence: high
+source: repo-doc
+status: active
+supersedes: ""
+tags: [systemd, template, execstartpre]
+---
+## systemd: ExecStartPre com systemctl stop do próprio glob cancela o JOB_START
+- **Observação:** Em unit template, `ExecStartPre=-systemctl stop 'nome@*.service'` para a PRÓPRIA instância (estado activating) cancela o start (job conflict STOP×START, verificado no source do systemd v261); is-active não conta "activating" e oneshot com RemainAfterExit fica "active" com start no-op.
+- **Ação:** Para "dono único" em templates: stop auto-excludente (list-units + grep -vx da própria instância) e guard por `systemctl show -p ActiveState` com padrão "activating" quando o processo do oneshot roda o daemon; sem RemainAfterExit quando o udev precisa re-executar a cada evento.
+
+---
+id: LEARN-20260824-008
+date: "2026-08-24"
+type: gotcha
+confidence: medium
+source: sub-agent
+status: active
+supersedes: ""
+tags: [subwave, testes, gate]
+---
+## Testing subwave em paralelo com fix pode documentar comportamento pré-fix e quebrar o gate
+- **Observação:** Testes das subwaves escritos contra o comportamento anterior ao fix (mode+target=logo; mensagem de reconexão) passaram na worktree da subwave mas falharam no gate do snapshot integrado — o snapshot precisou ser recriado após o merge do fix e os testes atualizados.
+- **Ação:** Ao integrar testing subwaves, conferir se os testes documentam o estado ATUAL do main (especialmente quando um fix de semântica mergeou no meio); gate vermelho por teste desatualizado = atualizar o teste, não reverter o fix.
