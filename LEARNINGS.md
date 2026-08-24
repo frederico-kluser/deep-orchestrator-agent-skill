@@ -14,6 +14,10 @@
 - 2026-08-23 | convention | Limpeza de worktrees: nomes exatos do owned.tsv, nunca concatenação [id: LEARN-20260823-001]
 - 2026-08-23 | antipattern | Revisão adversarial deve incluir integração entre sub-agentes [id: LEARN-20260823-002]
 - 2026-08-23 | convention | Gate deste repo: 4 suítes + check-install [id: LEARN-20260823-003]
+- 2026-08-24 | fact | DSH retém sessões vivas com log append-only em RAM e sem API de descarte [id: LEARN-20260824-001]
+- 2026-08-24 | antipattern | Keep-alives DSH orfaos (node -e setInterval) acumulam por onda e nunca morrem [id: LEARN-20260824-002]
+- 2026-08-24 | gotcha | tmpfs /tmp sem size= vale metade da RAM e resido de agentes enche-o -> OOM real [id: LEARN-20260824-003]
+- 2026-08-24 | fact | Servicos em restart loop corrompem o journal (evidencia OOM perdida) [id: LEARN-20260824-004]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -110,3 +114,59 @@ tags: [gate, testes]
 ## Gate deste repo: 4 suítes + check-install
 - **Observação:** O trio registrado deste repo é bash -n + shellcheck -S error + test-contencao/test-plan-approval/test-search/test-evolve, e o check-install.sh fecha o contrato (15 checagens na v3.7.0). Rodar tudo junto pega regressões de contrato.
 - **Ação:** Mantenha o gate com as 4 suítes + check-install e rode no snapshot de integração e no gate final.
+
+---
+id: LEARN-20260824-001
+date: "2026-08-24"
+type: fact
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [dsh, memoria, leak, session]
+---
+## DSH retém sessões vivas com log append-only em RAM e sem API de descarte
+- **Observação:** packages/core/session/src/index.ts:426,643 mantem SessionEvent[] inteiro em RAM por sessao viva; apiproxy/api/sessions.ts:238-377 nao tem close/delete/dispose; sessao so e liberada quando o processo host morre. Subagentes in-process amplificam (50 subagentes = 50 logs). Compaction (threshold 0.8) so substitui a surface, nunca trunca o log (F3).
+- **Ação:** Ao orquestrar com DSH nesta maquina, considerar custo de RAM por sessao viva; medir RSS do host antes de ondas grandes; sugerir ao usuario abrir/fechar menos sessoes no GUI e reiniciar o host periodicamente ate existir dispose.
+
+---
+id: LEARN-20260824-002
+date: "2026-08-24"
+type: antipattern
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [dsh, keepalive, leak, orquestracao]
+---
+## Keep-alives DSH orfaos (node -e setInterval) acumulam por onda e nunca morrem
+- **Observação:** Processos `node -e setInterval(() => {}, 1000)` com env DSH_SHELL=1/DSH_SESSION_ID/DSH_SESSION_JSONL/DSH_WEB_URL (shell-env) sao spawnados como shell calls de modelo; no encerramento de sessao os orfaos nao sao terminados (53/63 com cwd em worktree deletada, ppid systemd --user). Na maquina: 63+ acumulados (1,1GiB RSS + 0,62GiB swap) e a populacao MainThread total chegou a 148-209 procs = 18,1GiB no pico. Spawner exato nao localizado no source (string montada em runtime).
+- **Ação:** Apos ondas grandes no deep-orchestrator, conferir `ps -eo pid,args | grep setInterval` e o count de MainThreads; nao matar os LIVE (sessao ativa), mas os orfaos com cwd (deleted) sao seguros de terminar.
+
+---
+id: LEARN-20260824-003
+date: "2026-08-24"
+type: gotcha
+confidence: medium
+source: sub-agent
+status: active
+supersedes: ""
+tags: [maquina, tmpfs, zram, oom]
+---
+## tmpfs /tmp sem size= vale metade da RAM e resido de agentes enche-o -> OOM real
+- **Observação:** Nesta maquina (CachyOS), /etc/fstab monta /tmp tmpfs sem size= (=> ram/2 = 15,5GiB) e swappiness=150 + zram ram/2. Residuo de agentes (perfis Playwright study-method-e2e, .pnpm-store, claude-1000, sandboxes daf-outbox, GGUF) encheu /tmp a 96%; ~11GiB foram para o zram; no pico a maquina teve 15 oom_kills no boot e o usuario precisou reiniciar. Boots de analise com orquestrador geram esse residuo.
+- **Ação:** Em execucoes longas nesta maquina, vigiar `df -h /tmp` e `zramctl`; mover caches pesados (TMPDIR do claude, pnpm-store) para disco (/var/tmp) ou limpar residuo entre ondas — com autorizacao do usuario.
+
+---
+id: LEARN-20260824-004
+date: "2026-08-24"
+type: fact
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [journal, diagnostico, oom]
+---
+## Servicos em restart loop corrompem o journal (evidencia OOM perdida)
+- **Observação:** synthmouse (67.020 restarts), ttyd@* (46.380) e librepods (14.633) com executaveis ausentes inundaram o journal a ponto de reter so ~1h18m de um boot de 1d15h — os detalhes de 11+ OOM kills do kernel foram perdidos. Contadores de cgroup (memory.events) sao a fonte de verdade resiliente.
+- **Ação:** Em diagnostico de OOM, usar /sys/fs/cgroup/*/memory.events e journalctl --list-boots ANTES de confiar no journal; sinalizar servicos em auto-restart como ruido.
