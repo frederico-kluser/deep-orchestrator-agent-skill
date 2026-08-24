@@ -11,6 +11,9 @@
 > Fonte: user > repo-doc > inferência (nunca invente evidência).
 
 ## Índice
+- 2026-08-23 | convention | Limpeza de worktrees: nomes exatos do owned.tsv, nunca concatenação [id: LEARN-20260823-001]
+- 2026-08-23 | antipattern | Revisão adversarial deve incluir integração entre sub-agentes [id: LEARN-20260823-002]
+- 2026-08-23 | convention | Gate deste repo: 4 suítes + check-install [id: LEARN-20260823-003]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -65,3 +68,45 @@ contract: comando1, comando2   # OPCIONAL — revalidado no consolidate (command
 - **Observação:** <fato específico, com path/comando; vago é proibido>
 - **Ação:** <o que fazer/evitar daqui pra frente>
 ```
+
+---
+id: LEARN-20260823-001
+date: "2026-08-23"
+type: convention
+confidence: high
+source: repo-doc
+status: active
+supersedes: ""
+tags: [orquestracao, do-wt, limpeza]
+---
+## Limpeza de worktrees: nomes exatos do owned.tsv, nunca concatenação
+- **Observação:** Um loop de limpeza com "$DO_WT" remove "int-ondaN-$n" onde $n já é prefixado (onda2-evolve-script) gera "int-onda2-onda2-evolve-script" — alvo inexistente; o do-wt.sh recusa com "RECUSADO: path vazio" e os snapshots ficam pendentes.
+- **Ação:** Na limpeza, use SEMPRE os nomes exatos do owned.tsv (confira com "$DO_WT" status); nunca derive nomes de worktree por concatenação de prefixos.
+
+---
+id: LEARN-20260823-002
+date: "2026-08-23"
+type: antipattern
+confidence: medium
+source: sub-agent
+status: active
+supersedes: ""
+tags: [revisao, integracao]
+---
+## Revisão adversarial deve incluir integração entre sub-agentes
+- **Observação:** Os dois BLOCKs/WARNINGs vieram de contratos quebrados ENTRE sub-agentes: formato de candidato documentado × parser; path real do SKILL.md × allowlist. A revisão individual não pega isso.
+- **Ação:** Em todo round de revisão, inclua a checagem de integração: formato documentado × parser, paths reais × allowlist, design doc × implementação.
+
+---
+id: LEARN-20260823-003
+date: "2026-08-23"
+type: convention
+confidence: high
+source: repo-doc
+status: active
+supersedes: ""
+tags: [gate, testes]
+---
+## Gate deste repo: 4 suítes + check-install
+- **Observação:** O trio registrado deste repo é bash -n + shellcheck -S error + test-contencao/test-plan-approval/test-search/test-evolve, e o check-install.sh fecha o contrato (15 checagens na v3.7.0). Rodar tudo junto pega regressões de contrato.
+- **Ação:** Mantenha o gate com as 4 suítes + check-install e rode no snapshot de integração e no gate final.
