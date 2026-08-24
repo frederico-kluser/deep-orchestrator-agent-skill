@@ -4,36 +4,48 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="plannotator-theme" content="host">
-<title>Por que o EXPLAINER da v3.6.0 agora passa pelo Plannotator?</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%235537eb'/%3E%3Cpath d='M9 9h7a7 7 0 0 1 0 14H9z' fill='none' stroke='white' stroke-width='2.4'/%3E%3Cpath d='M16 9h7a7 7 0 0 1 0 14h-7z' fill='white' opacity='.55'/%3E%3C/svg%3E">
+<meta name="generator" content="html-explainer-agent-skill + plannotator-visual-explainer (visual explainer route)">
+<title>Como a deep-orchestrator-agent-skill passou a evoluir a si mesma (v3.7.0)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%235537eb'/%3E%3Cpath d='M18 40V24l14-8 14 8v16l-14 8-14-8Z' fill='none' stroke='%23f5f5f4' stroke-width='4' stroke-linejoin='round'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%23f59e0b'/%3E%3C/svg%3E">
 <style>
+  /* ============ TOKENS DE TEMA (Plannotator) ============ */
   :root {
-    /* Plannotator tokens (defaults standalone; o meta plannotator-theme sobrescreve quando embutido) */
+    color-scheme: light;
+    /* Surfaces */
     --background: oklch(0.97 0.005 260);
     --foreground: oklch(0.18 0.02 260);
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.18 0.02 260);
     --muted: oklch(0.92 0.01 260);
     --muted-foreground: oklch(0.40 0.02 260);
+
+    /* Accents */
     --primary: oklch(0.50 0.25 280);
     --primary-foreground: oklch(1 0 0);
     --secondary: oklch(0.50 0.18 180);
     --accent: oklch(0.60 0.22 50);
     --accent-foreground: oklch(0.18 0.02 260);
+
+    /* Semantic */
     --destructive: oklch(0.50 0.25 25);
     --success: oklch(0.45 0.20 150);
     --warning: oklch(0.55 0.18 85);
+
+    /* Structure */
     --border: oklch(0.88 0.01 260);
     --code-bg: oklch(0.92 0.01 260);
     --ring: oklch(0.50 0.25 280);
     --radius: 0.625rem;
-    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+    /* Typography */
+    --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, 'SF Mono', Consolas, monospace;
     --font-display: ui-serif, Georgia, 'Times New Roman', serif;
-    color-scheme: light;
   }
+
   @media (prefers-color-scheme: dark) {
     :root {
+      color-scheme: dark;
       --background: oklch(0.15 0.02 260);
       --foreground: oklch(0.90 0.01 260);
       --card: oklch(0.22 0.02 260);
@@ -48,586 +60,1325 @@
       --destructive: oklch(0.65 0.20 25);
       --success: oklch(0.72 0.17 150);
       --warning: oklch(0.75 0.15 85);
-      color-scheme: dark;
     }
   }
 
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
+  /* ============ RESET + BASE ============ */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
   body {
-    margin: 0;
-    background: var(--background);
+    background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
     font-size: 16px;
-    line-height: 1.6;
+    line-height: 1.65;
+    padding: 48px 24px 64px;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px 72px; }
 
-  /* Header / hero */
-  header.page {
-    padding: 56px 0 28px;
-    border-bottom: 1px solid var(--border);
+  .container {
+    max-width: 980px;
+    margin: 0 auto;
   }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+    line-height: 1.2;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: 40px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+
+  h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  p { max-width: 66ch; }
+  p + p { margin-top: 0.9em; }
+
+  a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible, button:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.08em 0.35em;
+  }
+
+  strong { font-weight: 650; }
+
   .eyebrow {
     font-family: var(--font-mono);
     font-size: 12px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--muted-foreground);
-    margin: 0 0 14px;
+    margin-bottom: 10px;
   }
-  h1 {
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: clamp(1.9rem, 4.6vw, 3rem);
-    line-height: 1.15;
-    margin: 0 0 10px;
-    text-wrap: balance;
-    max-width: 18em;
-  }
-  .meta {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--muted-foreground);
-    margin: 0;
-  }
-  .meta span { display: inline-block; }
-  .meta .sep { margin: 0 8px; opacity: .5; }
 
-  /* Resposta em uma frase — primeira coisa visível */
+  /* ============ ANIMAÇÃO (sutil) ============ */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate { animation: fadeUp 0.4s ease-out both; animation-delay: calc(var(--i, 0) * 0.06s); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* ============ HEADER / HERO ============ */
+  .hero { margin-bottom: 36px; }
+
+  .prompt-box {
+    margin-top: 22px;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-left: 3px solid var(--primary);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    font-size: 14px;
+    color: var(--muted-foreground);
+    max-width: 72ch;
+  }
+  .prompt-box .prompt-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--primary);
+    display: block;
+    margin-bottom: 6px;
+  }
+  .prompt-box blockquote {
+    font-style: italic;
+    color: var(--foreground);
+  }
+
+  /* ============ RESPOSTA EM UMA FRASE ============ */
   .answer {
-    margin-top: 30px;
-    background: color-mix(in oklab, var(--primary) 7%, var(--card));
+    background: color-mix(in oklab, var(--primary) 5%, var(--card));
     border: 1.5px solid var(--primary);
     border-radius: var(--radius);
-    padding: 22px 24px;
+    box-shadow: 0 4px 24px color-mix(in oklab, var(--primary) 10%, transparent);
+    padding: 22px 26px;
+    margin-bottom: 14px;
   }
-  .answer .label {
+  .answer p {
+    font-size: 19px;
+    line-height: 1.55;
+    max-width: none;
+  }
+  .reader-note {
+    font-size: 13.5px;
+    color: var(--muted-foreground);
+    max-width: 72ch;
+    margin-bottom: 30px;
+  }
+
+  /* ============ STAT CARDS ============ */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+    margin: 26px 0 8px;
+  }
+  .kpi-card {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .kpi-value {
+    font-family: var(--font-display);
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1.1;
+  }
+  .kpi-label {
     font-family: var(--font-mono);
-    font-size: 12px;
-    letter-spacing: .12em;
+    font-size: 11.5px;
+    color: var(--muted-foreground);
+    margin-top: 4px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ============ SEÇÕES (segmentos) ============ */
+  .seg {
+    margin-top: 52px;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+  }
+  .seg-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .seg-num {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--primary);
+    letter-spacing: 0.08em;
+  }
+  .seg-lead {
+    color: var(--muted-foreground);
+    font-size: 15.5px;
+    max-width: 66ch;
+    margin-bottom: 18px;
+  }
+  .seg-body > * + * { margin-top: 14px; }
+
+  /* ============ PRÉ-TREINO (termos do diagrama) ============ */
+  .pretrain {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    font-size: 14px;
+    margin-bottom: 22px;
+    max-width: 72ch;
+  }
+  .pretrain .pretrain-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--primary);
     display: block;
     margin-bottom: 8px;
   }
-  .answer p { margin: 0; font-size: 1.06rem; }
+  .pretrain ul { list-style: none; padding: 0; }
+  .pretrain li { margin: 6px 0; }
+  .pretrain code { margin-right: 2px; }
 
-  /* Sections */
-  section { margin-top: 52px; }
-  h2 {
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 1.7rem;
-    margin: 0 0 8px;
-    text-wrap: balance;
+  .callout {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 14px 18px;
+    font-size: 14.5px;
+    max-width: 72ch;
   }
-  section > .lead { color: var(--muted-foreground); margin: 0 0 22px; max-width: 62ch; }
+  .callout strong { color: var(--foreground); }
 
-  h3 {
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 1.22rem;
-    margin: 34px 0 10px;
+  .crit-callout {
+    border-left-color: var(--destructive);
+    background: color-mix(in oklab, var(--destructive) 4%, var(--card));
   }
 
-  p { max-width: 68ch; }
-  ul, ol { max-width: 66ch; }
-  li { margin: 6px 0; }
-  code {
+  /* ============ FIGURAS ============ */
+  figure {
+    margin: 26px 0;
+  }
+  figcaption {
+    font-size: 14.5px;
+    line-height: 1.5;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    color: var(--foreground);
+    max-width: 72ch;
+  }
+  figcaption .claim { font-weight: 650; }
+
+  /* ============ MERMAID SHELL (diagram-shell canônico) ============ */
+  .diagram-shell { position: relative; }
+  .diagram-shell__hint {
     font-family: var(--font-mono);
-    font-size: 0.9em;
-    background: var(--code-bg);
-    border-radius: 5px;
-    padding: 0.12em 0.35em;
+    font-size: 11px;
+    color: var(--muted-foreground);
+    margin-bottom: 8px;
+    opacity: 0.75;
   }
-  a { color: var(--primary); }
+  .mermaid-wrap {
+    position: relative;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 30px 22px;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 380px;
+  }
+  .mermaid-wrap { cursor: grab; }
+  .mermaid-wrap.is-panning { cursor: grabbing; user-select: none; }
+  .zoom-controls {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    gap: 2px;
+    z-index: 10;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+  }
+  .zoom-controls button {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .zoom-controls button:hover { background: var(--muted); color: var(--foreground); }
+  .mermaid-viewport {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    min-height: 320px;
+  }
+  .mermaid-canvas { position: absolute; top: 0; left: 0; }
+  .zoom-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted-foreground);
+    padding: 0 6px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+  }
 
-  /* Tables */
+  /* Mermaid SVG overrides */
+  .mermaid .nodeLabel { font-size: 14px !important; }
+  .mermaid .edgeLabel { font-size: 12px !important; }
+  .mermaid .node rect, .mermaid .node circle, .mermaid .node polygon { stroke-width: 1.5px !important; }
+
+  /* ============ TABELAS ============ */
+  .table-scroll { overflow-x: auto; border: 1.5px solid var(--border); border-radius: var(--radius); }
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.93rem;
-    margin: 18px 0 6px;
-    overflow-wrap: break-word;
+    font-size: 14px;
+    background: var(--card);
+    min-width: 560px;
   }
   th, td {
     text-align: left;
-    padding: 10px 12px;
+    padding: 10px 14px;
     border-bottom: 1px solid var(--border);
     vertical-align: top;
   }
   th {
     font-family: var(--font-mono);
-    font-size: 0.8rem;
-    letter-spacing: .06em;
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--muted-foreground);
     background: var(--muted);
   }
-  th:first-child { border-top-left-radius: 8px; }
-  th:last-child { border-top-right-radius: 8px; }
   tr:last-child td { border-bottom: none; }
+  td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 
-  .scroll-x { overflow-x: auto; }
-
-  /* Cards grid */
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin: 20px 0;
+  .badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
   }
-  .card {
+  .badge--verde { color: var(--success); border-color: color-mix(in oklab, var(--success) 45%, transparent); background: color-mix(in oklab, var(--success) 10%, transparent); }
+  .badge--warning { color: var(--warning); border-color: color-mix(in oklab, var(--warning) 45%, transparent); background: color-mix(in oklab, var(--warning) 10%, transparent); }
+  .badge--block { color: var(--destructive); border-color: color-mix(in oklab, var(--destructive) 45%, transparent); background: color-mix(in oklab, var(--destructive) 10%, transparent); }
+  .badge--alta { color: var(--destructive); border-color: color-mix(in oklab, var(--destructive) 45%, transparent); background: color-mix(in oklab, var(--destructive) 10%, transparent); }
+
+  /* ============ DOBRÁVEL (andaime) ============ */
+  details {
     background: var(--card);
     border: 1.5px solid var(--border);
     border-radius: var(--radius);
-    padding: 18px;
+    padding: 4px 18px;
+    margin-top: 16px;
   }
-  .card .k {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: .1em;
-    text-transform: uppercase;
-    color: var(--muted-foreground);
-    margin: 0 0 6px;
-  }
-  .card .v { font-size: 1.02rem; margin: 0; color: var(--card-foreground); }
-
-  /* Figure / diagram shell */
-  figure { margin: 26px 0 10px; padding: 0; }
-  .diagram-shell {
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--card);
-    overflow: hidden;
-  }
-  .diagram-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--border);
-    background: var(--muted);
-    flex-wrap: wrap;
-  }
-  .diagram-toolbar .hint {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--muted-foreground);
-    margin-left: auto;
-  }
-  .diagram-toolbar button {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    padding: 4px 10px;
-    border: 1px solid var(--border);
-    background: var(--card);
-    color: var(--foreground);
-    border-radius: 6px;
-    cursor: pointer;
-  }
-  .diagram-toolbar button:hover { border-color: var(--primary); color: var(--primary); }
-  .diagram-toolbar button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-  .mermaid-wrap { position: relative; }
-  .mermaid-viewport {
-    overflow: auto;
-    max-height: 560px;
-    cursor: grab;
-    padding: 18px;
-  }
-  .mermaid-viewport.dragging { cursor: grabbing; }
-  .mermaid-canvas { min-width: min-content; transform-origin: top left; }
-  .mermaid-canvas svg { margin: 0 auto; display: block; }
-  figcaption {
-    margin: 14px 2px 0;
-    font-size: 0.95rem;
-    color: var(--muted-foreground);
-    border-left: 3px solid var(--primary);
-    padding-left: 12px;
-  }
-  figcaption .claim { color: var(--foreground); font-weight: 600; }
-
-  /* details / dobradura */
-  summary {
+  details summary {
     cursor: pointer;
     font-weight: 600;
-    color: var(--primary);
-    margin: 22px 0 8px;
+    font-size: 14.5px;
+    padding: 12px 0;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
-  summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 4px; }
-  details { border: 1px dashed var(--border); border-radius: var(--radius); padding: 4px 18px 16px; margin: 20px 0; }
-  details[open] { border-style: solid; }
-  details > .inner { margin-top: 10px; }
-  details > .inner pre {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px;
-    overflow-x: auto;
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before {
+    content: "▸";
+    color: var(--primary);
     font-family: var(--font-mono);
     font-size: 13px;
-    line-height: 1.5;
-    color: var(--foreground);
+    transition: transform 0.15s ease;
   }
-
-  .note {
-    background: var(--muted);
-    border-radius: var(--radius);
-    padding: 14px 18px;
-    font-size: 0.94rem;
-    margin: 18px 0;
+  details[open] summary::before { transform: rotate(90deg); }
+  details .details-body {
+    padding: 0 4px 16px;
+    font-size: 14.5px;
   }
+  details .details-body > * + * { margin-top: 10px; }
+  details ul { padding-left: 1.3em; }
+  details li { margin: 6px 0; max-width: 66ch; }
 
-  @media (max-width: 560px) {
-    .diagram-toolbar .hint { display: none; }
-    .grid { grid-template-columns: 1fr; }
+  /* ============ TIMELINE ============ */
+  .timeline { position: relative; margin: 10px 0 6px; padding-left: 26px; }
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: var(--border);
+  }
+  .tl-item { position: relative; padding: 0 0 20px 10px; max-width: 66ch; }
+  .tl-item::before {
+    content: "";
+    position: absolute;
+    left: -25px;
+    top: 7px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 2.5px solid var(--primary);
+  }
+  .tl-item.tl--final::before { background: var(--primary); }
+  .tl-time {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .tl-title { font-weight: 650; font-size: 15px; }
+  .tl-desc { font-size: 14px; color: var(--muted-foreground); margin-top: 2px; }
+
+  /* ============ RODAPÉ ============ */
+  footer {
+    margin-top: 64px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  footer p { max-width: none; }
+  footer p + p { margin-top: 4px; }
+
+  /* ============ RESPONSIVO ============ */
+  @media (max-width: 720px) {
+    body { padding: 26px 14px 40px; }
+    h1 { font-size: 27px; }
+    h2 { font-size: 21px; }
+    .answer p { font-size: 16.5px; }
+    .mermaid-wrap { padding: 18px 10px; min-height: 300px; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="container">
 
-  <header class="page">
-    <p class="eyebrow">deep-orchestrator-agent-skill · v3.6.0 · execução 20260823-175129</p>
-    <h1>Por que o EXPLAINER da v3.6.0 agora passa pelo Plannotator?</h1>
-    <p class="meta"><span>execução 20260823-175129-2804543</span><span class="sep">·</span><span>válido para a versão v3.6.0</span><span class="sep">·</span><span>documentado em 2026-08-23</span></p>
+  <!-- ================= HEADER ================= -->
+  <header class="hero animate" style="--i:0">
+    <p class="eyebrow">deep-orchestrator-agent-skill · v3.7.0 · 2026-08-23</p>
+    <h1>Como a deep-orchestrator-agent-skill passou a evoluir a si mesma</h1>
+    <div class="prompt-box">
+      <span class="prompt-label">Tarefa original (invocação /deep-orchestrator-agent-skill no-stop)</span>
+      <blockquote>“Quero que não importa onde essa skill for chamada, se ela aprender algo novo, possa modificar as skills dentro da pasta onde está instalada, para evoluir continuamente e não repetir os mesmos erros. Use muitas subskills para pesquisar como fazer essa auto-evolução da maneira correta e aplique isso.”</blockquote>
+    </div>
   </header>
 
-  <div class="answer" role="region" aria-label="Resposta em uma frase">
-    <span class="label">Resposta em uma frase</span>
-    <p>Porque, na v3.6.0, o <code>EXPLAINER.html</code> deixou de ser gerado por um script fixo e passou a ser uma <strong>explicação didática delegada a um sub-agente</strong>, e o Plannotator é o <strong>runtime de render/anotação</strong> cujos tokens de tema a skill de render aplica ao arquivo final — instalado automaticamente quando falta.</p>
-  </div>
-
-  <!-- ============================ LEITOR ============================ -->
-  <section aria-labelledby="leitor-h">
-    <h2 id="leitor-h">Leitor</h2>
-    <div class="grid">
-      <div class="card">
-        <p class="k">Nível</p>
-        <p class="v"><strong>misto / desconhecido</strong> → tratado como novato</p>
-      </div>
-      <div class="card">
-        <p class="k">Já sabe</p>
-        <p class="v">Que há um orquestrador multi-agente e que cada execução gera um EXPLAINER.</p>
-      </div>
-      <div class="card">
-        <p class="k">Não sabe</p>
-        <p class="v">O que mudou no fluxo do EXPLAINER nem por que o Plannotator entrou como runtime.</p>
-      </div>
+  <!-- ================= RESPOSTA EM UMA FRASE ================= -->
+  <section class="animate" style="--i:1">
+    <div class="answer">
+      <p>
+        Nesta execução, a <strong>skill</strong> (um pacote de instruções que um agente de IA segue para
+        executar uma tarefa) construiu um mecanismo de <strong>auto-evolução</strong> (a skill passa a
+        alterar as próprias skills instaladas a partir do que aprendeu em execuções passadas): ao fim de
+        cada execução ela registra o que aprendeu no <strong>LEARNINGS.md</strong> (o arquivo da skill
+        onde os aprendizados são gravados em formato que o motor lê) e aplica as mudanças — protegida por
+        guardas de segurança —, com cada etapa de trabalho validada por testes antes de entrar no repositório.
+      </p>
     </div>
-    <p>Como o leitor é misto ou desconhecido, este documento constrói o conteúdo para o novato, com o andaime (passo a passo) recolhível em <a href="#dobrado">&lt;details&gt;</a> para quem já conhece o orquestrador pular.</p>
+    <p class="reader-note">
+      Leitor assumido: misto/desconhecido — este documento trata você como iniciante e dobra o que o
+      experiente pode pular (tudo em <code>&lt;details&gt;</code>). A primeira tela já responde o título;
+      os termos novos são definidos na primeira vez em que aparecem.
+    </p>
   </section>
 
-  <!-- ============================ O QUE MUDOU ============================ -->
-  <section aria-labelledby="mudou-h">
-    <h2 id="mudou-h">O que mudou — o de-para</h2>
-    <p class="lead">Uma linha do antes e do depois, em números e em figura.</p>
-
-    <div class="scroll-x">
-      <table>
-        <thead>
-          <tr><th>Aspecto</th><th>Antes (rota por script)</th><th>Depois (v3.6.0)</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Quem escreve a explicação</td><td>Script <code>generate-explainer.sh</code> + template fixo <code>templates/html-explainer.html</code></td><td>Sub-agente delegado seguindo a <code>html-explainer-agent-skill</code> (brief didático)</td></tr>
-          <tr><td>Renderização</td><td>Template pronto embutido no script</td><td><code>visual-explainer</code> / <code>plannotator-visual-explainer</code>, com tokens de tema do Plannotator</td></tr>
-          <tr><td>Runtime Plannotator</td><td>Não existia no fluxo</td><td>Binário auto-instalado se ausente (<code>scripts/check-plannotator.sh --install</code>, v0.27.6 verificada)</td></tr>
-          <tr><td>Entrega</td><td>Arquivo salvo pelo script</td><td>Arquivo <code>EXPLAINER.html</code> salvo <strong>no lugar</strong>, no fim do COMMIT-FINAL</td></tr>
-          <tr><td>Tempo</td><td>Geração síncrona do script</td><td>Sem limite de tempo (a explicação pode demorar o que precisar)</td></tr>
-        </tbody>
-      </table>
+  <!-- ================= STATS ================= -->
+  <section class="kpi-grid animate" style="--i:2">
+    <div class="kpi-card">
+      <div class="kpi-value">4 ondas</div>
+      <div class="kpi-label">ondas = fases com agentes em paralelo</div>
     </div>
-
-    <p class="note"><strong>O que não mudou:</strong> a entrega continua sendo o arquivo <code>EXPLAINER.html</code> salvo na raiz; a UI de anotação do Plannotator é opcional e nunca substitui o arquivo.</p>
+    <div class="kpi-card">
+      <div class="kpi-value">6 sub-agentes</div>
+      <div class="kpi-label">sub-agentes = agentes de IA com contexto próprio</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">6 squash commits</div>
+      <div class="kpi-label">squash = onda integrada como um único commit</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">120 asserções</div>
+      <div class="kpi-label">asserções = checagens automáticas de teste</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-value">v3.7.0</div>
+      <div class="kpi-label">sobe de 3.6.0 — MINOR: capacidade nova</div>
+    </div>
   </section>
 
-  <!-- ============================ FIGURA 1 ============================ -->
-  <section aria-labelledby="fig1-h">
-    <h2 id="fig1-h">O novo fluxo do EXPLAINER</h2>
-    <p class="lead">Quatro etapas encadeadas trocam o script fixo por uma explicação construída sob regras didáticas.</p>
+  <!-- ================= FIGURA 1 — O CICLO ================= -->
+  <section class="seg animate" style="--i:3">
+    <div class="seg-head">
+      <span class="seg-num">VISÃO GERAL</span>
+    </div>
+    <h2>O ciclo de auto-evolução, do início ao fim</h2>
+    <p class="seg-lead">
+      Tudo o que esta execução construiu serve a um único desenho: um ciclo fechado. A execução
+      consulta a memória antes de planejar, coleta aprendizados ao terminar, registra, aplica e só
+      commita depois de validar — e a próxima execução começa consultando de novo.
+    </p>
 
-    <p>O caminho crítico está no <strong class="crit">passo de renderização</strong>: é onde o Plannotator entra — se a skill de render não estiver disponível e destravada, o arquivo não sai. A figura abaixo marca essa etapa em destaque; o texto volta a apontá-lo no segmento <a href="#runtime">O runtime do Plannotator</a>.</p>
+    <div class="pretrain">
+      <span class="pretrain-label">Termos que aparecem neste diagrama</span>
+      <ul>
+        <li><code>gate</code> — verificação obrigatória (testes/lint) que uma etapa precisa passar antes de ser integrada;</li>
+        <li><code>allowlist</code> — lista fechada dos arquivos que o motor tem permissão de alterar;</li>
+        <li><code>append-only</code> — o registro só anexa ao arquivo, nunca reescreve o que já existe;</li>
+        <li><code>anti-poisoning</code> — guardas que impedem conteúdo não confiável de virar regra da skill.</li>
+      </ul>
+    </div>
 
     <figure>
-      <div class="diagram-shell" role="img" aria-label="Fluxograma do novo fluxo do EXPLAINER na v3.6.0: o COMMIT-FINAL delega a um sub-agente, que segue a html-explainer-agent-skill para escrever o brief didático, que é renderizado por visual-explainer e plannotator-visual-explainer com tokens de tema do Plannotator, gerando o EXPLAINER.html salvo no lugar. O passo de renderização é o gargalo.">
-        <div class="diagram-toolbar">
-          <button type="button" class="zoom-in">＋</button>
-          <button type="button" class="zoom-out">－</button>
-          <button type="button" class="zoom-reset">reset</button>
-          <button type="button" class="zoom-expand">expandir</button>
-          <span class="hint">rolar p/ mover · Ctrl+scroll p/ zoom</span>
-        </div>
+      <div class="diagram-shell" role="img" aria-label="Ciclo fechado de auto-evolução: executar, consultar a memória, coletar aprendizados, registrar com add, aplicar com apply, validar e commitar, voltando à próxima execução.">
+        <p class="diagram-shell__hint">Ctrl/Cmd + roda para zoom · arraste para navegar quando ampliado · duplo clique ajusta · botão ↖ abre em tamanho cheio.</p>
         <div class="mermaid-wrap">
+          <div class="zoom-controls">
+            <button type="button" data-action="zoom-in" title="Aproximar">+</button>
+            <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
+            <button type="button" data-action="zoom-fit" title="Ajustar à tela">&#8634;</button>
+            <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
+            <button type="button" data-action="zoom-expand" title="Abrir em tamanho cheio">&#x26F6;</button>
+            <span class="zoom-label">Carregando…</span>
+          </div>
           <div class="mermaid-viewport">
-            <div class="mermaid-canvas"><pre class="mermaid">
+            <div class="mermaid mermaid-canvas"></div>
+          </div>
+        </div>
+      </div>
+      <script type="text/plain" class="diagram-source">
 flowchart TD
-  A["COMMIT-FINAL<br/>fase que encerra a execução"] -->|"delega a"| B["Sub-agente<br/>explicador"]
-  B -->|"segue"| C["html-explainer-agent-skill<br/>escreve o brief didático"]
-  C -->|"entrega o brief"| D["plannotator-visual-explainer<br/>aplica tokens de tema"]:::crit
-  D -->|"roteiriza"| E["visual-explainer<br/>compõe o HTML"]
-  E -->|"gera"| F["EXPLAINER.html<br/>salvo no lugar"]
-  classDef crit fill:#f7e7ff,stroke:#8a2be2,stroke-width:2.5px
-            </pre></div>
-          </div>
-        </div>
-      </div>
-      <figcaption><span class="claim">Afirmação:</span> na v3.6.0, o EXPLAINER nasce de um sub-agente que segue a html-explainer-agent-skill e renderiza com o Plannotator — não mais de um script fixo.</figcaption>
+    A["Execução da skill<br/>(FASE 1–4)"] -->|"passo 8.5: consulta a memória"| B["LEARNINGS.md<br/>(memória evolutiva)"]
+    B -->|"passo 6.5: coleta aprendizados"| C["evolve-skill.sh add<br/>(append-only)"]
+    C -->|"fonte registrada + anti-poisoning"| D["evolve-skill.sh apply<br/>(só allowlist)"]
+    D -->|"mudança dentro da allowlist"| E["Validação<br/>(test-evolve E1–E27)"]
+    E -->|"gate VERDE"| F["Commit<br/>evolve(learnings)"]
+    F -->|"próxima execução"| A
+    class E crit;
+    classDef crit fill:#ffd166,stroke:#b45309,color:#1f2937,font-weight:bold;
+      </script>
+      <figcaption>
+        <span class="claim">A auto-evolução é um ciclo fechado:</span> a skill consulta a memória antes
+        de planejar (passo 8.5), coleta aprendizados ao terminar (passo 6.5), registra com
+        <code>add</code>, aplica com <code>apply</code> e só commita depois de validar — a próxima
+        execução recomeça do mesmo ponto.
+      </figcaption>
     </figure>
-  </section>
 
-  <!-- ============================ FIGURA 2 ============================ -->
-  <section aria-labelledby="fig2-h">
-    <h2 id="fig2-h">Antes × depois, a diferença</h2>
-    <p class="lead">Comparar é desenhar o que cada rota adiciona — uma rota nova no lugar da antiga.</p>
-    <p>Três artefatos foram <strong>removidos</strong>: o script <code>generate-explainer.sh</code>, o template <code>html-explainer.html</code> e a pasta <code>templates/</code>. No lugar, entram a delegação didática e o runtime Plannotator.</p>
-    <figure>
-      <div class="diagram-shell" role="img" aria-label="Diagrama de antes e depois: a rota antiga gerava o EXPLAINER.html direto de um script e template fixos, sem Plannotator; a rota nova gera o mesmo arquivo passando por um sub-agente didático e pelo runtime Plannotator auto-instalado; a saída é a mesma.">
-        <div class="diagram-toolbar">
-          <button type="button" class="zoom-in">＋</button>
-          <button type="button" class="zoom-out">－</button>
-          <button type="button" class="zoom-reset">reset</button>
-          <button type="button" class="zoom-expand">expandir</button>
-          <span class="hint">rolar p/ mover · Ctrl+scroll p/ zoom</span>
-        </div>
-        <div class="mermaid-wrap">
-          <div class="mermaid-viewport">
-            <div class="mermaid-canvas"><pre class="mermaid">
-flowchart LR
-  subgraph ANTES["Antes — rota por script"]
-    direction LR
-    X1["generate-explainer.sh<br/>+ template fixo"] -->|"gera direto"| O1["EXPLAINER.html"]
-  end
-  subgraph DEPOIS["Depois — v3.6.0"]
-    direction LR
-    A1["sub-agente<br/>didático"] -->|"renderiza"| B1["Plannotator runtime<br/>auto-instalado"]:::crit
-    B1 -->|"gera"| O2["EXPLAINER.html"]
-  end
-  classDef crit fill:#f7e7ff,stroke:#8a2be2,stroke-width:2.5px
-            </pre></div>
-          </div>
-        </div>
-      </div>
-      <figcaption><span class="claim">Afirmação:</span> as duas rotas entregam o mesmo <code>EXPLAINER.html</code>; o que difere é o caminho — antes script fixo sem Plannotator, depois delegação didática com Plannotator auto-instalado.</figcaption>
-    </figure>
-  </section>
-
-  <!-- ============================ FIGURA 3 ============================ -->
-  <section aria-labelledby="fig3-h">
-    <h2 id="fig3-h">O contrato de instalação do Plannotator</h2>
-    <p class="lead">Quatro peças têm de existir para a entrega acontecer — e o script de auto-instalação garante as quatro.</p>
-    <p>O <code>check-plannotator.sh --install</code> instala o binário em modo <code>--minimal</code> quando falta (mínima 0.19.1). Nesta execução o Plannotator <strong>já estava</strong> instalado em <strong>v0.27.6</strong> e o setup <strong>já estava pronto</strong> — nada precisou ser instalado; só foi documentado.</p>
-    <figure>
-      <div class="diagram-shell" role="img" aria-label="Diagrama do contrato de instalação do Plannotator: o check-plannotator.sh --install (modo --minimal) garante quatro peças — o binário plannotator, a skill plannotator-visual-explainer, a skill visual-explainer e o destrave da invocação pelo modelo — que juntas permitem compor e salvar o EXPLAINER.html; o destrave é o passo crítico.">
-        <div class="diagram-toolbar">
-          <button type="button" class="zoom-in">＋</button>
-          <button type="button" class="zoom-out">－</button>
-          <button type="button" class="zoom-reset">reset</button>
-          <button type="button" class="zoom-expand">expandir</button>
-          <span class="hint">rolar p/ mover · Ctrl+scroll p/ zoom</span>
-        </div>
-        <div class="mermaid-wrap">
-          <div class="mermaid-viewport">
-            <div class="mermaid-canvas"><pre class="mermaid">
-flowchart TD
-  S["check-plannotator.sh --install<br/>modo --minimal"] -->|"garante"| B1["binário plannotator<br/>~/.local/bin"]
-  S -->|"garante"| R1["plannotator-visual-explainer<br/>skill de render"]
-  S -->|"garante"| V1["visual-explainer<br/>skill de composição"]
-  S -->|"garante"| U1["destrave da invocação<br/>pelo modelo"]:::crit
-  B1 -->|"fornece o tema"| T1["tokens copiados<br/>para o EXPLAINER.html"]
-  R1 -->|"roteiriza"| V1
-  V1 -->|"compõe"| T1
-  U1 -->|"permite"| R1
-  classDef crit fill:#f7e7ff,stroke:#8a2be2,stroke-width:2.5px
-            </pre></div>
-          </div>
-        </div>
-      </div>
-      <figcaption><span class="claim">Afirmação:</span> nenhuma das quatro peças sobra — faltando o destrave, a skill de render não pode ser invocada pelo modelo e a entrega falha.</figcaption>
-    </figure>
-    <p>O <strong class="crit">destrave</strong> é o passo crítico: a skill de render chega com <code>disable-model-invocation: true</code>; sem a linha removida (e o flag <code>allow_implicit_invocation</code> ajustado), a ordem "invoque a skill de render" vira uma ordem impossível de cumprir e o agente cairia no fallback de escrever HTML na mão — exatamente o que a v3.6.0 eliminou.</p>
-  </section>
-
-  <!-- ============================ BUZZWORDS ============================ -->
-  <section aria-labelledby="bz-h">
-    <h2 id="bz-h">Buzzwords</h2>
-    <p class="lead">Termos usados neste documento, com a definição ≤20 palavras e a primeira aparição. Cada um é também definido no ponto de uso no texto.</p>
-    <div class="scroll-x">
-      <table>
-        <thead><tr><th>Termo</th><th>Primeira aparição</th><th>Definição (≤20 palavras)</th></tr></thead>
-        <tbody>
-          <tr><td><code>html-explainer-agent-skill</code></td><td>O que mudou</td><td>Skill que escreve o brief didático e delega a renderização (não desenha HTML).</td></tr>
-          <tr><td><code>brief didático</code></td><td>Figura 1</td><td>Rascunho com leitor, figuras, buzzwords e andaime; define o conteúdo.</td></tr>
-          <tr><td><code>visual-explainer</code></td><td>O que mudou</td><td>Skill que compõe o HTML auto-contido final a partir do brief.</td></tr>
-          <tr><td><code>plannotator-visual-explainer</code></td><td>Figura 1</td><td>Skill de render que aplica os tokens de tema do Plannotator ao HTML.</td></tr>
-          <tr><td><code>Plannotator</code></td><td>Runtime</td><td>Binário local (servidor + UI de anotação); runtime de render/anotação do EXPLAINER.</td></tr>
-          <tr><td><code>runtime de render/anotação</code></td><td>Resposta</td><td>Backend que desenha o diagrama e abre para anotar o arquivo final.</td></tr>
-          <tr><td><code>tokens de tema</code></td><td>Figura 3</td><td>Variáveis CSS de cores e tipografia que a skill copia para o EXPLAINER.html.</td></tr>
-          <tr><td><code>check-plannotator.sh --install</code></td><td>O que mudou</td><td>Script que instala o Plannotator sozinho, em modo --minimal, quando falta.</td></tr>
-          <tr><td><code>--minimal</code></td><td>Contrato de instalação</td><td>Instala só o binário em ~/.local/bin, sem tocar configurações de outros agentes.</td></tr>
-          <tr><td><code>v0.27.6</code></td><td>Estado verificado</td><td>Versão do Plannotator confirmada na máquina (mínima exigida: 0.19.1).</td></tr>
-          <tr><td><code>onda</code></td><td>O orquestrador rodou</td><td>Lote de sub-agentes trabalhando em paralelo numa fase da execução.</td></tr>
-          <tr><td><code>worktree</code></td><td>O orquestrador rodou</td><td>Checkout git isolado; um por sub-agente, para não misturar entregas.</td></tr>
-          <tr><td><code>squash-merge</code></td><td>O orquestrador rodou</td><td>Merge que junta vários commits de um sub-agente em um só.</td></tr>
-          <tr><td><code>gate</code></td><td>O orquestrador rodou</td><td>Checagem (build/teste/lint) que barra uma entrega se falhar.</td></tr>
-          <tr><td><code>COMMIT-FINAL</code></td><td>Figura 1</td><td>Fase que fecha a execução: gate final, gera o EXPLAINER e o commit.</td></tr>
-          <tr><td><code>dogfooding</code></td><td>O orquestrador rodou</td><td>Usar o próprio produto no desenvolvimento — aqui, o EXPLAINER gerado pelo fluxo novo.</td></tr>
-          <tr><td><code>frontmatter</code></td><td>O about da skill</td><td>Bloco YAML no topo do SKILL.md com os metadados públicos da skill.</td></tr>
-        </tbody>
-      </table>
+    <div class="callout crit-callout">
+      <strong>O elo crítico é a validação antes do commit</strong> (nó em destaque): um aprendizado só
+      vira regra da skill depois de passar pelos testes <code>E1–E27</code>. Sem essa trava, o ciclo
+      fecharia sem prova de que a mudança não quebra nada.
     </div>
   </section>
 
-  <!-- ============================ SEGMENTOS ============================ -->
-  <section aria-labelledby="seg-h">
-    <h2 id="seg-h">Segmentos</h2>
-    <p class="lead">O que esta execução tocou e por quê — em passos com título próprio.</p>
-
-    <h3 id="estado">1 · Estado verificado: o Plannotator já estava pronto</h3>
-    <p>A tarefa pedia "instalar o plannotator se não tiver". A checagem da máquina mostrou que <strong>nada precisava ser instalado</strong>:</p>
-    <ul>
-      <li>Binário em <code>/home/ondokai/.local/bin/plannotator</code>, <strong>v0.27.6</strong> (mínima exigida <strong>0.19.1</strong>); o probe <code>plannotator annotate</code> imprime o usage e sai rc 0, sem abrir navegador.</li>
-      <li>Setup html-explainer <strong>PRONTO</strong>: binário OK, skills <code>visual-explainer</code> e <code>plannotator-visual-explainer</code> OK, invocação pelo modelo liberada, <strong>7/7 agent skill dirs</strong> com as duas skills.</li>
-    </ul>
-    <p>O requisito foi conferido e a auto-instalação documentada para o caso de ausência futura.</p>
-
-    <h3 id="runtime">2 · O runtime do Plannotator (o caminho crítico)</h3>
-    <p><strong>Plannotator</strong> é o runtime de render/anotação: um binário local que sobe um servidor e abre a UI de anotação. No fluxo novo, a skill de render <code>plannotator-visual-explainer</code> aplica os <strong>tokens de tema</strong> do Plannotator ao arquivo final. Este é o <strong class="crit">gargalo</strong> apontado na <a href="#fig1-h">Figura 1</a>: sem render, não existe EXPLAINER.</p>
-
-    <h3 id="autoinstala">3 · Auto-instalação, quando faltar</h3>
-    <p>Se o binário faltar em outro ambiente, <code>scripts/check-plannotator.sh --install</code> o instala em modo <code>--minimal</code> — só <code>~/.local/bin</code>, mínimo 0.19.1, sem <code>sudo</code>, sem <code>npm -g</code>, e nunca sobrescreve uma instalação existente.</p>
-
-    <h3 id="docs">4 · Docs e about atualizados</h3>
-    <p>O <code>README.md</code> ganhou bullet "Plannotator como runtime do EXPLAINER (auto-instalado)" nas <strong>Novidades v3.6.0</strong> e o item "Plannotator — AUTO-INSTALADO" em <strong>Requisitos</strong>. O "<strong>about</strong>" da skill (a <strong>description</strong> no frontmatter do <code>SKILL.md</code>) passou a descrever o EXPLAINER final didático v3.6.0 gerado por sub-agente seguindo a <code>html-explainer-agent-skill</code>, sem limite de tempo, salvo em <code>EXPLAINER.html</code> no lugar.</p>
-
-    <h3 id="onda">5 · O orquestrador rodou e fechou</h3>
-    <p>Uma <strong>onda</strong> de docs (<code>onda1-about-plannotator</code>) foi integrada por <strong>squash-merge</strong> no commit <code>a02037f</code> com o <strong>gate</strong> de snapshot <strong>verde</strong> (GATE_BUILD <code>bash -n</code>; GATE_TEST <code>check-install --quiet</code>; sem linter dedicado). A testing subwave foi NO-OP e a validação rodou o gate completo no integrado. O <code>EXPLAINER.html</code> deste ciclo é o <strong>dogfooding</strong> #2 pelo fluxo novo (a execução usa a própria entrega que documenta). A versão ficou em <strong>v3.6.0</strong> (mudança documental) e o commit + push para o GitHub é o passo final da execução.</p>
+  <!-- ================= SEGMENTO 1 ================= -->
+  <section class="seg animate" style="--i:4">
+    <div class="seg-head">
+      <span class="seg-num">01</span>
+      <p class="eyebrow" style="margin:0">O problema</p>
+    </div>
+    <h2>A skill repetia os mesmos erros</h2>
+    <p class="seg-lead">O pedido do usuário é o sintoma de uma ausência: memória.</p>
+    <div class="seg-body">
+      <p>
+        Uma skill que aprende durante uma execução — descobre uma correção, um anti-padrão, uma
+        pegadinha — mas não guarda nada disso, recomeça do zero na próxima chamada. O resultado é o
+        erro que o usuário descreveu: <em>repetir os mesmos erros</em> em qualquer pasta onde a skill
+        estiver instalada.
+      </p>
+      <p>
+        A tarefa pediu duas coisas: (1) um mecanismo que permita à skill <strong>modificar as skills
+        dentro da pasta onde está instalada</strong> a partir do que aprendeu, e (2) que essa mudança
+        seja feita <strong>da maneira correta</strong> — pesquisada, não inventada. A execução respondeu
+        com pesquisa ampla (Onda 1), construção (Ondas 2–3) e correção pelo crivo adverso (Onda 4).
+      </p>
+    </div>
   </section>
 
-  <!-- ============================ DOBRADO ============================ -->
-  <section aria-labelledby="dobrado-h">
-    <h2 id="dobrado-h">Dobrado — o que quem já conhece o orquestrador pode pular</h2>
-    <p class="lead">Andaime para o novato, recolhível para o experiente.</p>
-    <p>Para quem já trabalha com o deep-orchestrator, o <a href="#seg-h">Segmento 5</a> já resume tudo: uma onda de docs, gate verde, commit a02037f. O passo a passo granular abaixo atende a quem está vendo o orquestrador pela primeira vez.</p>
+  <!-- ================= SEGMENTO 2 ================= -->
+  <section class="seg animate" style="--i:5">
+    <div class="seg-head">
+      <span class="seg-num">02</span>
+      <p class="eyebrow" style="margin:0">Pesquisa</p>
+    </div>
+    <h2>Pesquisar antes de construir: a Onda 1</h2>
+    <p class="seg-lead">Seis sub-agentes paralelos, análise pura, zero código — para saber o que já
+    existia antes de desenhar o próprio mecanismo.</p>
+    <div class="seg-body">
+      <p>
+        As <strong>worktrees</strong> (cópias isoladas do repositório onde cada um trabalha sem colidir
+        com os outros) são a unidade de isolamento: a primeira <strong>Onda</strong> — grupo de
+        sub-agentes trabalhando em paralelo numa mesma fase — disparou 6 sub-agentes, cada um
+        responsável por uma frente de pesquisa. A worktree garante que a análise de um não suje a do
+        outro.
+      </p>
+      <p>
+        As seis frentes cobriram exatamente as perguntas que o mecanismo precisava responder antes de
+        existir: o que já existe como memória contínua, quais arquiteturas de auto-melhoria funcionam,
+        como se defender de conteúdo malicioso, como as convenções oficiais de skill tratam aprendizados,
+        como automatizar o loop e como a memória evolutiva falha.
+      </p>
 
-    <details>
-      <summary>Passo a passo do ciclo de orquestração (para o novato)</summary>
-      <div class="inner">
-        <ol>
-          <li><strong>FASE 1 — ANALYZE:</strong> lê a tarefa e mapeia a estrutura do repositório.</li>
-          <li><strong>FASE 2 — PLAN:</strong> decompõe a tarefa em sub-tarefas, cada uma na sua <strong>worktree</strong>, e em <strong>ondas</strong> paralelas.</li>
-          <li><strong>FASE 3 — EXECUTE-ONDA:</strong> dispara os sub-agentes, revisa adversarialmente e integra cada um por <strong>squash-merge</strong>, com o <strong>gate</strong> rodando em snapshot.</li>
-          <li><strong>FASE 4 — COMMIT-FINAL:</strong> roda o gate completo, registra só o que a execução produziu, <strong>gera o EXPLAINER.html</strong> pelo fluxo novo e entrega o relatório.</li>
-        </ol>
-        <p>Nesta execução só houve uma onda: a de documentação (<code>onda1-about-plannotator</code>), porque a instalação já estava pronta e o restante era redigir docs/about.</p>
-        <details>
-          <summary>Como o gate verde foi verificado (passo mecânico)</summary>
-          <div class="inner">
-<pre>GATE_BUILD → bash -n 15 scripts        # sintaxe dos scripts
-GATE_TEST  → check-install --quiet     # contrato de instalação completo
-GATE_LINT  → sem linter dedicado        # registrado como ausente</pre>
+      <details>
+        <summary>As 6 frentes da pesquisa (detalhe)</summary>
+        <div class="details-body">
+          <ul>
+            <li><strong>Memória contínua:</strong> ECC continuous-learning v2 + memory vault — verificado no código-fonte.</li>
+            <li><strong>Arquiteturas self-improving:</strong> Voyager, Reflexion, AgentOptimizer, MemGPT, A-MEM.</li>
+            <li><strong>Guardrails anti-poisoning:</strong> Anthropic, OpenAI, OWASP, Microsoft + MLAS (V-S4/V-S5).</li>
+            <li><strong>Convenções de skill/LEARNINGS:</strong> spec oficial Agent Skills, ECC, OKF, MindStudio.</li>
+            <li><strong>Automação do loop:</strong> hooks, branch de review, CI, versionamento semântico.</li>
+            <li><strong>Modos de falha da memória evolutiva:</strong> bloat, contradição, stale, overfitting, skill rot — 27 abstracts verificados; ETH 2602.11988 confirmado.</li>
+          </ul>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ================= SEGMENTO 3 ================= -->
+  <section class="seg animate" style="--i:6">
+    <div class="seg-head">
+      <span class="seg-num">03</span>
+      <p class="eyebrow" style="margin:0">Fundação</p>
+    </div>
+    <h2>O motor e a memória: a Onda 2</h2>
+    <p class="seg-lead">Duas peças nascem juntas: um motor de linha de comando e um arquivo de memória
+    que ele sabe ler e escrever.</p>
+    <div class="seg-body">
+      <p>
+        O coração é o <code>scripts/evolve-skill.sh</code>, uma <strong>CLI</strong> (programa de linha
+        de comando) com 6 comandos — <code>add</code>, <code>search</code>, <code>diff</code>,
+        <code>apply</code>, <code>consolidate</code> e <code>status</code> —, guardas de saída
+        (<code>exit 2/3/4</code>), anti-poisoning como código, <code>flock</code> (trava de arquivo que
+        impede duas execuções simultâneas de corromper a memória) e um parser com consciência de
+        code-fences. O <code>add</code> é <strong>append-only</strong>: a memória é um registro que não
+        se perde por sobrescrita.
+      </p>
+      <p>
+        A memória em si é o <strong>LEARNINGS.md</strong>, escrito num formato parseável — o motor
+        consegue extrair cada aprendizado de volta. A fundação fecha com 11 decisões de projeto
+        registradas em <code>docs/decisions/2026-08-23-auto-evolucao.md</code> (D1–D11), e o gate da
+        onda passou VERDE com 300 asserções.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= SEGMENTO 4 ================= -->
+  <section class="seg animate" style="--i:7">
+    <div class="seg-head">
+      <span class="seg-num">04</span>
+      <p class="eyebrow" style="margin:0">Guardas</p>
+    </div>
+    <h2>As guardas: como o motor não se envenena</h2>
+    <p class="seg-lead">A pesquisa da Onda 1 deixou um aviso que virou regra de projeto: memória
+    evolutiva sem filtro é porta aberta para conteúdo malicioso. Todo aprendizado passa por quatro
+    guardas antes de virar regra.</p>
+    <div class="seg-body">
+      <p>
+        O <strong>anti-poisoning</strong> funciona por ordem de confiança: a fonte do aprendizado é
+        obrigatória, e fontes não-confiáveis — web, sub-agente, diff, saída de modelo — nunca promovem.
+        Antes disso, o <strong>secret_scan</strong> (varredura que rejeita o lote inteiro se achar padrão
+        de credencial, sem imprimir o valor) impede que um segredo vaze para a memória. A
+        <strong>allowlist</strong> limita o estrago possível, e o <strong>flock</strong> serializa o
+        acesso.
+      </p>
+      <p>
+        Contradição nunca é apagada: a entrada mais nova vence e a antiga vira
+        <strong>superseded</strong> (marcada como superada, com referência à substituta — o corpo antigo
+        fica riscado e preservado). E há <strong>orçamento</strong> (limite de tamanho da memória: até
+        100 linhas ativas e arquivo até 400): no teto, o <code>consolidate</code> move o excedente para
+        o <code>learnings_archive.md</code>, preservado. O <code>apply</code> roda em
+        <strong>dry-run</strong> por padrão (mostra o que mudaria sem aplicar) e nunca faz merge sozinho:
+        se tocou só o LEARNINGS.md, commit direto; se tocou SKILL.md/prompts/docs, branch
+        <code>evolve/AAAA-MM-DD</code> para revisão.
+      </p>
+
+      <figure>
+        <div class="diagram-shell" role="img" aria-label="Caminho de um aprendizado bruto até a memória: fonte obrigatória, secret_scan, anti-poisoning por ordem de confiança, allowlist, flock; fora da allowlist o motor recusa com exit 2/3/4.">
+          <p class="diagram-shell__hint">Ctrl/Cmd + roda para zoom · arraste para navegar · duplo clique ajusta · botão ↖ abre em tamanho cheio.</p>
+          <div class="mermaid-wrap">
+            <div class="zoom-controls">
+              <button type="button" data-action="zoom-in" title="Aproximar">+</button>
+              <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
+              <button type="button" data-action="zoom-fit" title="Ajustar à tela">&#8634;</button>
+              <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
+              <button type="button" data-action="zoom-expand" title="Abrir em tamanho cheio">&#x26F6;</button>
+              <span class="zoom-label">Carregando…</span>
+            </div>
+            <div class="mermaid-viewport">
+              <div class="mermaid mermaid-canvas"></div>
+            </div>
           </div>
-        </details>
+        </div>
+        <script type="text/plain" class="diagram-source">
+flowchart TD
+    IN["Aprendizado bruto<br/>(surpresa, correção, achado)"] -->|"fonte obrigatória<br/>(source)"| S1["secret_scan<br/>(credenciais)"]
+    S1 -->|"lote limpo"| S2["Anti-poisoning<br/>(ordem de confiança)"]
+    S1 -. "achou segredo<br/>(rejeita o lote inteiro)" .-> R1["RECUSA<br/>lote inteiro"]
+    S2 -->|"web / sub-agente / diff /<br/>model-output nunca promovem"| S3["Allowlist<br/>(arquivos permitidos)"]
+    S3 -->|"dentro da lista"| S4["flock<br/>(uma execução por vez)"]
+    S3 -. "fora da lista<br/>(exit 2/3/4)" .-> R2["RECUSA<br/>exit 2/3/4"]
+    S4 -->|"apply com dry-run"| OUT["LEARNINGS.md / SKILL.md"]
+    class R1,R2 rej;
+    classDef rej fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d,font-weight:bold;
+        </script>
+        <figcaption>
+          <span class="claim">Um aprendizado só chega à memória depois de passar por quatro guardas;</span>
+          fora da allowlist o motor recusa com <code>exit 2/3/4</code> (ramos tracejados em vermelho).
+        </figcaption>
+      </figure>
+
+      <div class="callout crit-callout">
+        <strong>A recusa é o comportamento esperado:</strong> o motor prefere negar uma mudança legítima
+        a aceitar uma fora da allowlist. Err para o lado seguro — foi o que a pesquisa sobre
+        anti-poisoning recomendou.
       </div>
-    </details>
+    </div>
   </section>
 
-  <!-- ============================ FORA ============================ -->
-  <section aria-labelledby="fora-h">
-    <h2 id="fora-h">Fora — o que este documento corta de propósito</h2>
-    <p class="lead">Cortado por duplicado ou decorativo, para não competir com o que está desenhado ou já dito.</p>
-    <ul>
-      <li><strong>Redescrição das figuras em prosa</strong> — o conteúdo de cada diagrama vive na própria figura (texto que só redesenha se apaga).</li>
-      <li><strong>Histórico completo de novidades das versões 3.0.0–3.5.1</strong> — fora do escopo desta execução; só o que a v3.6.0 mudou é relevante aqui.</li>
-      <li><strong>Layout narrativo com múltiplas abas</strong> — o marcador visual do template antigo (gerado por script) não existe mais; este é um artefato explícito v3.6.0.</li>
-    </ul>
+  <!-- ================= SEGMENTO 5 ================= -->
+  <section class="seg animate" style="--i:8">
+    <div class="seg-head">
+      <span class="seg-num">05</span>
+      <p class="eyebrow" style="margin:0">Integração</p>
+    </div>
+    <h2>A skill passa a se consultar e se evoluir: a Onda 3</h2>
+    <p class="seg-lead">Motor e memória prontos, faltava amarrá-los no corpo da própria skill — em dois
+    pontos do fluxo, com testes e documentação de uso.</p>
+    <div class="seg-body">
+      <p>
+        A integração entrou no <code>SKILL.md</code> v3.7.0 em dois pontos novos: o <strong>passo 8.5</strong>
+        (na FASE 1, a skill consulta a memória com <code>evolve-skill.sh search</code> antes de planejar —
+        o ciclo da Figura 1 começando a girar) e o <strong>passo 6.5</strong> (na FASE 4, a EVOLUÇÃO
+        PÓS-EXECUÇÃO: coleta, filtra e persiste os aprendizados da execução). Além disso, a versão nova
+        traz relatório e final-note, e uma exceção de regra registrada (R8-h2 — o identificador interno
+        da exceção que permite esta auto-modificação).
+      </p>
+      <p>
+        Em volta do núcleo, a Onda 3 entregou: <code>prompts/evolution-guide.md</code> (as regras que
+        filtram o que merece virar aprendizado), <code>prompts/ecc-skills.md</code> (o "Doctor"
+        mecanizado), <code>scripts/test-evolve.sh</code> (testes E1–E20), README + scripts-README +
+        check-install, e o symlink do LEARNINGS.md para a pasta interna da skill. Duas decisões
+        autônomas marcaram a onda: a subwave de teste da Onda 2 foi dobrada na worktree de docs da Onda 3
+        (evitando colisão de arquivo — subwave é um grupo de teste rodando em paralelo à onda), e a
+        subwave de teste da Onda 3 foi NO-OP (sem operação — nada novo a testar: docs declarativas; o
+        contrato é exercitado no gate via check-install).
+      </p>
+      <p>
+        O <strong>semver</strong> (versionamento semântico <code>MAJOR.MINOR.PATCH</code>) subiu de
+        3.6.0 para 3.7.0 — <strong>MINOR</strong>, porque a mudança adiciona uma capacidade nova sem
+        quebrar o comportamento existente.
+      </p>
+    </div>
   </section>
 
-  <footer class="page">
-    <p>Artefato EXPLAINER html-explainer · válido para v3.6.0 (documentado em 2026-08-23) · execução 20260823-175129-2804543 · fontes: <code>.deep-orchestrator/run-20260823-175129-2804543/explainer/fatos.md</code> e <code>README.md</code>. Diagramas renderizados com Mermaid 11 nas paletas clara e escura.</p>
+  <!-- ================= SEGMENTO 6 ================= -->
+  <section class="seg animate" style="--i:9">
+    <div class="seg-head">
+      <span class="seg-num">06</span>
+      <p class="eyebrow" style="margin:0">Validação</p>
+    </div>
+    <h2>A validação: gates, asserções e revisão adversarial</h2>
+    <p class="seg-lead">Nada entra no repositório sem prova. Cada onda trabalhou em worktrees isoladas e
+    só foi integrada por squash-merge depois do gate VERDE.</p>
+    <div class="seg-body">
+      <p>
+        Um <strong>gate</strong> acompanhou cada onda; cada integração entrou como um
+        <strong>squash-merge</strong>, totalizando 6 squash commits. A <strong>revisão adversarial</strong>
+        (revisão que procura ativamente erros no diff antes de integrar) rodou em paralelo e foi o crivo
+        mais duro: bloqueou a Onda 2 (veredito <strong>BLOCK</strong> — reprovado), aprovou a Onda 3 com
+        <strong>WARNING</strong> (10 achados, dos quais 2 ALTA), e os fixes da Onda 4 fecharam com
+        <strong>VERDE</strong> (aprovado). Cada <strong>asserção</strong> soma prova ao veredito — veredito
+        é o resultado da revisão: BLOCK (reprovado), WARNING (aprovado com achados) ou VERDE (aprovado).
+      </p>
+
+      <figure>
+        <div class="diagram-shell" role="img" aria-label="As quatro ondas em sequência: pesquisa, fundação, integração e fixes, cada uma integrada por squash-merge após o gate VERDE, fechando em COMMIT-FINAL com 6 squash commits e v3.7.0.">
+          <p class="diagram-shell__hint">Ctrl/Cmd + roda para zoom · arraste para navegar · duplo clique ajusta · botão ↖ abre em tamanho cheio.</p>
+          <div class="mermaid-wrap">
+            <div class="zoom-controls">
+              <button type="button" data-action="zoom-in" title="Aproximar">+</button>
+              <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
+              <button type="button" data-action="zoom-fit" title="Ajustar à tela">&#8634;</button>
+              <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
+              <button type="button" data-action="zoom-expand" title="Abrir em tamanho cheio">&#x26F6;</button>
+              <span class="zoom-label">Carregando…</span>
+            </div>
+            <div class="mermaid-viewport">
+              <div class="mermaid mermaid-canvas"></div>
+            </div>
+          </div>
+        </div>
+        <script type="text/plain" class="diagram-source">
+flowchart TD
+    W1["Onda 1 — Pesquisa<br/>6 sub-agentes paralelos"] -->|"análise pura<br/>alimenta o desenho"| W2["Onda 2 — Fundação<br/>evolve-skill.sh + LEARNINGS.md<br/>+ decisões D1–D11"]
+    W2 -->|"gate VERDE 300 asserções<br/>revisão BLOCK → fixes"| W3["Onda 3 — Integração<br/>SKILL.md v3.7.0<br/>testes E1–E20"]
+    W3 -->|"gate VERDE 383 asserções<br/>check-install 15/15"| W4["Onda 4 — Fixes<br/>10 achados da revisão<br/>(2 ALTA)"]
+    W4 -->|"gate VERDE<br/>test-evolve E1–E27 (120 asserções)"| FIN["COMMIT-FINAL<br/>6 squash commits<br/>v3.7.0 (semver MINOR)"]
+        </script>
+        <figcaption>
+          <span class="claim">Cada onda só foi integrada por squash-merge depois do gate VERDE,</span>
+          e os números do gate cresceram com o tempo: 300, 383 e 120 asserções — fechando em
+          COMMIT-FINAL com 6 squash commits e a versão v3.7.0.
+        </figcaption>
+      </figure>
+
+      <div class="callout crit-callout">
+        <strong>Nenhuma onda entrou no repositório sem o gate:</strong> 300 asserções na Onda 2 (85 de
+        contenção, 151 de plan-approval, 64 de search), 383 na Onda 3 + check-install 15/15, e
+        test-evolve E1–E27 com 120 asserções + 3 suítes na Onda 4 — além da revisão adversarial que
+        bloqueou a Onda 2 e devolveu 10 achados na Onda 3.
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Onda</th>
+              <th>O que validou</th>
+              <th class="num">Asserções</th>
+              <th>Veredito</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>2</strong> — Fundação</td>
+              <td>build/lint · contenção 85 · plan-approval 151 · search 64</td>
+              <td class="num">300</td>
+              <td><span class="badge badge--verde">VERDE</span> <span class="badge badge--block">revisão BLOCK → fixes</span></td>
+            </tr>
+            <tr>
+              <td><strong>3</strong> — Integração</td>
+              <td>383 asserções + check-install 15/15</td>
+              <td class="num">383</td>
+              <td><span class="badge badge--verde">VERDE</span> <span class="badge badge--warning">revisão WARNING · 10 achados</span></td>
+            </tr>
+            <tr>
+              <td><strong>4</strong> — Fixes</td>
+              <td>test-evolve E1–E27 = 120 asserções + 3 suítes + check-install</td>
+              <td class="num">120</td>
+              <td><span class="badge badge--verde">VERDE</span> <span class="badge badge--alta">2 achados ALTA corrigidos</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details>
+        <summary>Os 10 achados da revisão adversarial da Onda 3 (detalhe)</summary>
+        <div class="details-body">
+          <p>Dos achados relatados nos fatos da execução, os seguintes foram registrados e corrigidos na Onda 4 — 2 deles classificados ALTA:</p>
+          <ul>
+            <li><code>add</code> aceitava o formato do template (ALTA);</li>
+            <li>o SKILL.md real precisava voltar à allowlist (decisão D8 restaurada) (ALTA);</li>
+            <li>entradas <code>superseded</code> apareciam fora do índice;</li>
+            <li><code>add</code> vazio saía com exit 0 em vez de falhar;</li>
+            <li>revalidação do contrato (<code>contract:</code>) na aplicação;</li>
+            <li>índice limitado a ≤30 entradas;</li>
+            <li>anti-poisoning aplicado por ordem de confiança;</li>
+            <li>decisão D5 realinhada.</li>
+          </ul>
+        </div>
+      </details>
+
+      <details>
+        <summary>Os 6 squash commits (detalhe)</summary>
+        <div class="details-body">
+          <p>Cada worktree da execução entrou como um commit único:</p>
+          <ul>
+            <li><code>3ff6973</code> — evolve-script (Onda 2)</li>
+            <li><code>5856487</code> — docs-base (Onda 2)</li>
+            <li><code>fdb7fb4</code> — skillmd (Onda 3)</li>
+            <li><code>f6d0198</code> — guide (Onda 3)</li>
+            <li><code>3e00011</code> — tests-docs (Onda 3)</li>
+            <li><code>0579f0f</code> — fix-evolve (Onda 4)</li>
+          </ul>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ================= SEGMENTO 7 ================= -->
+  <section class="seg animate" style="--i:10">
+    <div class="seg-head">
+      <span class="seg-num">07</span>
+      <p class="eyebrow" style="margin:0">Primeira evolução real</p>
+    </div>
+    <h2>O mecanismo usado pela primeira vez — na própria execução que o criou</h2>
+    <p class="seg-lead">Não foi ensaio: ao fim desta execução, o mecanismo novo foi exercitado pela
+    primeira vez com os aprendizados da própria execução.</p>
+    <div class="seg-body">
+      <p>
+        Os aprendizados coletados ao longo das ondas (surpresas, correções, falhas de gate, achados de
+        revisão) foram registrados e persistidos com o próprio motor — <code>evolve-skill.sh add</code>
+        seguido de <code>apply</code> — e o resultado entrou como um commit
+        <code>evolve(learnings): …</code>. O ciclo da Figura 1 fechou no mesmo dia em que foi desenhado.
+      </p>
+
+      <details>
+        <summary>Passo a passo da primeira evolução real (o experiente pula)</summary>
+        <div class="details-body">
+          <ol style="padding-left:1.3em; max-width:66ch">
+            <li>A execução termina e a FASE 4 (passo 6.5) coleta os aprendizados da retrospectiva.</li>
+            <li>Cada aprendizado é filtrado pelas regras de <code>prompts/evolution-guide.md</code>.</li>
+            <li><code>evolve-skill.sh add</code> registra no LEARNINGS.md — append-only, com fonte, passando por secret_scan e anti-poisoning.</li>
+            <li><code>evolve-skill.sh apply</code> aplica as mudanças dentro da allowlist, com dry-run e decisão de merge segura.</li>
+            <li>O resultado é commitado como <code>evolve(learnings): …</code> — e a próxima execução consultará essa memória no passo 8.5.</li>
+          </ol>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ================= SEGMENTO 8 ================= -->
+  <section class="seg animate" style="--i:11">
+    <div class="seg-head">
+      <span class="seg-num">08</span>
+      <p class="eyebrow" style="margin:0">Timeline</p>
+    </div>
+    <h2>Um dia inteiro: das 20:12 ao COMMIT-FINAL</h2>
+    <p class="seg-lead">Toda a auto-evolução foi construída, validada e integrada num único dia — 2026-08-23.</p>
+    <div class="seg-body">
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-time">20:12</div>
+          <div class="tl-title">FASE 0</div>
+          <div class="tl-desc">Delimitação do mundo: SKILL_HOME == BASE_DIR (a skill é o repo-alvo), NO_STOP ligado, busca Tier 1 disponível (o nível mais alto do sistema de busca em camadas da skill).</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-time">Onda 1</div>
+          <div class="tl-title">Pesquisa — 6 agentes em paralelo</div>
+          <div class="tl-desc">Análise pura: memória contínua, self-improving, anti-poisoning, convenções, automação do loop, modos de falha.</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-time">Onda 2</div>
+          <div class="tl-title">Fundação + 2 revisões BLOCK + fixes</div>
+          <div class="tl-desc">Motor, memória e decisões D1–D11; a revisão adversarial bloqueou duas vezes até o gate VERDE (300 asserções).</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-time">Onda 3</div>
+          <div class="tl-title">Integração + validação VERDE</div>
+          <div class="tl-desc">SKILL.md v3.7.0 com passos 8.5 e 6.5, testes E1–E20, docs; gate VERDE (383 asserções + check-install 15/15) e revisão com 10 achados.</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-time">Onda 4</div>
+          <div class="tl-title">Fixes — 10 achados, 2 ALTA</div>
+          <div class="tl-desc">Correções na allowlist, no add, no índice e no contrato; testes E21–E27; gate VERDE (120 asserções).</div>
+        </div>
+        <div class="tl-item tl--final">
+          <div class="tl-time">Fim</div>
+          <div class="tl-title">COMMIT-FINAL</div>
+          <div class="tl-desc">6 squash commits integrados, semver 3.6.0 → 3.7.0 (MINOR), e a primeira evolução real commitada como evolve(learnings).</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= GLOSSÁRIO (dobrado) ================= -->
+  <section class="seg animate" style="--i:12">
+    <div class="seg-head">
+      <span class="seg-num">＋</span>
+      <p class="eyebrow" style="margin:0">Referência</p>
+    </div>
+    <h2>Glossário (complemento)</h2>
+    <p class="seg-lead">Cada termo abaixo já foi definido no ponto em que apareceu; esta tabela é só um
+    resumo para consulta.</p>
+    <div class="seg-body">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Termo</th><th>Definição</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>skill</code></td><td>instruções que um agente de IA segue para executar uma tarefa</td></tr>
+            <tr><td><code>auto-evolução</code></td><td>a skill altera as próprias skills instaladas a partir do que aprendeu em execuções passadas</td></tr>
+            <tr><td><code>LEARNINGS.md</code></td><td>arquivo da skill onde os aprendizados são registrados em formato que o motor lê</td></tr>
+            <tr><td><code>Onda</code></td><td>grupo de sub-agentes trabalhando em paralelo numa mesma fase, cada um na sua worktree</td></tr>
+            <tr><td><code>sub-agente</code></td><td>agente de IA que roda em contexto próprio, disparado pelo orquestrador</td></tr>
+            <tr><td><code>worktree</code></td><td>cópia isolada do repositório onde um sub-agente trabalha sem colidir com os outros</td></tr>
+            <tr><td><code>CLI</code></td><td>programa de linha de comando; aqui, os 6 comandos add/search/diff/apply/consolidate/status</td></tr>
+            <tr><td><code>append-only</code></td><td>o add só anexa ao arquivo, nunca reescreve o que já existe</td></tr>
+            <tr><td><code>anti-poisoning</code></td><td>guardas que impedem conteúdo não confiável de virar regra da skill</td></tr>
+            <tr><td><code>secret_scan</code></td><td>varredura que rejeita o lote inteiro se achar padrão de credencial, sem imprimir o valor</td></tr>
+            <tr><td><code>allowlist</code></td><td>lista fechada dos arquivos que o motor tem permissão de alterar</td></tr>
+            <tr><td><code>flock</code></td><td>trava de arquivo que impede duas execuções simultâneas de corromper a memória</td></tr>
+            <tr><td><code>dry-run</code></td><td>rodar o motor só mostrando o que mudaria, sem aplicar nada</td></tr>
+            <tr><td><code>superseded</code></td><td>entrada antiga marcada como superada quando uma nova a contradiz; nunca é apagada</td></tr>
+            <tr><td><code>orçamento</code></td><td>limite de tamanho da memória: ≤100 linhas ativas e arquivo ≤400</td></tr>
+            <tr><td><code>semver</code></td><td>versionamento semântico MAJOR.MINOR.PATCH; 3.6.0→3.7.0 é MINOR (capacidade nova)</td></tr>
+            <tr><td><code>gate</code></td><td>verificação obrigatória (testes/lint) que a onda precisa passar para ser integrada</td></tr>
+            <tr><td><code>asserção</code></td><td>checagem automática que falha se a condição esperada não vale</td></tr>
+            <tr><td><code>revisão adversarial</code></td><td>revisão que procura ativamente erros no diff antes de integrar</td></tr>
+            <tr><td><code>veredito</code></td><td>resultado da revisão: BLOCK (reprovado), WARNING (aprovado com achados) ou VERDE (aprovado)</td></tr>
+            <tr><td><code>squash-merge</code></td><td>integrar os commits de uma onda como um único commit</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= RODAPÉ ================= -->
+  <footer>
+    <p>Válido para: <strong>deep-orchestrator-agent-skill v3.7.0</strong> · execução de 2026-08-23 (run 20260823-201254-3660430).</p>
+    <p>Fonte: <code>.deep-orchestrator/run-20260823-201254-3660430/explainer/fatos.md</code> — nenhum fato, número, decisão ou veredito foi inventado; o repositório serviu apenas como contexto de nomenclatura.</p>
+    <p>Gerado pelo fluxo html-explainer-agent-skill → plannotator-visual-explainer (rota visual explainer).</p>
   </footer>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-<script>
-(function () {
-  const colorScheme = getComputedStyle(document.documentElement).colorScheme;
-  const isDark = colorScheme === 'dark'
-    || (colorScheme === 'normal' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 
-  const themeVars = isDark ? {
-    darkMode: true,
-    primaryColor: '#1e242e', primaryTextColor: '#dadee5', primaryBorderColor: '#343b45',
-    lineColor: '#9da5b2', secondaryColor: '#1e242e', secondaryTextColor: '#dadee5',
-    tertiaryColor: '#1e242e', tertiaryTextColor: '#dadee5', background: '#070b14',
-  } : {
-    primaryColor: '#5537eb', primaryTextColor: '#ffffff', primaryBorderColor: '#d4d8de',
-    lineColor: '#414853', secondaryColor: '#e1e5eb', secondaryTextColor: '#414853',
-    tertiaryColor: '#e1e5eb', tertiaryTextColor: '#414853', background: '#f3f5f9',
+  const config = {
+    fitPadding: 28,
+    minHeight: 360,
+    maxHeightPx: 900,
+    maxHeightVh: 0.84,
+    maxInitialZoom: 1.8,
+    minZoom: 0.08,
+    maxZoom: 6.5,
+    zoomStep: 0.14,
+    readabilityFloor: 0.58
   };
 
-  window.mermaid.initialize({
-    startOnLoad: true,
-    securityLevel: 'loose',
-    theme: 'base',
-    themeVariables: Object.assign({}, themeVars, {
-      fontFamily: "'Inter', system-ui, sans-serif",
-      fontSize: '14px',
-      labelTextColor: themeVars.secondaryTextColor,
-    }),
-  });
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+  let activeDrag = null;
+  addEventListener('mousemove', (e) => activeDrag?.onMove(e));
+  addEventListener('mouseup', () => { activeDrag?.onEnd(); activeDrag = null; });
 
-  // Diagram shell: zoom / pan / expand per figure
-  document.querySelectorAll('.diagram-shell').forEach(function (shell) {
+  const mqDark = matchMedia('(prefers-color-scheme: dark)');
+  const isDark = () => mqDark.matches;
+
+  // Paletas literais do Plannotator (theme-override) — hex, legíveis nas duas paletas.
+  function palette(dark) {
+    return dark
+      ? {
+          darkMode: true,
+          primaryColor: '#1e242e',
+          primaryTextColor: '#dadee5',
+          primaryBorderColor: '#343b45',
+          lineColor: '#9da5b2',
+          secondaryColor: '#1e242e',
+          secondaryTextColor: '#dadee5',
+          tertiaryColor: '#1e242e',
+          tertiaryTextColor: '#dadee5',
+          background: '#070b14',
+          edgeLabelBackground: '#10151d',
+          labelTextColor: '#c7ccd4'
+        }
+      : {
+          primaryColor: '#5537eb',
+          primaryTextColor: '#ffffff',
+          primaryBorderColor: '#d4d8de',
+          lineColor: '#414853',
+          secondaryColor: '#e1e5eb',
+          secondaryTextColor: '#414853',
+          tertiaryColor: '#e1e5eb',
+          tertiaryTextColor: '#414853',
+          background: '#f3f5f9',
+          edgeLabelBackground: '#5537eb',
+          labelTextColor: '#414853'
+        };
+  }
+
+  function initMermaid() {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      look: 'classic',
+      themeVariables: {
+        ...palette(isDark()),
+        fontFamily: "'Inter', system-ui, sans-serif",
+        fontSize: '14px'
+      }
+    });
+  }
+  initMermaid();
+
+  const rerenderers = [];
+
+  function initDiagram(shell) {
     const wrap = shell.querySelector('.mermaid-wrap');
     const viewport = shell.querySelector('.mermaid-viewport');
     const canvas = shell.querySelector('.mermaid-canvas');
-    const btnIn = shell.querySelector('.zoom-in');
-    const btnOut = shell.querySelector('.zoom-out');
-    const btnReset = shell.querySelector('.zoom-reset');
-    const btnExpand = shell.querySelector('.zoom-expand');
+    const source = shell.querySelector('.diagram-source');
+    const label = shell.querySelector('.zoom-label');
+    if (!wrap || !viewport || !canvas || !source || !label) return;
 
-    let scale = 1;
-    const clamp = v => Math.min(3, Math.max(0.4, v));
-    function apply() { canvas.style.transform = 'scale(' + scale + ')'; }
+    let zoom = 1;
+    let fitMode = 'contain';
+    let panX = 0, panY = 0, svgW = 0, svgH = 0;
+    let sx = 0, sy = 0, spx = 0, spy = 0;
+    let touchDist = 0, touchCx = 0, touchCy = 0;
 
-    btnIn.addEventListener('click', () => { scale = clamp(scale * 1.2); apply(); });
-    btnOut.addEventListener('click', () => { scale = clamp(scale / 1.2); apply(); });
-    btnReset.addEventListener('click', () => { scale = 1; apply(); viewport.scrollTo(0, 0); });
-    btnExpand.addEventListener('click', () => {
-      document.fullscreenElement
-        ? document.exitFullscreen()
-        : (wrap.requestFullscreen && wrap.requestFullscreen());
+    function constrainPan() {
+      const vpW = viewport.clientWidth, vpH = viewport.clientHeight;
+      const rW = svgW * zoom, rH = svgH * zoom, pad = config.fitPadding;
+      panX = (rW + pad * 2 <= vpW) ? (vpW - rW) / 2 : clamp(panX, vpW - rW - pad, pad);
+      panY = (rH + pad * 2 <= vpH) ? (vpH - rH) / 2 : clamp(panY, vpH - rH - pad, pad);
+    }
+
+    function applyTransform() {
+      const svg = canvas.querySelector('svg');
+      if (!svg || !svgW) return;
+      constrainPan();
+      svg.style.width = (svgW * zoom) + 'px';
+      svg.style.height = (svgH * zoom) + 'px';
+      canvas.style.transform = `translate(${panX}px, ${panY}px)`;
+      label.textContent = Math.round(zoom * 100) + '% — ' + fitMode;
+    }
+
+    function canPan() {
+      return svgW * zoom + config.fitPadding * 2 > viewport.clientWidth
+          || svgH * zoom + config.fitPadding * 2 > viewport.clientHeight;
+    }
+
+    function computeSmartFit() {
+      const vpW = viewport.clientWidth, vpH = viewport.clientHeight;
+      const aW = Math.max(80, vpW - config.fitPadding * 2);
+      const aH = Math.max(80, vpH - config.fitPadding * 2);
+      const contain = Math.min(aW / svgW, aH / svgH);
+      let z = contain, mode = 'contain';
+      if (contain < config.readabilityFloor) {
+        const chartR = svgH / svgW, vpR = vpH / Math.max(vpW, 1);
+        z = (chartR >= vpR) ? aW / svgW : aH / svgH;
+        mode = (chartR >= vpR) ? 'width-priority' : 'height-priority';
+      }
+      return { zoom: clamp(z, config.minZoom, config.maxInitialZoom), mode };
+    }
+
+    function fitDiagram() {
+      if (!svgW) return;
+      const fit = computeSmartFit();
+      zoom = fit.zoom; fitMode = fit.mode;
+      panX = (viewport.clientWidth - svgW * zoom) / 2;
+      panY = (viewport.clientHeight - svgH * zoom) / 2;
+      applyTransform();
+    }
+
+    function setOneToOne() {
+      zoom = clamp(1, config.minZoom, config.maxZoom); fitMode = '1:1';
+      panX = (viewport.clientWidth - svgW * zoom) / 2;
+      panY = (viewport.clientHeight - svgH * zoom) / 2;
+      applyTransform();
+    }
+
+    function zoomAround(factor, cx, cy) {
+      const next = clamp(zoom * factor, config.minZoom, config.maxZoom);
+      const ratio = next / zoom;
+      panX = cx - ratio * (cx - panX);
+      panY = cy - ratio * (cy - panY);
+      zoom = next; fitMode = 'custom';
+      applyTransform();
+    }
+
+    function readSvgNaturalSize(svg) {
+      let w = 0, h = 0;
+      if (svg.viewBox?.baseVal?.width > 0) { w = svg.viewBox.baseVal.width; h = svg.viewBox.baseVal.height; }
+      if (!w) { w = parseFloat(svg.getAttribute('width')) || 0; h = parseFloat(svg.getAttribute('height')) || 0; }
+      if (!w) { const b = svg.getBBox(); w = b.width; h = b.height; }
+      if (!w) { const r = svg.getBoundingClientRect(); w = r.width || 1000; h = r.height || 700; }
+      if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      return { w, h };
+    }
+
+    function setAdaptiveHeight() {
+      if (!svgW) return;
+      const usableW = Math.max(280, wrap.getBoundingClientRect().width - 2);
+      const idealH = (svgH / svgW) * usableW + config.fitPadding * 2;
+      const maxVp = Math.floor(innerHeight * config.maxHeightVh);
+      const hardMax = Math.min(config.maxHeightPx, Math.max(config.minHeight + 40, maxVp));
+      wrap.style.height = Math.round(clamp(idealH, config.minHeight, hardMax)) + 'px';
+    }
+
+    function openInNewTab() {
+      const svg = canvas.querySelector('svg');
+      if (!svg) return;
+      const clone = svg.cloneNode(true);
+      clone.style.width = ''; clone.style.height = '';
+      const bg = getComputedStyle(document.documentElement).getPropertyValue('--background').trim()
+        || (isDark() ? '#070b14' : '#f3f5f9');
+      const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Diagrama — auto-evolução v3.7.0</title><style>
+      body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+      background:${bg};padding:40px;box-sizing:border-box}
+      svg{max-width:100%;max-height:90vh;height:auto}
+      </style></head><body>${clone.outerHTML}</body></html>`;
+      open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
+    }
+
+    async function render() {
+      try {
+        const code = source.textContent.trim();
+        if (!code) { label.textContent = 'Erro: fonte vazia'; return; }
+        const id = 'diagram-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        const { svg } = await mermaid.render(id, code);
+        const parsed = new DOMParser().parseFromString(svg, 'text/html');
+        const parsedSvg = parsed.body.querySelector('svg');
+        if (!parsedSvg) { label.textContent = 'Erro: sem SVG'; return; }
+        canvas.replaceChildren(document.adoptNode(parsedSvg));
+        const svgNode = canvas.querySelector('svg');
+        if (!svgNode) { label.textContent = 'Erro: sem SVG'; return; }
+        const size = readSvgNaturalSize(svgNode);
+        svgW = size.w; svgH = size.h;
+        svgNode.removeAttribute('width');
+        svgNode.removeAttribute('height');
+        svgNode.style.maxWidth = 'none';
+        svgNode.style.display = 'block';
+        setAdaptiveHeight();
+        fitDiagram();
+      } catch (err) {
+        console.error('Mermaid render failed:', err);
+        label.textContent = 'Erro: ' + (err.message || 'render falhou');
+      }
+    }
+
+    const actions = {
+      'zoom-in': () => zoomAround(1 + config.zoomStep, viewport.clientWidth / 2, viewport.clientHeight / 2),
+      'zoom-out': () => zoomAround(1 / (1 + config.zoomStep), viewport.clientWidth / 2, viewport.clientHeight / 2),
+      'zoom-fit': fitDiagram,
+      'zoom-one': setOneToOne,
+      'zoom-expand': openInNewTab
+    };
+    Object.entries(actions).forEach(([action, handler]) => {
+      wrap.querySelector(`[data-action="${action}"]`)?.addEventListener('click', handler);
     });
 
-    // Ctrl/Cmd + scroll zoom
-    viewport.addEventListener('wheel', function (e) {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      scale = clamp(scale * (e.deltaY < 0 ? 1.1 : 0.9));
-      apply();
+    viewport.addEventListener('dblclick', fitDiagram);
+
+    viewport.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = viewport.getBoundingClientRect();
+        const factor = e.deltaY < 0 ? 1 + config.zoomStep : 1 / (1 + config.zoomStep);
+        zoomAround(factor, e.clientX - rect.left, e.clientY - rect.top);
+        return;
+      }
+      if (canPan()) {
+        e.preventDefault();
+        panX -= e.deltaX; panY -= e.deltaY;
+        applyTransform();
+      }
     }, { passive: false });
 
-    // drag pan
-    let dragging = false, startX = 0, startY = 0, sx = 0, sy = 0;
-    viewport.addEventListener('mousedown', function (e) {
-      dragging = true;
-      startX = e.clientX; startY = e.clientY;
-      sx = viewport.scrollLeft; sy = viewport.scrollTop;
-      viewport.classList.add('dragging');
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.zoom-controls') || !canPan()) return;
+      wrap.classList.add('is-panning');
+      sx = e.clientX; sy = e.clientY; spx = panX; spy = panY;
+      e.preventDefault();
+      activeDrag = {
+        onMove: (ev) => { panX = spx + (ev.clientX - sx); panY = spy + (ev.clientY - sy); applyTransform(); },
+        onEnd: () => wrap.classList.remove('is-panning')
+      };
     });
-    window.addEventListener('mousemove', function (e) {
-      if (!dragging) return;
-      viewport.scrollLeft = sx - (e.clientX - startX);
-      viewport.scrollTop = sy - (e.clientY - startY);
-    });
-    window.addEventListener('mouseup', function () {
-      dragging = false;
-      viewport.classList.remove('dragging');
-    });
+
+    viewport.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        sx = e.touches[0].clientX; sy = e.touches[0].clientY; spx = panX; spy = panY;
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        touchDist = Math.sqrt(dx * dx + dy * dy);
+        const r = viewport.getBoundingClientRect();
+        touchCx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+        touchCy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+      }
+    }, { passive: true });
+
+    viewport.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1 && canPan()) {
+        if (touchDist > 0) {
+          sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+          spx = panX; spy = panY; touchDist = 0;
+        }
+        e.preventDefault();
+        panX = spx + (e.touches[0].clientX - sx);
+        panY = spy + (e.touches[0].clientY - sy);
+        applyTransform();
+      } else if (e.touches.length === 2 && touchDist > 0) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        zoomAround(d / touchDist, touchCx, touchCy);
+        touchDist = d;
+      }
+    }, { passive: false });
+
+    new ResizeObserver(() => { if (svgW) { setAdaptiveHeight(); fitDiagram(); } }).observe(wrap);
+
+    rerenderers.push(render);
+    render();
+  }
+
+  document.querySelectorAll('.diagram-shell').forEach(initDiagram);
+
+  // Re-render ao trocar o esquema de cor (Mermaid grava as cores no SVG na renderização).
+  mqDark.addEventListener('change', () => {
+    initMermaid();
+    Promise.all(rerenderers.map((r) => r()));
   });
-})();
 </script>
+
 </body>
 </html>
