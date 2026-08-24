@@ -247,6 +247,7 @@ metadata:
 4. **Read** — leia a entrada completa antes de confiar nela; **verifique alegações contra fontes autoritativas** (código, docs, testes) — memória não é política executável.
 5. **Handoff** — ao fim da unidade de trabalho, produza o bloco de memória + o handoff do orquestrador; no fim da onda, o orquestrador agrega os handoffs no TASK_PLAN.md que será colado inline no prompt da próxima onda (sub-agentes não leem o TASK_PLAN.md — o conteúdo chega via {{HANDOFF}}).
 6. **Doctor** — periodicamente: memórias obsoletas? contraditórias? pendências resolvidas? Consolide e promova o que virou conhecimento estável (o que o ECC faz com `/evolve` e `continuous-learning`).
+   - No deep-orchestrator-agent-skill, a promoção de conhecimento estável é **MECANIZADA**: `prompts/evolution-guide.md` decide (a/b/c + dual-buffer probação→promoção), `scripts/evolve-skill.sh` executa (add/search/diff/apply/consolidate) e `LEARNINGS.md` (raiz da skill) é o store — nunca promova memória ao corpo da skill sem evidência (≥2× ou usuário) nem sem diff revisável.
 7. **Limite de contexto** — o que é carregado na próxima sessão é ENXUTO (cap configurável, ex. `ECC_SESSION_START_MAX_CHARS`): essencial, não verboso. Persistência local por padrão; nada de enviar transcrições a serviços externos.
 
 ### Templates de prompt usados
