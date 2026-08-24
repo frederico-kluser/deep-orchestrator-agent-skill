@@ -534,18 +534,28 @@ parse_fields() { # <bloco> → popula B_TITLE B_TYPE B_CONFIDENCE B_SOURCE B_TAG
   # TEMPLATE documentado no LEARNINGS.md (o título também pode vir da linha
   # '## <título>' do corpo). Se ambas presentes, o frontmatter vence (as linhas
   # do frontmatter vêm primeiro no bloco; as de corpo só preenchem campos vazios).
+  # F-11b: múltiplas linhas '- **Observação:**' / '- **Ação:**' no MESMO bloco
+  # são JUNTADAS (preservadas, unidas por espaço) — nenhuma é descartada; linhas
+  # de corpo continuam sem efeito quando o campo já veio do frontmatter.
   local block="$1" line key val
+  local obs_src="" acao_src=""   # "" | frontmatter | body
   B_TITLE=""; B_TYPE=""; B_CONFIDENCE=""; B_SOURCE=""; B_TAGS=""; B_OBS=""; B_ACAO=""; B_CONTRACT=""
   while IFS= read -r line; do
     case "$line" in
       ''|'---') continue ;;
     esac
     if printf '%s\n' "$line" | grep -q '^- \*\*Observação:\*\*'; then
-      [ -z "$B_OBS" ] && B_OBS=$(printf '%s\n' "$line" | sed 's/^- \*\*Observação:\*\* *//')
+      if [ -z "$obs_src" ] || [ "$obs_src" = "body" ]; then
+        B_OBS="${B_OBS:+$B_OBS }$(printf '%s\n' "$line" | sed 's/^- \*\*Observação:\*\* *//')"
+        obs_src="body"
+      fi
       continue
     fi
     if printf '%s\n' "$line" | grep -q '^- \*\*Ação:\*\*'; then
-      [ -z "$B_ACAO" ] && B_ACAO=$(printf '%s\n' "$line" | sed 's/^- \*\*Ação:\*\* *//')
+      if [ -z "$acao_src" ] || [ "$acao_src" = "body" ]; then
+        B_ACAO="${B_ACAO:+$B_ACAO }$(printf '%s\n' "$line" | sed 's/^- \*\*Ação:\*\* *//')"
+        acao_src="body"
+      fi
       continue
     fi
     case "$line" in
@@ -560,8 +570,8 @@ parse_fields() { # <bloco> → popula B_TITLE B_TYPE B_CONFIDENCE B_SOURCE B_TAG
           confidence)  B_CONFIDENCE="$val" ;;
           source)      B_SOURCE="$val" ;;
           tags)        B_TAGS="$val" ;;
-          observacao)  B_OBS="$val" ;;
-          acao)        B_ACAO="$val" ;;
+          observacao)  B_OBS="$val"; obs_src="frontmatter" ;;
+          acao)        B_ACAO="$val"; acao_src="frontmatter" ;;
           contract)    B_CONTRACT="$val" ;;
         esac ;;
     esac
@@ -677,17 +687,22 @@ cmd_add() {
   # qualquer inválido → nada é escrito e o lote sai com exit 2).
   local -a candidates=()
   local cur="" line idx=0 bad=0 nblk=0
-  flush_block() { # F-A1/F-4: bloco vazio (só espaços) não vira candidato; bloco
-    # de CORPO do formato TEMPLATE (começa com '## ' ou '- **') é continuação do
-    # candidato anterior — o corpo vem DEPOIS do '---' que fecha o frontmatter.
+  flush_block() { # F-A1/F-4/F-11a: bloco vazio (só espaços) não vira candidato;
+    # bloco de CORPO do formato TEMPLATE (começa com '## ' ou '- **') é
+    # continuação do candidato anterior APENAS se este ainda NÃO tem corpo
+    # (linhas '- **Observação:**' / '- **Ação:**' — o corpo vem DEPOIS do '---'
+    # que fecha o frontmatter). Se o anterior JÁ tem corpo, o bloco é candidato
+    # NOVO: o anterior é flushado e nada é descartado (F-11a).
     cur="${cur#$'\n'}"
     if printf '%s\n' "$cur" | grep -q '[^[:space:]]'; then
       case "$cur" in
         '## '*|'- **'*)
           if [ "$nblk" -gt 0 ]; then
-            candidates[$((nblk - 1))]+=$'\n'"$cur"
-            cur=""
-            return
+            if ! printf '%s\n' "${candidates[$((nblk - 1))]:-}" | grep -qE '^- \*\*(Observação|Ação):\*\*'; then
+              candidates[$((nblk - 1))]+=$'\n'"$cur"
+              cur=""
+              return
+            fi
           fi ;;
       esac
       candidates+=("$cur")
@@ -1111,10 +1126,37 @@ is_trusted_source() { # <source> → 0 se confiável (user|repo-doc)
   return 1
 }
 
+archive_evidence() { # → 'título-normalizado|type|source|data' por linha (uma por
+  # entrada do learnings_archive.md com id válido). Fonte da evidência de
+  # ocorrências INDEPENDENTES para o critério de promoção ≥2 (F-11b): entradas
+  # arquivadas (dedupe/poda/orçamento) NÃO são duplicatas descartadas — são
+  # ocorrências anteriores do MESMO padrão em datas distintas.
+  [ -f "$ARCHIVE" ] || return 0
+  local adir="$TMPD/archive-evidence" n i f title type src date
+  rm -rf "$adir"; mkdir -p "$adir"
+  split_entries "$ARCHIVE" "$adir"
+  n=$(cat "$adir/COUNT")
+  for ((i = 1; i <= n; i++)); do
+    f=$(printf '%03d' "$i")
+    entry_valid_id "$adir/$f.entry" || continue   # F6: blocos sem id válido não contam
+    title=$(sed -n 's/^## //p' "$adir/$f.entry" | head -1)
+    type=$(entry_field "$adir/$f.entry" type)
+    src=$(entry_field "$adir/$f.entry" source)
+    date=$(entry_field "$adir/$f.entry" date)
+    date=${date//\"/}
+    [ -n "$title" ] || continue
+    printf '%s|%s|%s|%s\n' "$(normalize "$title")" "$type" "$src" "$date"
+  done
+}
+
 promotion_proposals() { # sobre o estado PÓS dedupe+supersessão+contratos (F-10a:
-  # entrada marcada superseded na MESMA execução nunca é proposta); preenche PROPOSALS
-  local -A groupdates=()
-  local idx key src cur
+  # entrada marcada superseded na MESMA execução nunca é proposta); preenche PROPOSALS.
+  # F-11b: o critério ≥2 conta ocorrências em datas distintas TAMBÉM no
+  # learnings_archive.md — para cada entrada ATIVA elegível (user|repo-doc,
+  # não-superseded), ocorrências = 1 (ela) + entradas arquivadas com MESMO título
+  # normalizado + MESMO type + fonte confiável (user|repo-doc) + data diferente.
+  local -A groupdates=() archdates=()
+  local idx key src cur k2 t2 s2 d2
   for idx in "${ORDER[@]}"; do
     load_meta "$idx"
     [ "$M_STATUS" = "active" ] || continue
@@ -1125,6 +1167,21 @@ promotion_proposals() { # sobre o estado PÓS dedupe+supersessão+contratos (F-1
       *) groupdates[$key]="${cur:+$cur$'\n'}$M_DATE" ;;
     esac
   done
+  # datas das entradas ARQUIVADAS (evidência de ocorrências anteriores)
+  while IFS='|' read -r k2 t2 s2 d2; do
+    [ -n "$k2" ] || continue
+    case "$s2" in
+      user|repo-doc) ;;                # só fonte confiável conta como evidência
+      *) continue ;;
+    esac
+    [ -n "$d2" ] || continue
+    key="$k2|$t2"
+    cur="${archdates[$key]:-}"
+    case "|$cur|" in
+      *"|$d2|"*) ;;
+      *) archdates[$key]="${cur:+$cur$'\n'}$d2" ;;
+    esac
+  done <<< "$(archive_evidence)"
   for idx in "${ORDER[@]}"; do
     load_meta "$idx"
     [ "$M_STATUS" = "active" ] || continue
@@ -1133,8 +1190,12 @@ promotion_proposals() { # sobre o estado PÓS dedupe+supersessão+contratos (F-1
       web|sub-agent|diff|model-output) continue ;;   # anti-poisoning: NUNCA candidatas
     esac
     key="$(normalize "$M_TITLE")|$M_TYPE"
-    local ndates
-    ndates=$(printf '%s\n' "${groupdates[$key]:-}" | sort -u | grep -c . || true)
+    local all ndates
+    all="${groupdates[$key]:-}"
+    if [ -n "${archdates[$key]:-}" ]; then
+      all="${all:+$all$'\n'}${archdates[$key]}"
+    fi
+    ndates=$(printf '%s\n' "$all" | sort -u | grep -c . || true)
     if [ "$src" = "user" ] || [ "$ndates" -ge 2 ]; then
       PROPOSALS+=("$M_ID|$M_TITLE|$M_TYPE|$src|$ndates")
     fi

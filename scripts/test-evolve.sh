@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Testes de aceitação do motor de AUTO-EVOLUÇÃO — E1..E27 (v3.7.0)
+# Testes de aceitação do motor de AUTO-EVOLUÇÃO — E1..E30 (v3.7.0)
 #
 # Cada caso roda ISOLADO num repo fake da skill (git init + SKILL.md com
 # identidade + scripts/evolve-skill.sh COPIADO), com HOME/tmp próprios, SEM
@@ -55,6 +55,15 @@
 #        a user vence, a web é marcada superseded; a web NÃO é proposta na
 #        mesma execução (estado pós-supersessão) (F-10)
 #   E27: índice > 30 linhas → add avisa 'ÍNDICE: rode consolidate' (F-6)
+#   E28: dois candidatos body-only (títulos diferentes) separados por '---' →
+#        add anexa 2 entradas, NENHUMA descartada (o 2º bloco não é mesclado
+#        silenciosamente no 1º) (F-11a)
+#   E29: promoção ≥2 restaurada — entrada ativa repo-doc + duplicata arquivada
+#        (mesmo título+type, data diferente) → consolidate --dry-run propõe com
+#        '2 ocorrência(s) em datas distintas'; idêntica situação com fonte
+#        UNTRUSTED (web) → NENHUMA proposta (F-11b)
+#   E30: múltiplas linhas '- **Observação:**' no mesmo bloco são JUNTADAS
+#        (preservadas) na entrada anexada (F-11b)
 set -uo pipefail
 SKILL=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 EVOLVE_SRC="$SKILL/scripts/evolve-skill.sh"
@@ -564,6 +573,65 @@ candidate "$CASE/n.txt" "Entrada E27" fact high user "[g]" "obs" "acao"
 out=$("$EVOLVE" add "$CASE/n.txt" 2>&1); rc=$?
 chk "E27 add exit 0" "$rc" "0"
 chk "E27 avisa ÍNDICE (rode consolidate)" "$(echo "$out" | grep -c 'ÍNDICE' || true)" "1"
+
+echo "=== E28: dois candidatos body-only separados por '---' → add anexa 2 entradas (nenhuma descartada) ==="
+newcase e28
+write_skill; seed_learnings; commit_all init
+{
+  printf '## Primeiro aprendizado body-only\ntype: gotcha\nconfidence: high\nsource: user\ntags: [a]\n- **Observação:** obs um\n- **Ação:** acao um\n---\n## Segundo aprendizado body-only\ntype: fact\nconfidence: high\nsource: repo-doc\ntags: [b]\n- **Observação:** obs dois\n- **Ação:** acao dois\n'
+} > "$CASE/body.txt"
+out=$("$EVOLVE" add "$CASE/body.txt" 2>&1); rc=$?
+chk "E28 add exit 0" "$rc" "0"
+chk "E28 add reporta 2 adicionada(s)" "$(echo "$out" | grep -c 'add: 2 adicionada(s), 0 duplicada(s) ignorada(s)' || true)" "1"
+chk "E28 2 entradas anexadas" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "2"
+chk "E28 1º título preservado" "$(grep -c '^## Primeiro aprendizado body-only$' "$CASE/repo/LEARNINGS.md")" "1"
+chk "E28 2º título preservado (não descartado)" "$(grep -c '^## Segundo aprendizado body-only$' "$CASE/repo/LEARNINGS.md")" "1"
+chk "E28 corpo do 2º preservado" "$(grep -c 'obs dois' "$CASE/repo/LEARNINGS.md" || true)" "1"
+
+echo "=== E29: promoção ≥2 conta evidência no learnings_archive.md (F-11b) ==="
+newcase e29
+write_skill
+{
+  learnings_head
+  printf -- '- 2026-08-22 | gotcha | Fluxo X confirmado [id: LEARN-20260822-001]\n\n'
+  entry LEARN-20260822-001 2026-08-22 gotcha high repo-doc "[fluxo]" "Fluxo X confirmado" "obs B" "acao B"
+} > "$CASE/repo/LEARNINGS.md"
+{
+  printf '# LEARNINGS ARCHIVE — deep-orchestrator-agent-skill\n\n> fixture de teste.\n\n'
+  printf -- '<!-- evolve-skill consolidate: arquivada em 2026-08-22 — duplicata de LEARN-20260822-001 -->\n'
+  entry LEARN-20260801-001 2026-08-01 gotcha high repo-doc "[fluxo]" "Fluxo X confirmado" "obs A" "acao A"
+} > "$CASE/repo/learnings_archive.md"
+commit_all init
+out=$("$EVOLVE" consolidate --dry-run 2>&1); rc=$?
+chk "E29 consolidate --dry-run exit 0" "$rc" "0"
+chk "E29 imprime PROPOSTAS DE PROMOÇÃO" "$(echo "$out" | grep -c 'PROPOSTAS DE PROMOÇÃO' || true)" "1"
+chk "E29 proposta cita 2 ocorrência(s) em datas distintas" "$(echo "$out" | grep -c '2 ocorrência(s) em datas distintas' || true)" "1"
+chk "E29 proposta cita a entrada ativa" "$(echo "$out" | grep -c 'promover para o corpo da skill (SKILL.md/prompts): LEARN-20260822-001' || true)" "1"
+chk "E29 dry-run nada escrito (porcelain)" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
+# parte 2: idêntica situação com fonte UNTRUSTED (web) → NENHUMA proposta
+{
+  learnings_head
+  printf -- '- 2026-08-22 | gotcha | Fluxo X confirmado [id: LEARN-20260822-001]\n\n'
+  entry LEARN-20260822-001 2026-08-22 gotcha high web "[fluxo]" "Fluxo X confirmado" "obs B" "acao B"
+} > "$CASE/repo/LEARNINGS.md"
+commit_all web
+out2=$("$EVOLVE" consolidate --dry-run 2>&1); rc2=$?
+chk "E29 web: consolidate exit 0" "$rc2" "0"
+chk "E29 web: NENHUMA proposta" "$(echo "$out2" | grep -c 'PROPOSTAS DE PROMOÇÃO' || true)" "0"
+chk "E29 web: relatório 'propostas: nenhuma'" "$(echo "$out2" | grep -c 'propostas de promoção: nenhuma' || true)" "1"
+
+echo "=== E30: múltiplas linhas '- **Observação:**' no mesmo bloco são juntadas (preservadas) ==="
+newcase e30
+write_skill; seed_learnings; commit_all init
+{
+  printf -- '---\ntitle: Duas observacoes\ntype: gotcha\nconfidence: high\nsource: user\ntags: [a]\n---\n## Duas observacoes\n- **Observação:** primeira observacao\n- **Observação:** segunda observacao\n- **Ação:** acao\n'
+} > "$CASE/obs2.txt"
+out=$("$EVOLVE" add "$CASE/obs2.txt" 2>&1); rc=$?
+chk "E30 add exit 0" "$rc" "0"
+chk "E30 1 entrada anexada" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "1"
+chk "E30 ambas observações juntadas na entrada" "$(grep -c -- '- \*\*Observação:\*\* primeira observacao segunda observacao' "$CASE/repo/LEARNINGS.md" || true)" "1"
+chk "E30 nenhuma observação descartada" "$(grep -c 'primeira observacao' "$CASE/repo/LEARNINGS.md" || true)" "1"
+chk "E30 Ação preservada" "$(grep -c -- '- \*\*Ação:\*\* acao' "$CASE/repo/LEARNINGS.md" || true)" "1"
 
 echo; printf 'RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
