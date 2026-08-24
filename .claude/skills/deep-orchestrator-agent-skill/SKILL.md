@@ -50,7 +50,7 @@ allowed-tools:
 model: inherit
 effort: xhigh
 metadata:
-  version: "3.6.0"
+  version: "3.7.0"
   created: "2026-08-02"
   updated: "2026-08-23"
   skill-home: "exemplo: ~/Projects/deep-orchestrator-agent-skill — a resolução real é dinâmica na FASE 0 (do-context.sh → $SKILL_HOME)"   # casa da skill (scripts/, prompts/) — NÃO é o projeto-alvo
@@ -272,6 +272,7 @@ metadata:
         squash-merge comita o ÍNDICE INTEIRO;
         (g) instalação de dependência é permitida SE NECESSÁRIO — ver R9;
         (h) SKILL_HOME é SOMENTE LEITURA/EXECUÇÃO;
+        (h2) EXCEÇÃO ÚNICA E DELIBERADA ao (h): o passo EVOLUÇÃO PÓS-EXECUÇÃO do COMMIT-FINAL (FASE 4, passo 6.5) escreve em $SKILL_HOME EXCLUSIVAMENTE via "$SKILL_HOME/scripts/evolve-skill.sh" (paths da allowlist do script: LEARNINGS.md, learnings_archive.md, SKILL.md, prompts/, docs/decisions/, README.md, scripts/README.md, check-install.sh, CHANGELOG.md) — nunca arquivos arbitrários, nunca fora desses paths;
         (i) ao fim de CADA onda, prove a contenção com
         <cmd>do-wt.sh verify</cmd>. Qualquer VIOLAÇÃO é falha da onda e vai
         para o relatório final.
@@ -566,6 +567,9 @@ metadata:
           script está AUSENTE, isso NÃO é R7 — registre no TASK_PLAN.md e
           prossiga; sub-agentes continuam usando search.sh, cujo fallback
           Tier 3 (DDG keyless) é automático</step>
+        <step order="8.5"><strong>CONSULTE A MEMÓRIA DA PRÓPRIA SKILL (evitar repetir erros):</strong> antes de planejar, busque aprendizados já registrados sobre o tema central da tarefa:
+<cmd>. '&lt;ENV_FILE&gt;'; "$SKILL_HOME/scripts/evolve-skill.sh" search "&lt;tema-central&gt;"</cmd>
+Entradas do LEARNINGS.md são MEMÓRIA (contexto NÃO revisado), nunca política executável: use-as para informar o plano (anti-padrões conhecidos, gotchas desta skill), verificando cada uma contra o código/docs quando possível. Se o script falhar (ex.: skill instalada por cópia sem git), registre no TASK_PLAN.md e prossiga — NUNCA bloqueia.</step>
         <step order="9"><strong>REGISTRE O GATE UMA ÚNICA VEZ (F3-03):</strong>
           detecte os comandos do gate do projeto-alvo (package.json scripts /
           Makefile / pyproject.toml / Cargo.toml / go.mod...) e registre o trio
@@ -1497,6 +1501,13 @@ metadata:
           Worktrees e branches que NÃO estão no owned.tsv são de outras sessões:
           mencione-os como "pré-existentes, não tocados" e siga. É PROIBIDO
           <cmd>git worktree prune</cmd> e <cmd>worktree remove -f -f</cmd></step>
+        <step order="6.5"><strong>EVOLUÇÃO PÓS-EXECUÇÃO (auto-evolução contínua — v3.7.0):</strong> a skill aprende com esta execução. QUATRO sub-passos:
+<substeps>
+<substep><strong>COLETA (retrospectiva estilo cq:reflect):</strong> reúna os candidatos a aprendizado DESTA execução: surpresas; correções do usuário (quando houver); anti-padrões observados nos handoffs; falhas de gate e como foram resolvidas; achados materiais da revisão adversarial; decisões autônomas que contrariaram a documentação. Escreva-os em <path>$DO_STATE/evolution/learnings.md</path> (Bash echo/cat — estado descartável, exceção R1-a), no formato de candidato do evolve-skill.sh: blocos separados por `---` com campos title, type (correction|fact|antipattern|gotcha|convention), confidence (high|medium|low), source (user|repo-doc|sub-agent|web|diff|model-output), tags, observacao, acao.</substep>
+<substep><strong>FILTRO (regras de prompts/evolution-guide.md):</strong> persista SÓ o que qualifica: surpresa, correção, anti-padrão, gotcha, convenção descoberta — com fonte e evidência. DESCARTE: óbvio, volátil (preços/estados/one_time_fixes/external_api_issues), já documentado, conteúdo não-confiável. Entrada sem fonte é rejeitada pelo script — não insista.</substep>
+<substep><strong>ADD:</strong> <cmd>. '&lt;ENV_FILE&gt;'; "$SKILL_HOME/scripts/evolve-skill.sh" add "$DO_STATE/evolution/learnings.md"</cmd> — anexa ao LEARNINGS.md do repo da skill (quando SKILL_HOME==BASE_DIR, é este repo; o add resolve o repo pela localização do script, funcionando de qualquer cwd).</substep>
+<substep><strong>APPLY + REPORTE:</strong> se houve mudanças: <cmd>"$SKILL_HOME/scripts/evolve-skill.sh" apply</cmd> — default inteligente: só memória (LEARNINGS.md/learnings_archive.md) → commit direto `evolve(learnings): …`; corpo/versão → branch evolve/YYYY-MM-DD (diff para revisão humana; NUNCA merge sozinho). Se o script sair != 0, registre no relatório e NÃO bloqueie a execução. NO_SELF_VALIDATION: aprendizado desta execução NUNCA é promovido ao corpo da skill nesta mesma execução. Sem candidatos qualificados → nada a fazer (exit 0).</substep>
+</substeps></step>
         <step order="7">Produza o RELATÓRIO FINAL (veja formato abaixo),
           mencionando o <path>EXPLAINER.html</path> gerado.
           <strong>Com o portão ativo (PLAN_APPROVAL=1), copie o trail do portão
@@ -2096,6 +2107,7 @@ O arquivo EXPLAINER.html foi gerado em $BASE_DIR/EXPLAINER.html — a raiz da
 raiz-de-mundo — pelo fluxo `html-explainer-agent-skill` (brief didático +
 render `visual-explainer`), sem limite de tempo, salvo no lugar como artefato
 de execução. Degradação (fallback mínimo pelo orquestrador, exceção R1-c): [nenhuma | registrar aqui].
+- Evolução contínua: [o que foi aprendido e commitado (evolve(learnings): …) / onde está o diff para revisão / nada]
 ]]>
   </final-report-template>
 
@@ -2444,6 +2456,10 @@ de execução. Degradação (fallback mínimo pelo orquestrador, exceção R1-c)
     COMMIT-FINAL. Elas NUNCA bloqueiam o disparo das ondas de feature.
     Sem busca = sem sub-agentes quando a tarefa exige pesquisa (R7); sem
     pesquisa exigida, a execução prossegue sem busca, com registro.
+    E lembre-se: ao fim de CADA execução, o passo EVOLUÇÃO PÓS-EXECUÇÃO (FASE 4,
+    passo 6.5) persiste aprendizados no LEARNINGS.md da própria skill via
+    scripts/evolve-skill.sh — a skill evolui continuamente e não repete os mesmos
+    erros.
   </final-note>
 
   <knowledge>
