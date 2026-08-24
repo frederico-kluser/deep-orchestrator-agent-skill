@@ -27,6 +27,24 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 | `sync-global-skill.sh` | Publica a skill para todos os agentes da maquina por SYMLINK: ${CLAUDE_CONFIG_DIR:-~/.claude}/skills, ~/.agents/skills (pi/jcode/opencode), ~/.jcode/skills e ~/.pi/agent/skills. Existe porque alguns agentes importam skills POR COPIA, e copia congela a versao do dia da importacao (verificado: ~/.jcode/skills/deep-orchestrator-agent-skill ficou em 3.1.0 com a skill viva em 3.4.0 -- rodar por la executava um orquestrador de duas versoes atras). Toca EXCLUSIVAMENTE a entrada `deep-orchestrator-agent-skill`; so substitui um diretorio depois de confirmar que ele tem SKILL.md com `name: deep-orchestrator-agent-skill`; guarda a copia antiga em `.bak-<data>`; nao cria diretorio-pai de agente que nao existe. Chamado pelo hook SessionStart do Claude Code. Opcoes: --quiet, --dry-run, --strict. Exit 0 sempre (1 so com --strict). |
 | `check-install.sh` | Prova de que UMA INSTALACAO da skill esta COMPLETA: verifica o contrato de instalacao num diretorio (SKILL.md com `name:` correto + ferramentas executaveis `scripts/{do-context,do-wt,search,search-parallel,check-search-credits,check-plannotator,plan-approval,sync-global-skill}.sh` + `prompts/{ecc-prompts,ecc-skills,search-prompts,plan-approval-prompts}.md`). Aceita a raiz do repo OU a pasta `.claude/skills/...` (que espelha scripts/prompts por symlink). `--root <dir>` (default: a propria casa da skill), `--json`, `--quiet`. Exit 0 completo · 1 faltando itens · 2 uso. Detecta o estado "so SKILL.md, sem scripts" que faz a FASE 0 abortar com "PARE: do-context.sh nao encontrado". |
 
+## Auto-evolucao (evolucao continua — v3.7.0)
+
+| Script | Proposito |
+|--------|-----------|
+| `evolve-skill.sh` | Motor de auto-evolucao: add/search/diff/apply/consolidate/status do LEARNINGS.md da propria skill. |
+
+`evolve-skill.sh` persiste a memoria episodica da skill (contexto NAO revisado): ao
+fim de cada execucao o orquestrador coleta aprendizados (retrospectiva), filtra pelas
+regras de `prompts/evolution-guide.md` e anexa via `add` — lote atomico com validacao
+(campos obrigatorios, enums, scan de segredos, dedupe). `search` consulta; `diff` mostra
+o pendente; `apply` commita (default inteligente: so LEARNINGS.md/learnings_archive.md
+mudaram -> direto no branch atual; outro path da allowlist -> branch evolve/YYYY-MM-DD;
+nunca push); `consolidate` deduplica, marca contradicoes (nunca apaga), poda volateis e
+aplica o orcamento (GC). Use ao terminar uma execucao com surpresas/correcoes; promocao
+ao corpo da skill exige evidencia e diff revisavel. Exit codes: 0 ok · 1 search sem
+resultados · 2 uso/ambiente (candidato invalido, segredo, copia sem git, lock ocupado) ·
+3 identidade errada do SKILL.md · 4 escrita fora da allowlist.
+
 ## Busca (search)
 
 | Script | Proposito | Tier |

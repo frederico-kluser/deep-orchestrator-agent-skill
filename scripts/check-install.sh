@@ -98,12 +98,14 @@ check "scripts/ check-search-credits.sh" "$ROOT/scripts/check-search-credits.sh"
 check "scripts/ check-plannotator.sh" "$ROOT/scripts/check-plannotator.sh" x
 check "scripts/ plan-approval.sh"     "$ROOT/scripts/plan-approval.sh" x
 check "scripts/ sync-global-skill.sh" "$ROOT/scripts/sync-global-skill.sh" x
+check "scripts/ evolve-skill.sh"      "$ROOT/scripts/evolve-skill.sh" x
 
 # --- 3. Prompts ---------------------------------------------------------------
 check "prompts/ ecc-prompts.md"       "$ROOT/prompts/ecc-prompts.md"
 check "prompts/ ecc-skills.md"        "$ROOT/prompts/ecc-skills.md"
 check "prompts/ search-prompts.md"    "$ROOT/prompts/search-prompts.md"
 check "prompts/ plan-approval-prompts.md" "$ROOT/prompts/plan-approval-prompts.md"
+check "prompts/ evolution-guide.md"   "$ROOT/prompts/evolution-guide.md"
 
 if [ "$JSON" = 1 ]; then
   if [ "${#MISSING[@]}" = 0 ]; then
