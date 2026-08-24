@@ -17,6 +17,14 @@
 #       enums de type/confidence/source; scan de segredos), deduplica contra o
 #       LEARNINGS.md (título normalizado + type), gera id LEARN-YYYYMMDD-NNN,
 #       anexa a entrada ao LEARNINGS.md e atualiza a seção '## Índice'.
+#       Observação/Ação são aceitas nas DUAS formas: (a) chaves
+#       'observacao:'/'acao:' no frontmatter; (b) linhas de corpo
+#       '- **Observação:** <texto>' / '- **Ação:** <texto>' do TEMPLATE
+#       documentado no LEARNINGS.md (o título também pode vir da linha
+#       '## <título>' do corpo; 'contract:' opcional no frontmatter é
+#       preservado). Se ambas presentes, o frontmatter vence.
+#       Entrada vazia (nenhum bloco de candidato) → exit 0, 'nada a adicionar',
+#       nada escrito (D9).
 #       O parser IGNORA linhas dentro de code fences (``` … ```) e blocos sem
 #       'id: LEARN-<8 dígitos>-<3 dígitos>' válido — o TEMPLATE documentado no
 #       LEARNINGS.md nunca vira entrada nem desloca a numeração.
@@ -34,8 +42,9 @@
 #       verificação com shellcheck quando instalado, senão avisa). Sem
 #       --direct/--branch o default é INTELIGENTE: se SÓ LEARNINGS.md /
 #       learnings_archive.md mudaram (working tree vs HEAD) → commita DIRETO no
-#       branch atual; se qualquer outro path da allowlist mudou (SKILL.md,
-#       prompts/, docs/decisions/, README.md, scripts/README.md,
+#       branch atual; se qualquer outro path da allowlist mudou (SKILL.md — raiz
+#       OU .claude/skills/deep-orchestrator-agent-skill/SKILL.md —, prompts/,
+#       docs/decisions/, README.md, scripts/README.md,
 #       check-install.sh, CHANGELOG.md) → cria o branch evolve/YYYY-MM-DD a
 #       partir do branch atual e commita lá (--direct: commit no branch atual;
 #       --branch <nome>: usa o nome dado). Mensagem:
@@ -50,6 +59,12 @@
 #       apaga), poda de voláteis (type: fact com tags preço|versão|estado|
 #       price|version|state e mais de 90 dias → learnings_archive.md), orçamento
 #       (entradas ativas > 100 linhas → move as mais antigas para o arquivo),
+#       orçamento do ÍNDICE (índice > 30 linhas → reporta PROPOSTA de mover as
+#       entradas ativas mais antigas para o arquivo — só relatório) e
+#       REVALIDAÇÃO DE CONTRATOS (D7): entrada ativa com 'contract: cmd1, cmd2'
+#       tem cada comando checado com 'command -v'; comando ausente → a entrada
+#       é marcada superseded com motivo 'contrato quebrado: <cmd> ausente'
+#       (NUNCA apaga; comando ausente NÃO é erro — é resultado),
 #       e PROPOSTAS de promoção (entrada em probação com ≥2 ocorrências
 #       independentes — mesmo título/type em datas diferentes — OU source: user;
 #       fontes web|sub-agent|diff|model-output NUNCA promovem, nem aparecem na
@@ -58,7 +73,8 @@
 #   evolve-skill.sh status
 #       SKILL_REPO, branch atual, versão da skill (lida do frontmatter do
 #       SKILL.md), nº de entradas (ativas/superseded), orçamento (linhas do
-#       LEARNINGS.md vs tetos), branches evolve/* abertas, última data.
+#       LEARNINGS.md vs tetos, incl. índice ≤ 30), branches evolve/* abertas,
+#       última data.
 #   evolve-skill.sh --help
 #
 # Exit codes:
@@ -81,7 +97,9 @@
 #     'name: deep-orchestrator-agent-skill' (o SKILL.md da raiz é symlink; o
 #     grep lê através dele, i.e., o arquivo real);
 #   • ALLOWLIST de paths que este script pode tocar (relativos a SKILL_REPO):
-#     LEARNINGS.md, learnings_archive.md, SKILL.md, prompts/, docs/decisions/,
+#     LEARNINGS.md, learnings_archive.md, SKILL.md (raiz E
+#     .claude/skills/deep-orchestrator-agent-skill/SKILL.md — o arquivo REAL do
+#     corpo da skill, alcançado pelo symlink da raiz), prompts/, docs/decisions/,
 #     README.md, scripts/README.md, check-install.sh, CHANGELOG.md — o
 #     git status --porcelain é fotografado no início e conferido após cada
 #     mutação; qualquer path novo fora da allowlist → exit 4;
@@ -93,7 +111,9 @@
 #     MUDANÇA para learnings_archive.md — nunca deleção;
 #   • entrada sem source é rejeitada; fontes não-confiáveis
 #     (web|sub-agent|diff|model-output) nunca promovem (nem aparecem na
-#     proposta);
+#     proposta) e NUNCA supersedem entrada com fonte confiável (user|repo-doc):
+#     em contradição a entrada UNTRUSTED é que é marcada superseded (pela
+#     confiável); sem confiável na disputa, a mais nova vence normalmente;
 #   • flock exclusivo (em <gitdir>/evolve-skill.lock) durante apply,
 #     consolidate e o append do add — execuções paralelas não colidem (adds
 #     concorrentes serializam e nunca geram id duplicado);
@@ -148,9 +168,13 @@ LEARNINGS="$SKILL_REPO/LEARNINGS.md"
 ARCHIVE="$SKILL_REPO/learnings_archive.md"
 
 # ALLOWLIST de paths que este script pode tocar (relativos a SKILL_REPO).
-ALLOWED_PATHS=(LEARNINGS.md learnings_archive.md SKILL.md prompts/ docs/decisions/ README.md scripts/README.md check-install.sh CHANGELOG.md)
+# F-A2: o SKILL.md REAL (corpo da skill) vive em .claude/skills/... e é
+# alcançado pelo symlink da raiz — AMBOS os paths são permitidos e contam como
+# "corpo" na classificação do apply default-inteligente (nunca commit direto).
+ALLOWED_PATHS=(LEARNINGS.md learnings_archive.md SKILL.md .claude/skills/deep-orchestrator-agent-skill/SKILL.md prompts/ docs/decisions/ README.md scripts/README.md check-install.sh CHANGELOG.md)
 
 BUDGET_ACTIVE_LINES=100
+BUDGET_INDEX_LINES=30
 BUDGET_TOTAL_LINES=400
 VOLATILE_DAYS=90
 # Tolerante a acentos (preço/preco, versão/versao) além do inglês price/version/state.
@@ -179,7 +203,7 @@ trap 'rm -rf "$TMPD"' EXIT
 
 # Estado global compartilhado pelas passadas do consolidate.
 declare -a ORDER=() ARCHIVED=() PROPOSALS=()
-NDUP=0 NSUP=0 NPRUNE=0 NBUDG=0
+NDUP=0 NSUP=0 NPRUNE=0 NBUDG=0 NCONTRACT=0
 
 # Fotografia do git status --porcelain no início: a conferência da allowlist
 # tolera o que JÁ estava sujo antes deste script rodar (outras sub-tarefas do
@@ -493,16 +517,39 @@ learnings_stats() { # → 'total_entradas ativas superseded linhas_totais linhas
   printf '%d %d %d %d %d %s\n' "$total_e" "$act_e" "$sup_e" "$total_l" "$act_l" "$last"
 }
 
+# F-6: nº de linhas do Índice (formato '- YYYY-MM-DD | <type> | <título> [id: LEARN-…]').
+# Comentários e o TEMPLATE em code fence não casam com o formato → não contam.
+index_line_count() {
+  [ -f "$LEARNINGS" ] || { printf '0\n'; return; }
+  grep -cE '^- [0-9]{4}-[0-9]{2}-[0-9]{2} \| .*\[id: LEARN-' "$LEARNINGS" || true
+}
+
 # ---------------------------------------------------------------------------
 # add
 # ---------------------------------------------------------------------------
 
-parse_fields() { # <bloco> → popula B_TITLE B_TYPE B_CONFIDENCE B_SOURCE B_TAGS B_OBS B_ACAO
+parse_fields() { # <bloco> → popula B_TITLE B_TYPE B_CONFIDENCE B_SOURCE B_TAGS B_OBS B_ACAO B_CONTRACT
+  # F-A1: aceita as DUAS formas de Observação/Ação — (a) chaves no frontmatter;
+  # (b) linhas de corpo '- **Observação:** <texto>' / '- **Ação:** <texto>' do
+  # TEMPLATE documentado no LEARNINGS.md (o título também pode vir da linha
+  # '## <título>' do corpo). Se ambas presentes, o frontmatter vence (as linhas
+  # do frontmatter vêm primeiro no bloco; as de corpo só preenchem campos vazios).
   local block="$1" line key val
-  B_TITLE=""; B_TYPE=""; B_CONFIDENCE=""; B_SOURCE=""; B_TAGS=""; B_OBS=""; B_ACAO=""
+  B_TITLE=""; B_TYPE=""; B_CONFIDENCE=""; B_SOURCE=""; B_TAGS=""; B_OBS=""; B_ACAO=""; B_CONTRACT=""
   while IFS= read -r line; do
     case "$line" in
       ''|'---') continue ;;
+    esac
+    if printf '%s\n' "$line" | grep -q '^- \*\*Observação:\*\*'; then
+      [ -z "$B_OBS" ] && B_OBS=$(printf '%s\n' "$line" | sed 's/^- \*\*Observação:\*\* *//')
+      continue
+    fi
+    if printf '%s\n' "$line" | grep -q '^- \*\*Ação:\*\*'; then
+      [ -z "$B_ACAO" ] && B_ACAO=$(printf '%s\n' "$line" | sed 's/^- \*\*Ação:\*\* *//')
+      continue
+    fi
+    case "$line" in
+      '## '*) [ -z "$B_TITLE" ] && B_TITLE="${line#'## '}" ;;
       *:*)
         key="${line%%:*}"
         val="${line#*:}"
@@ -515,6 +562,7 @@ parse_fields() { # <bloco> → popula B_TITLE B_TYPE B_CONFIDENCE B_SOURCE B_TAG
           tags)        B_TAGS="$val" ;;
           observacao)  B_OBS="$val" ;;
           acao)        B_ACAO="$val" ;;
+          contract)    B_CONTRACT="$val" ;;
         esac ;;
     esac
   done <<< "$block"
@@ -586,26 +634,20 @@ entry_duplicate() { # <norm-título|type> → 0 se já existe no LEARNINGS.md
   return 1
 }
 
-append_entry() { # <título> <type> <confidence> <source> <tags> <observacao> <acao> → imprime o id
-  local title="$1" type="$2" conf="$3" src="$4" tags="$5" obs="$6" acao="$7"
+append_entry() { # <título> <type> <confidence> <source> <tags> <observacao> <acao> [contract] → imprime o id
+  local title="$1" type="$2" conf="$3" src="$4" tags="$5" obs="$6" acao="$7" contract="${8:-}"
   local today today_c id entry
   today=$(date +%Y%m%d)
   today_c=$(date +%Y-%m-%d)
   id="$(next_id)"
-  entry=$(printf '%s\n' \
-    '---' \
-    "id: $id" \
-    "date: \"$today_c\"" \
-    "type: $type" \
-    "confidence: $conf" \
-    "source: $src" \
-    'status: active' \
-    'supersedes: ""' \
-    "tags: ${tags:-[]}" \
-    '---' \
-    "## $title" \
-    "- **Observação:** $obs" \
-    "- **Ação:** $acao")
+  local -a lines=('---' "id: $id" "date: \"$today_c\"" "type: $type" \
+    "confidence: $conf" "source: $src" 'status: active' 'supersedes: ""' \
+    "tags: ${tags:-[]}")
+  # F-5: campo OPCIONAL contract (lista de comandos separados por vírgula)
+  # preservado do candidato; revalidado no consolidate com 'command -v'.
+  [ -n "$contract" ] && lines+=("contract: $contract")
+  lines+=('---' "## $title" "- **Observação:** $obs" "- **Ação:** $acao")
+  entry=$(printf '%s\n' "${lines[@]}")
   if [ ! -f "$LEARNINGS" ]; then
     printf '%s\n' "$MIN_HEADER" > "$LEARNINGS"
   fi
@@ -634,21 +676,38 @@ cmd_add() {
   # Passada 1: quebra em blocos e valida TODOS os candidatos (lote atômico:
   # qualquer inválido → nada é escrito e o lote sai com exit 2).
   local -a candidates=()
-  local cur="" line idx=0 bad=0
+  local cur="" line idx=0 bad=0 nblk=0
+  flush_block() { # F-A1/F-4: bloco vazio (só espaços) não vira candidato; bloco
+    # de CORPO do formato TEMPLATE (começa com '## ' ou '- **') é continuação do
+    # candidato anterior — o corpo vem DEPOIS do '---' que fecha o frontmatter.
+    cur="${cur#$'\n'}"
+    if printf '%s\n' "$cur" | grep -q '[^[:space:]]'; then
+      case "$cur" in
+        '## '*|'- **'*)
+          if [ "$nblk" -gt 0 ]; then
+            candidates[$((nblk - 1))]+=$'\n'"$cur"
+            cur=""
+            return
+          fi ;;
+      esac
+      candidates+=("$cur")
+      nblk=$((nblk + 1))
+    fi
+    cur=""
+  }
   while IFS= read -r line || [ -n "$line" ]; do
     if [ "$line" = "---" ]; then
-      if [ -n "$cur" ]; then
-        candidates+=("$cur")
-        cur=""
-      fi
+      flush_block
     else
       cur+=$'\n'"$line"
     fi
   done < "$input"
-  [ -n "$cur" ] && candidates+=("$cur")
+  flush_block
 
   if [ "${#candidates[@]}" -eq 0 ]; then
-    die "add: nenhum candidato encontrado no arquivo"
+    # F-4 (D9): entrada vazia (nenhum bloco de candidato) → exit 0, nada escrito.
+    say "add: nada a adicionar (entrada vazia)"
+    return 0
   fi
 
   local b
@@ -687,7 +746,7 @@ cmd_add() {
       say "  [dry-run] adicionaria: $B_TITLE (type=$B_TYPE, source=$B_SOURCE, confidence=$B_CONFIDENCE)"
       added=$((added + 1))
     else
-      newid="$(append_entry "$B_TITLE" "$B_TYPE" "$B_CONFIDENCE" "$B_SOURCE" "${B_TAGS:-}" "$B_OBS" "$B_ACAO")"
+      newid="$(append_entry "$B_TITLE" "$B_TYPE" "$B_CONFIDENCE" "$B_SOURCE" "${B_TAGS:-}" "$B_OBS" "$B_ACAO" "${B_CONTRACT:-}")"
       say "  adicionada: $newid — $B_TITLE (type=$B_TYPE)"
       added=$((added + 1))
     fi
@@ -698,10 +757,15 @@ cmd_add() {
   fi
 
   if [ "$dry" = 0 ] && [ "$added" -gt 0 ] && [ -f "$LEARNINGS" ]; then
-    local TE TA TS TL AL LAST
+    local TE TA TS TL AL LAST IL
     read -r TE TA TS TL AL LAST <<< "$(learnings_stats)"
     if [ "$AL" -gt "$BUDGET_ACTIVE_LINES" ] || [ "$TL" -gt "$BUDGET_TOTAL_LINES" ]; then
       warn "ORÇAMENTO: rode evolve-skill.sh consolidate"
+    fi
+    # F-6: orçamento do ÍNDICE — avisa quando o índice passa de 30 linhas.
+    IL=$(index_line_count)
+    if [ "$IL" -gt "$BUDGET_INDEX_LINES" ]; then
+      warn "ÍNDICE: rode evolve-skill.sh consolidate — $IL linhas no índice (teto $BUDGET_INDEX_LINES)"
     fi
   fi
 
@@ -1001,10 +1065,11 @@ cmd_apply() {
 # ENT_DIR (pasta das entradas), NDUP/NSUP/NPRUNE/NBUDG (contadores do relatório).
 ENT_DIR=""
 
-load_meta() { # <índice> → popula M_ID M_DATE M_TYPE M_CONF M_SRC M_STATUS M_TAGS M_TITLE
+load_meta() { # <índice> → popula M_ID M_DATE M_TYPE M_CONF M_SRC M_STATUS M_TAGS M_TITLE (+M_CONTRACT)
   local idx="$1"
   IFS='|' read -r M_ID M_DATE M_TYPE M_CONF M_SRC M_STATUS M_TAGS M_TITLE \
     <<< "$(entry_meta "$ENT_DIR/$idx.entry")"
+  M_CONTRACT=$(entry_field "$ENT_DIR/$idx.entry" contract)   # F-5: opcional, vazio quando ausente
 }
 
 mark_superseded() { # <índice> <id-da-nova> <data-da-nova> — marca a antiga; NUNCA apaga
@@ -1021,20 +1086,44 @@ mark_superseded() { # <índice> <id-da-nova> <data-da-nova> — marca a antiga; 
   ' "$f" > "$tmp" && mv "$tmp" "$f"
 }
 
-promotion_proposals() { # sobre o estado ORIGINAL; preenche PROPOSALS (anti-poisoning embutido)
-  local -A groupdates=() groupsrc=()
+mark_superseded_reason() { # <índice> <motivo> — marca sem id de substituição (F-5: contrato quebrado)
+  local idx="$1" reason="$2"
+  local f="$ENT_DIR/$idx.entry"
+  local title tmp today
+  today=$(date +%F)
+  title=$(sed -n 's/^## //p' "$f" | head -1)
+  tmp="$TMPD/mark.$$"
+  awk -v rs="$reason" -v td="$today" -v t="$title" '
+    /^status: /     { print "status: superseded"; next }
+    /^supersedes: / { print "supersedes: \"\""; next }
+    /^## /          { print "## ~~" t "~~ (obsoleto " td ": " rs ")"; next }
+    { print }
+  ' "$f" > "$tmp" && mv "$tmp" "$f"
+}
+
+is_untrusted_source() { # <source> → 0 se UNTRUSTED (web|sub-agent|diff|model-output)
+  case "$1" in web|sub-agent|diff|model-output) return 0 ;; esac
+  return 1
+}
+
+is_trusted_source() { # <source> → 0 se confiável (user|repo-doc)
+  case "$1" in user|repo-doc) return 0 ;; esac
+  return 1
+}
+
+promotion_proposals() { # sobre o estado PÓS dedupe+supersessão+contratos (F-10a:
+  # entrada marcada superseded na MESMA execução nunca é proposta); preenche PROPOSALS
+  local -A groupdates=()
   local idx key src cur
   for idx in "${ORDER[@]}"; do
     load_meta "$idx"
     [ "$M_STATUS" = "active" ] || continue
     key="$(normalize "$M_TITLE")|$M_TYPE"
-    src="${M_SRC:-}"
     cur="${groupdates[$key]:-}"
     case "|$cur|" in
       *"|$M_DATE|"*) ;;
       *) groupdates[$key]="${cur:+$cur$'\n'}$M_DATE" ;;
     esac
-    [ -n "${groupsrc[$key]:-}" ] || groupsrc[$key]="$src"
   done
   for idx in "${ORDER[@]}"; do
     load_meta "$idx"
@@ -1084,11 +1173,15 @@ dedupe_pass() { # title+type iguais → mantém a mais nova; antigas vão para A
   ORDER=("${neworder[@]}")
 }
 
-supersede_pass() { # contradição: mesmo type + tags sobrepostas + título similar + datas diferentes → a mais nova vence
-  local i j ia da ta taga tita
+supersede_pass() { # contradição: mesmo type + tags sobrepostas + título similar + datas diferentes
+  # F-10b ORDEM DE CONFIANÇA: fonte UNTRUSTED (web|sub-agent|diff|model-output)
+  # NUNCA supersede fonte confiável (user|repo-doc) — em contradição a UNTRUSTED
+  # é que é marcada superseded (pela confiável); sem confiável na disputa, a
+  # mais nova vence normalmente.
+  local i j ia da ta taga tita sra
   for i in "${ORDER[@]}"; do
     load_meta "$i"
-    ia="$M_ID"; da="$M_DATE"; ta="$M_TYPE"; taga="$M_TAGS"; tita="$M_TITLE"
+    ia="$M_ID"; da="$M_DATE"; ta="$M_TYPE"; taga="$M_TAGS"; tita="$M_TITLE"; sra="$M_SRC"
     [ "$M_STATUS" = "active" ] || continue
     for j in "${ORDER[@]}"; do
       [ "$j" = "$i" ] && continue
@@ -1099,11 +1192,43 @@ supersede_pass() { # contradição: mesmo type + tags sobrepostas + título simi
       [ "$M_TYPE" != "$ta" ] && continue
       titles_similar "$M_TITLE" "$tita" || continue
       tags_overlap "$M_TAGS" "$taga" || continue
+      if is_untrusted_source "$M_SRC" && is_trusted_source "$sra"; then
+        # j (nova, UNTRUSTED) contradiz i (antiga, confiável) → quem é marcada
+        # é a UNTRUSTED; a confiável vence mesmo sendo mais antiga.
+        mark_superseded "$j" "$ia" "$da"
+        say "  superseded: $M_ID ($M_DATE) ← $ia ($da) [fonte $M_SRC UNTRUSTED não supersede $sra]"
+        NSUP=$((NSUP + 1))
+        break
+      fi
       mark_superseded "$i" "$M_ID" "$M_DATE"
       say "  superseded: $ia ($da) ← $M_ID ($M_DATE) [type=$ta, tags sobrepostas, título similar]"
       NSUP=$((NSUP + 1))
       break
     done
+  done
+}
+
+contract_pass() { # F-5 (D7): revalida CONTRATOS — para cada entrada ATIVA com
+  # 'contract: cmd1, cmd2', roda 'command -v <cmd>' (checagem determinística, sem
+  # LLM); comando ausente → entrada marcada superseded com motivo 'contrato
+  # quebrado: <cmd> ausente'. Comando ausente NÃO é erro — é resultado.
+  local idx cmd missing
+  for idx in "${ORDER[@]}"; do
+    load_meta "$idx"
+    [ "$M_STATUS" = "active" ] || continue
+    [ -n "${M_CONTRACT:-}" ] || continue
+    missing=""
+    while IFS= read -r cmd; do
+      [ -n "$cmd" ] || continue
+      if ! command -v "$cmd" >/dev/null 2>&1; then
+        [ -n "$missing" ] || missing="$cmd"
+      fi
+    done <<< "$(printf '%s\n' "$M_CONTRACT" | tr ',' '\n' | sed 's/^ *//; s/ *$//')"
+    if [ -n "$missing" ]; then
+      mark_superseded_reason "$idx" "contrato quebrado: $missing ausente"
+      say "  superseded (contrato quebrado): $M_ID — $M_TITLE (comando ausente: $missing)"
+      NCONTRACT=$((NCONTRACT + 1))
+    fi
   done
 }
 
@@ -1188,6 +1313,8 @@ rebuild_learnings() { # <novo-arquivo> — header preservado (comentários + TEM
     printf '%s\n' "$pre"
     for o in "${ORDER[@]}"; do
       load_meta "$o"
+      # F-3: entradas superseded SAEM do Índice (o corpo permanece, marcado).
+      [ "$M_STATUS" = "superseded" ] && continue
       ititle=$(sed -n 's/^## //p' "$ENT_DIR/$o.entry" | head -1)
       printf '%s\n' "- $M_DATE | $M_TYPE | $ititle [id: $M_ID]"
     done
@@ -1243,8 +1370,14 @@ cmd_consolidate() {
   say "consolidate: $nvalid entrada(s) lidas de $LEARNINGS"
   [ "$nvalid" -eq 0 ] && { say "consolidate: nenhuma entrada válida encontrada"; return 0; }
 
-  # FASE 1: propostas de promoção — sobre o estado ORIGINAL, antes de qualquer
-  # transformação (o dedupe colapsaria as ≥2 ocorrências num só registro).
+  # FASE 1: dedupe (title+type iguais → mantém a mais nova)
+  dedupe_pass
+  # FASE 2: supersessão de contradições (F-10b: ordem de confiança aplicada)
+  supersede_pass
+  # FASE 3: revalidação de contratos (F-5/D7)
+  contract_pass
+  # FASE 4: propostas de promoção — sobre o estado PÓS dedupe+supersessão+contratos
+  # (F-10a: entrada marcada superseded na MESMA execução nunca é proposta).
   promotion_proposals
   if [ "${#PROPOSALS[@]}" -gt 0 ]; then
     say "PROPOSTAS DE PROMOÇÃO (nunca aplicadas — exigem revisão humana + diff):"
@@ -1256,17 +1389,35 @@ cmd_consolidate() {
   else
     say "propostas de promoção: nenhuma"
   fi
-
-  # FASE 2: dedupe (title+type iguais → mantém a mais nova)
-  dedupe_pass
-  # FASE 3: supersessão de contradições
-  supersede_pass
-  # FASE 4: poda de voláteis
+  # FASE 5: poda de voláteis
   prune_pass
-  # FASE 5: orçamento (ativas > 100 linhas → move as mais antigas)
+  # FASE 6: orçamento (ativas > 100 linhas → move as mais antigas)
   budget_pass
 
-  say "consolidate: $NDUP duplicata(s) arquivada(s) · $NSUP superseded · $NPRUNE volátil(is) podada(s) · $NBUDG movida(s) por orçamento"
+  say "consolidate: $NDUP duplicata(s) arquivada(s) · $NSUP superseded · $NPRUNE volátil(is) podada(s) · $NBUDG movida(s) por orçamento · $NCONTRACT contrato(s) quebrado(s)"
+
+  # F-6: orçamento do ÍNDICE — só relatório (proposta de arquivar as ativas
+  # mais antigas quando o índice passa de 30 linhas; nunca move sozinho).
+  local ilines
+  ilines=$(index_line_count)
+  if [ "$ilines" -gt "$BUDGET_INDEX_LINES" ]; then
+    warn "ÍNDICE: $ilines linhas (teto $BUDGET_INDEX_LINES) — considere consolidar/arquivar"
+    say "  proposta (não aplicada): arquivar as entradas ativas mais antigas —"
+    local -a idates=() idx2
+    local sorted line shown=0
+    for idx2 in "${ORDER[@]}"; do
+      load_meta "$idx2"
+      [ "$M_STATUS" = "active" ] || continue
+      idates+=("$M_DATE|$M_ID|$M_TITLE")
+    done
+    sorted=$(printf '%s\n' "${idates[@]}" | sort -k1,1 -t'|' -s)
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      [ "$shown" -ge $((ilines - BUDGET_INDEX_LINES)) ] && break
+      say "    $line"
+      shown=$((shown + 1))
+    done <<< "$sorted"
+  fi
 
   # Monta o novo LEARNINGS.md
   local newfile="$work/LEARNINGS.new"
@@ -1320,10 +1471,12 @@ cmd_status() {
   say "branch      : $branch"
   say "versão      : $version"
   if [ -f "$LEARNINGS" ]; then
-    local TE TA TS TL AL LAST
+    local TE TA TS TL AL LAST IL
     read -r TE TA TS TL AL LAST <<< "$(learnings_stats)"
     say "entradas    : $TE (ativas $TA · superseded $TS)"
     say "linhas      : $TL totais (teto $BUDGET_TOTAL_LINES) · $AL em entradas ativas (teto $BUDGET_ACTIVE_LINES)"
+    IL=$(index_line_count)
+    say "índice      : $IL linhas (teto $BUDGET_INDEX_LINES)"
     say "última data : ${LAST:-—}"
     if [ "$AL" -gt "$BUDGET_ACTIVE_LINES" ] || [ "$TL" -gt "$BUDGET_TOTAL_LINES" ]; then
       warn "ORÇAMENTO: rode evolve-skill.sh consolidate"

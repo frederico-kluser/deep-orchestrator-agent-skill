@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Testes de aceitação do motor de AUTO-EVOLUÇÃO — E1..E20 (83 asserções — v3.7.0)
+# Testes de aceitação do motor de AUTO-EVOLUÇÃO — E1..E27 (v3.7.0)
 #
 # Cada caso roda ISOLADO num repo fake da skill (git init + SKILL.md com
 # identidade + scripts/evolve-skill.sh COPIADO), com HOME/tmp próprios, SEM
@@ -40,6 +40,21 @@
 #   E18: add paralelo — 5 pares de add concorrentes → 10 entradas, 10 ids únicos
 #   E19: --dry-run — add e consolidate NÃO escrevem nada (git status limpo)
 #   E20: apply idempotente — sem mudanças → exit 0, sem commit novo
+#   E21: add aceita o formato do TEMPLATE (corpo '- **Observação:**'/
+#        '- **Ação:**' + título '## ') e o anexa; frontmatter VENCE se ambas
+#        presentes (F-A1)
+#   E22: mudança no SKILL.md REAL (.claude/skills/.../SKILL.md) → apply sem
+#        flags cria branch evolve/YYYY-MM-DD (NUNCA commit direto) e commita lá
+#        (F-A2)
+#   E23: superseded NÃO aparece no Índice após consolidate, mas permanece no
+#        corpo marcada (F-3)
+#   E24: add com entrada vazia → exit 0, 'nada a adicionar', nada escrito (F-4)
+#   E25: contrato — 'contract: comando-inexistente-xyz' → consolidate marca
+#        superseded 'contrato quebrado'; 'contract: bash' passa (F-5)
+#   E26: supersessão por CONFIANÇA — web (nova) NUNCA supersede user (antiga):
+#        a user vence, a web é marcada superseded; a web NÃO é proposta na
+#        mesma execução (estado pós-supersessão) (F-10)
+#   E27: índice > 30 linhas → add avisa 'ÍNDICE: rode consolidate' (F-6)
 set -uo pipefail
 SKILL=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 EVOLVE_SRC="$SKILL/scripts/evolve-skill.sh"
@@ -418,6 +433,137 @@ out=$("$EVOLVE" apply 2>&1); rc=$?
 chk "E20 apply exit 0" "$rc" "0"
 chk "E20 sem commit novo (HEAD igual)" "$(git -C "$CASE/repo" rev-parse HEAD)" "$head_before"
 chk "E20 mensagem 'nada a commitar'" "$(echo "$out" | grep -c 'nada a commitar' || true)" "1"
+
+echo "=== E21: add aceita o formato do TEMPLATE (corpo - **Observação:**/- **Ação:**); frontmatter vence ==="
+newcase e21
+write_skill; seed_learnings; commit_all init
+{
+  printf -- '---\ntype: gotcha\nconfidence: high\nsource: user\ntags: [cache, build]\n---\n## Formato do template aceito\n- **Observação:** obs do template\n- **Ação:** acao do template\n---\ntitle: Ambos presentes\ntype: fact\nconfidence: high\nsource: user\ntags: [ambos]\nobservacao: valor do frontmatter\nacao: acao do frontmatter\n---\n## Ambos presentes\n- **Observação:** valor do corpo\n- **Ação:** acao do corpo\n'
+} > "$CASE/tpl.txt"
+out=$("$EVOLVE" add "$CASE/tpl.txt" 2>&1); rc=$?
+chk "E21 add exit 0" "$rc" "0"
+chk "E21 2 entradas anexadas" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "2"
+chk "E21 primeiro id = LEARN-<hoje>-001" "$(grep -E "$REALID" "$CASE/repo/LEARNINGS.md" | head -1 | sed 's/^id: //')" "LEARN-$TODAY-001"
+chk "E21 corpo do template preservado" "$(grep -c -- '- \*\*Observação:\*\* obs do template' "$CASE/repo/LEARNINGS.md" || true)" "1"
+chk "E21 título veio do corpo (## )" "$(grep -c '^## Formato do template aceito$' "$CASE/repo/LEARNINGS.md")" "1"
+chk "E21 frontmatter VENCE (obs do frontmatter)" "$(grep -c 'valor do frontmatter' "$CASE/repo/LEARNINGS.md" || true)" "1"
+chk "E21 corpo NÃO vazou (obs do corpo)" "$(grep -c 'valor do corpo' "$CASE/repo/LEARNINGS.md" || true)" "0"
+
+echo "=== E22: SKILL.md REAL (.claude/skills/...) mudado → apply cria branch evolve/ (NUNCA direto) ==="
+newcase e22
+mkdir -p "$CASE/repo/.claude/skills/deep-orchestrator-agent-skill"
+cat > "$CASE/repo/.claude/skills/deep-orchestrator-agent-skill/SKILL.md" <<'EOF'
+---
+name: deep-orchestrator-agent-skill
+description: fixture de teste do motor de auto-evolucao
+metadata:
+  version: "3.7.0"
+---
+EOF
+ln -s .claude/skills/deep-orchestrator-agent-skill/SKILL.md "$CASE/repo/SKILL.md"
+seed_learnings; commit_all init
+printf '\n# nota de corpo da skill (path real)\n' >> "$CASE/repo/.claude/skills/deep-orchestrator-agent-skill/SKILL.md"
+out=$("$EVOLVE" apply 2>&1); rc=$?
+chk "E22 apply exit 0" "$rc" "0"
+chk "E22 cria branch evolve/YYYY-MM-DD" "$(git -C "$CASE/repo" rev-parse --abbrev-ref HEAD)" "evolve/$TODAY_C"
+chk "E22 commit no branch novo" "$(git -C "$CASE/repo" log -1 --format=%s | grep -c '^evolve(learnings):' || true)" "1"
+chk "E22 change do SKILL.md real COMMITADO" "$([ -z "$(git -C "$CASE/repo" diff HEAD -- .claude/skills/deep-orchestrator-agent-skill/SKILL.md)" ] && echo sim || echo nao)" "sim"
+chk "E22 porcelain limpo" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
+chk "E22 main NÃO recebeu o commit (sem nota)" "$(git -C "$CASE/repo" show "main:.claude/skills/deep-orchestrator-agent-skill/SKILL.md" | grep -c 'nota de corpo' || true)" "0"
+
+echo "=== E23: superseded NÃO aparece no Índice após consolidate (corpo permanece) ==="
+newcase e23
+write_skill
+{
+  learnings_head
+  printf -- '- 2026-08-01 | gotcha | Sempre use o flag cache ao rodar builds [id: LEARN-20260801-001]\n'
+  printf -- '- 2026-08-22 | gotcha | Sempre use cache ao rodar builds [id: LEARN-20260822-001]\n\n'
+  entry LEARN-20260801-001 2026-08-01 gotcha high user "[build, cache]" "Sempre use o flag cache ao rodar builds" "versao antiga" "usar cache"
+  printf '\n'
+  entry LEARN-20260822-001 2026-08-22 gotcha high user "[build, cache]" "Sempre use cache ao rodar builds" "versao nova" "usar cache"
+} > "$CASE/repo/LEARNINGS.md"
+commit_all init
+"$EVOLVE" consolidate --apply >/dev/null 2>&1; rc=$?
+chk "E23 consolidate --apply exit 0" "$rc" "0"
+idx=$(awk '/^## Índice$/{f=1;next} f&&/^---$/{exit} f&&/^- [0-9]{4}-[0-9]{2}-[0-9]{2} \|/{print}' "$CASE/repo/LEARNINGS.md")
+chk "E23 índice tem só 1 linha" "$(echo "$idx" | grep -c . || true)" "1"
+chk "E23 superseded NÃO no índice" "$(echo "$idx" | grep -c 'LEARN-20260801-001' || true)" "0"
+chk "E23 ativa no índice" "$(echo "$idx" | grep -c 'LEARN-20260822-001' || true)" "1"
+chk "E23 superseded permanece no corpo" "$(grep -c '^status: superseded$' "$CASE/repo/LEARNINGS.md")" "1"
+chk "E23 corpo marcado ~~…~~" "$(grep -c '^## ~~Sempre use o flag cache ao rodar builds~~' "$CASE/repo/LEARNINGS.md")" "1"
+
+echo "=== E24: add com entrada vazia → exit 0, 'nada a adicionar', nada escrito ==="
+newcase e24
+write_skill; seed_learnings; commit_all init
+head_before=$(git -C "$CASE/repo" rev-parse HEAD)
+out=$(printf '' | "$EVOLVE" add - 2>&1); rc=$?
+chk "E24 add vazio exit 0" "$rc" "0"
+chk "E24 mensagem 'nada a adicionar'" "$(echo "$out" | grep -c 'nada a adicionar' || true)" "1"
+chk "E24 nada escrito (porcelain)" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
+chk "E24 HEAD igual" "$(git -C "$CASE/repo" rev-parse HEAD)" "$head_before"
+chk "E24 nenhum id novo" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "0"
+
+echo "=== E25: contrato — contract: comando-inexistente-xyz → superseded 'contrato quebrado'; contract: bash passa ==="
+newcase e25
+write_skill
+{
+  learnings_head
+  printf -- '- 2026-08-01 | fact | Ferramenta ausente no PATH [id: LEARN-20260801-001]\n'
+  printf -- '- 2026-08-02 | fact | Deploy com bash funciona [id: LEARN-20260802-001]\n\n'
+  printf -- '---\nid: LEARN-20260801-001\ndate: "2026-08-01"\ntype: fact\nconfidence: high\nsource: user\nstatus: active\nsupersedes: ""\ntags: [c]\ncontract: comando-inexistente-xyz\n---\n## Ferramenta ausente no PATH\n- **Observação:** obs\n- **Ação:** acao\n\n'
+  printf -- '---\nid: LEARN-20260802-001\ndate: "2026-08-02"\ntype: fact\nconfidence: high\nsource: user\nstatus: active\nsupersedes: ""\ntags: [d]\ncontract: bash\n---\n## Deploy com bash funciona\n- **Observação:** obs2\n- **Ação:** acao2\n'
+} > "$CASE/repo/LEARNINGS.md"
+commit_all init
+out=$("$EVOLVE" consolidate --apply 2>&1); rc=$?
+chk "E25 consolidate --apply exit 0" "$rc" "0"
+chk "E25 reporta contrato quebrado" "$(echo "$out" | grep -c 'contrato quebrado' || true)" "1"
+chk "E25 motivo no corpo" "$(grep -c 'contrato quebrado: comando-inexistente-xyz ausente' "$CASE/repo/LEARNINGS.md" || true)" "1"
+chk "E25 entrada marcada superseded" "$(grep -c '^status: superseded$' "$CASE/repo/LEARNINGS.md")" "1"
+chk "E25 contract: bash passa (ativa)" "$(awk '/^id: LEARN-20260802-001$/{f=1} f&&/^status: /{print;f=0}' "$CASE/repo/LEARNINGS.md")" "status: active"
+
+echo "=== E26: supersessão por CONFIANÇA — web (nova) NUNCA supersede user (antiga); web não proposta ==="
+newcase e26
+write_skill
+{
+  learnings_head
+  printf -- '- 2026-08-01 | gotcha | Use o cache ao rodar builds [id: LEARN-20260801-001]\n'
+  printf -- '- 2026-08-22 | gotcha | Use cache ao rodar builds [id: LEARN-20260822-001]\n\n'
+  entry LEARN-20260801-001 2026-08-01 gotcha high user "[build, cache]" "Use o cache ao rodar builds" "usar cache" "usar cache sempre"
+  printf '\n'
+  entry LEARN-20260822-001 2026-08-22 gotcha high web "[build, cache]" "Use cache ao rodar builds" "achado na web" "usar cache"
+} > "$CASE/repo/LEARNINGS.md"
+commit_all init
+out=$("$EVOLVE" consolidate --apply 2>&1); rc=$?
+chk "E26 consolidate --apply exit 0" "$rc" "0"
+chk "E26 user vence (status active)" "$(awk '/^id: LEARN-20260801-001$/{f=1} f&&/^status: /{print;f=0}' "$CASE/repo/LEARNINGS.md")" "status: active"
+chk "E26 web marcada superseded" "$(awk '/^id: LEARN-20260822-001$/{f=1} f&&/^status: /{print;f=0}' "$CASE/repo/LEARNINGS.md")" "status: superseded"
+chk "E26 web supersedes a user" "$(grep -c '^supersedes: "LEARN-20260801-001"$' "$CASE/repo/LEARNINGS.md")" "1"
+chk "E26 relatório cita UNTRUSTED não supersede" "$(echo "$out" | grep -c 'UNTRUSTED não supersede' || true)" "1"
+chk "E26 web NÃO proposta (estado pós-supersessão)" "$(echo "$out" | sed -n '/PROPOSTAS DE PROMO/,/^consolidate:/p' | grep -c 'LEARN-20260822-001' || true)" "0"
+
+echo "=== E27: índice > 30 linhas → add avisa ÍNDICE ==="
+newcase e27
+write_skill
+{
+  learnings_head
+  for i in $(seq 1 31); do
+    dd=$(printf '%02d' $((i % 28 + 1)))
+    idn=$(printf '%03d' "$i")
+    printf -- '- 2026-08-%s | fact | Titulo de orcamento %s [id: LEARN-202608%s-%s]\n' "$dd" "$i" "$dd" "$idn"
+  done
+  printf '\n'
+  for i in $(seq 1 31); do
+    dd=$(printf '%02d' $((i % 28 + 1)))
+    idn=$(printf '%03d' "$i")
+    entry "LEARN-202608$dd-$idn" "2026-08-$dd" fact high user "[o]" "Titulo de orcamento $i" "obs $i" "acao $i"
+    printf '\n'
+  done
+} > "$CASE/repo/LEARNINGS.md"
+commit_all init
+candidate "$CASE/n.txt" "Entrada E27" fact high user "[g]" "obs" "acao"
+out=$("$EVOLVE" add "$CASE/n.txt" 2>&1); rc=$?
+chk "E27 add exit 0" "$rc" "0"
+chk "E27 avisa ÍNDICE (rode consolidate)" "$(echo "$out" | grep -c 'ÍNDICE' || true)" "1"
 
 echo; printf 'RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1

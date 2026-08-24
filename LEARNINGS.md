@@ -39,6 +39,9 @@
      status      — active | superseded.
      supersedes  — id da entrada substituída; "" quando nenhuma.
      tags        — lista [tag1, tag2] usada na checagem determinística de contradição no consolidate.
+     contract    — OPCIONAL (D7): lista de comandos separados por vírgula, revalidados no
+                   consolidate com 'command -v'; comando ausente → a entrada vira
+                   status: superseded com motivo 'contrato quebrado: <cmd> ausente'.
      Observação  — fato específico, com path/comando; vago é proibido.
      Ação        — o que fazer/evitar daqui pra frente.
 
@@ -56,6 +59,7 @@ source: user | repo-doc | sub-agent | web | diff | model-output
 status: active | superseded
 supersedes: ""
 tags: [tag1, tag2]
+contract: comando1, comando2   # OPCIONAL — revalidado no consolidate (command -v)
 ---
 ## <título imperativo curto>
 - **Observação:** <fato específico, com path/comando; vago é proibido>

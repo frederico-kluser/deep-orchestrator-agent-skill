@@ -67,11 +67,15 @@ também roda scan de segredos e rejeita o lote inteiro se disparar.
 
 ## Contradição e volatilidade
 
-- **Contradição:** a mais nova **vence na escrita**; a antiga vira
-  `status: superseded` + `supersedes: "<id da nova>"` e o corpo é marcado
-  `~~…~~ (obsoleto AAAA-MM-DD: motivo)` — **nunca apagar** (D5; STALE/MemStrata).
-  A detecção é determinística no consolidate (type + tags + título); LLM só para
-  ambiguidade semântica residual.
+- **Contradição:** a supersessão (marcação) acontece no **consolidate** — a
+  antiga vira `status: superseded` + `supersedes: "<id da nova>"` e o corpo é
+  marcado `~~…~~ (obsoleto AAAA-MM-DD: motivo)` — **nunca apagar** (D5;
+  STALE/MemStrata). A detecção é determinística no consolidate (type + tags +
+  título); LLM só para ambiguidade semântica residual. **Ordem de confiança na
+  supersessão:** fonte **UNTRUSTED** (`web | sub-agent | diff | model-output`)
+  **nunca** supersede fonte confiável (`user | repo-doc`) — em contradição a
+  UNTRUSTED é que é marcada superseded (pela confiável); sem confiável na
+  disputa, a mais nova vence normalmente.
 - **Voláteis:** `fact` com tags de preço/versão/estado ganham TTL — poda no
   consolidate após 90 dias (→ `learnings_archive.md`, nunca deleção).
 - **Skill rot = contrato violado:** toda entrada **promovida** carrega contrato
@@ -106,6 +110,11 @@ por **recorrência** (semanal/release/orçamento), não a cada execução — Re
    acao: "Detectar package manager e runner reais antes de rodar a suíte (tdd-workflow, passo 1)."
    ---
    ```
+
+   O `add` aceita **as duas formas** de Observação/Ação: o formato de candidato
+   acima (chaves `observacao:`/`acao:` no frontmatter) OU o formato do TEMPLATE
+   documentado no `LEARNINGS.md` (corpo com `- **Observação:**` / `- **Ação:**`
+   e título na linha `## <título>`). Se ambas presentes, o frontmatter vence.
 
 2. **FILTRO** — aplique as regras acima: qualifica? fonte confiável? volátil? já
    documentado? Sem candidato qualificado, pare aqui.

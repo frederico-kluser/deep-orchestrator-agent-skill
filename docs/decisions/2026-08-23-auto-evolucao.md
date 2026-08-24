@@ -88,9 +88,10 @@ abaixo é inferida.
 
 ### D5 — CONTRADIÇÃO NA ESCRITA
 
-- **Decisão:** em contradição, **a mais nova vence na hora da escrita**: a antiga
-  vira `status: superseded`, ganha `supersedes: "<id da nova>"` e o corpo é marcado
-  `~~…~~ (obsoleto AAAA-MM-DD: motivo)`. A detecção é **determinística** no
+- **Decisão:** em contradição, a **supersessão** (marcação) acontece no
+  **consolidate** — a antiga vira `status: superseded`, ganha `supersedes: "<id da nova>"` e o corpo é marcado
+  `~~…~~ (obsoleto AAAA-MM-DD: motivo)`; no write (`add`), apenas checagens
+  simbólicas baratas sinalizam suspeita de contradição. A detecção é **determinística** no
   consolidate por `type + tags + título` (checks simbólicos; LLM só para
   ambiguidade semântica residual).
 - **Evidência:** STALE mostra revisão na escrita superando revisão tardia (55,2%);
