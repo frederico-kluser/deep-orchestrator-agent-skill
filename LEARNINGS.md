@@ -29,6 +29,9 @@
 - 2026-08-25 | antipattern | set -euo pipefail + pipeline de grep sem guarda em $(...) mata script com exit 1 e stderr VAZIO [id: LEARN-20260825-002]
 - 2026-08-25 | antipattern | Descompasso de vocabulário entre main e renderer (phase em inglês vs pt-BR; fraction vs progress) mascarava o progresso inteiro [id: LEARN-20260825-003]
 - 2026-08-25 | fact | B-03 do gate-build quebra com tsconfig contendo comentários JSONC (pré-existente no projeto) [id: LEARN-20260825-004]
+- 2026-08-25 | convention | Documentar aprendizado de build/instalador AUTOMATICAMENTE ao criar um POC Unity [id: LEARN-20260825-005]
+- 2026-08-25 | gotcha | -executeMethod requer nome totalmente qualificado (namespace.Classe.Metodo) [id: LEARN-20260825-006]
+- 2026-08-25 | fact | player Linux do Unity é um thin launcher + UnityPlayer.so + _Data/ [id: LEARN-20260825-007]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -335,3 +338,45 @@ tags: [gate, tsconfig, jsonc]
 ## B-03 do gate-build quebra com tsconfig contendo comentários JSONC (pré-existente no projeto)
 - **Observação:** app/tsconfig.node.json contém comentários // (JSONC) — válido para tsc, inválido para python json.load do B-03. O CI do próprio projeto está vermelho desde ondas 12/16 por isso. Não é regressão de onda nenhuma; documentado como exceção de baseline.
 - **Ação:** Em projetos com tsconfig comentado, esperar B-03 vermelho e documentar como baseline; não corrigir em tarefa alheia (scope creep).
+
+---
+id: LEARN-20260825-005
+date: "2026-08-25"
+type: convention
+confidence: high
+source: user
+status: active
+supersedes: ""
+tags: [unity, docs, instalador, build, poc]
+---
+## Documentar aprendizado de build/instalador AUTOMATICAMENTE ao criar um POC Unity
+- **Observação:** Ao gerar o instalador Linux e evoluir o POC MovingPlatformPOC (cam 3a
+- **Ação:** Toda vez que evoluir um POC Unity e/ou gerar instalador, persistir o aprendizado
+
+---
+id: LEARN-20260825-006
+date: "2026-08-25"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [unity, build, batchmode]
+---
+## -executeMethod requer nome totalmente qualificado (namespace.Classe.Metodo)
+- **Observação:** Rodar -executeMethod BuildScript.BuildLinux (sem Game.Editor) aborta batchmode
+- **Ação:** Sempre usar o nome totalmente qualificado no -executeMethod de um Editor script
+
+---
+id: LEARN-20260825-007
+date: "2026-08-25"
+type: fact
+confidence: high
+source: diff
+status: active
+supersedes: ""
+tags: [unity, build, linux, instalador]
+---
+## player Linux do Unity é um thin launcher + UnityPlayer.so + _Data/
+- **Observação:** O *.x86_64 gerado pelo build Linux é um thin launcher ~4KB; a engine real é
+- **Ação:** Para build/instalação de Linux player, tratar o trio (launcher + .so + _Data) como
