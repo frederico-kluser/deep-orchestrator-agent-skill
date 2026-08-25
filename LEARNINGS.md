@@ -35,6 +35,10 @@
 - 2026-08-25 | fact | argv0 do spawn não aparece em /proc/<pid>/cmdline [id: LEARN-20260825-008]
 - 2026-08-25 | fact | lib/ gitignored é produto de build; .d.ts de subpath export deve ser gerado, não commitado [id: LEARN-20260825-009]
 - 2026-08-25 | antipattern | Override TRANSITORIO de lint com target morto deixa regra sem efeito [id: LEARN-20260825-010]
+- 2026-08-25 | antipattern | Sessão órfã de geração crashada trava a re-geração (exit 4 RESOURCE_LOCKED) — fix: reuseLive opt-in [id: LEARN-20260825-011]
+- 2026-08-25 | antipattern | Autoria LLM não mantém assinatura consistente entre stub/test/reference — e a semente com assinatura toy contamina a validação [id: LEARN-20260825-012]
+- 2026-08-25 | gotcha | Resposta malformada do juiz (exit 5 no ciclo --apply) abortava a aula inteira; content vazio do autor abortava sem retry [id: LEARN-20260825-013]
+- 2026-08-25 | fact | Prompt do autor com exemplo concreto (assinatura) resolveu o que regra descritiva não resolveu [id: LEARN-20260825-014]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -425,3 +429,59 @@ tags: eslint, oxlint, refactor, monólito
 ## Override TRANSITORIO de lint com target morto deixa regra sem efeito
 - **Observação:** Após dissolver um monólito, os overrides TRANSITORIO que listavam o arquivo-único original ficam com target morto se o arquivo de teste for deslocado (ex: test/index.test.ts -> test/unit/index.test.ts). O override perde efeito sobre o novo path, e a regra que deveria ser rebaixada para warn volta a valer a 'error' ou fica órfã. Muitos warnings de no-unnecessary-condition em co-variância podem surgir quando o override deixou de cobrir.
 - **Ação:** Ao mover/renomear arquivos cobertos por overrides TRANSITORIO de lint, atualizar o 'files' do override (ou removê-lo se o monólito já foi dissolvido). Grep por paths antigos nos configs de lint após refactors.
+
+---
+id: LEARN-20260825-011
+date: "2026-08-25"
+type: antipattern
+confidence: high
+source: diff
+status: active
+supersedes: ""
+tags: [electron, session, lock, ttl]
+---
+## Sessão órfã de geração crashada trava a re-geração (exit 4 RESOURCE_LOCKED) — fix: reuseLive opt-in
+- **Observação:** generateLesson abre sessão no setup (por assunto, path fixo); se a geração anterior crashou, a sessão fica viva (TTL 8h) e a próxima aborta com session-new.sh exit 4. O fix: newSession ganhou opts.reuseLive (a geração reusa a sessão viva; o IPC do aluno continua vendo o erro). Duas lições: (1) retry de fluxo multi-etapas precisa limpar/reusar estado parcial; (2) opt-in por chamador quando o mesmo serviço serve ações implícitas (geração) e explícitas (aluno).
+- **Ação:** Ao orquestrar fix de "retry quebrado", verificar TODOS os chamadores do serviço e usar opt-in quando a semântica do erro difere entre eles.
+
+---
+id: LEARN-20260825-012
+date: "2026-08-25"
+type: antipattern
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [llm, scaffolding, harness, e2e]
+---
+## Autoria LLM não mantém assinatura consistente entre stub/test/reference — e a semente com assinatura toy contamina a validação
+- **Observação:** O autor (DeepSeek) produzia stub com assinatura placeholder (n: u64 -> u64) e teste/reference com a real (Vec<i32> -> Option<i32>) — E0308 em tudo. E o harness valida contra empty_stub/reference_alt_* que a semente gera com a assinatura toy e a materialização não sobrescrevia. Fix em 3 frentes: regra de ASSINATURA IDÊNTICA no prompt (com exemplo), referenceAlternates no draft, materialização preenchendo os artefatos ocultos (empty_stub = cópia do stub; alternates; stub.h em C).
+- **Ação:** Quando o harness valida artefatos além dos óbvios (stub/test/reference), o ORQUESTRADOR precisa sobrescrever TODOS eles com conteúdo autorado — e o prompt precisa de regras com EXEMPLO concreto, não só descrição.
+
+---
+id: LEARN-20260825-013
+date: "2026-08-25"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [llm, judge, protocol, resilience]
+---
+## Resposta malformada do juiz (exit 5 no ciclo --apply) abortava a aula inteira; content vazio do autor abortava sem retry
+- **Observação:** No ciclo REQUEST/APPLY, o script recusa resposta fora do schema com exit 5 — verifyChallenge lançava e a aula inteira morria (deveria rejeitar SÓ o desafio). E o autor devolvendo só reasoning_content (EMPTY_CONTENT) abortava sem retry. Fix: exit 5 com cyclesUsed>=1 degrada para not_run/apply_exhausted; retry (max 2) só para EMPTY_CONTENT.
+- **Ação:** Em fluxos com LLM injetado, TODO erro de resposta do modelo deve degradar o ITEM, nunca o fluxo inteiro; retry apenas para classes transitórias (content vazio), nunca para schema inválido.
+
+---
+id: LEARN-20260825-014
+date: "2026-08-25"
+type: fact
+confidence: medium
+source: sub-agent
+status: active
+supersedes: ""
+tags: [llm, prompt]
+---
+## Prompt do autor com exemplo concreto (assinatura) resolveu o que regra descritiva não resolveu
+- **Observação:** A regra dos identificadores fixos (crate desafio etc.) funcionou no E2E (o teste importou use desafio::...); a regra de assinatura com EXEMPLO Rust completo (pub fn maior_elemento_vetor(vetor: Vec<i32>) -> Option<i32>) também. Modelos seguem exemplos literais melhor que descrições.
+- **Ação:** Regras de código em prompts de autoria DEVEM incluir exemplo concreto por linguagem.
