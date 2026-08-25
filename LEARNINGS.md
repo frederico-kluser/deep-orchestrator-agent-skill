@@ -32,6 +32,9 @@
 - 2026-08-25 | convention | Documentar aprendizado de build/instalador AUTOMATICAMENTE ao criar um POC Unity [id: LEARN-20260825-005]
 - 2026-08-25 | gotcha | -executeMethod requer nome totalmente qualificado (namespace.Classe.Metodo) [id: LEARN-20260825-006]
 - 2026-08-25 | fact | player Linux do Unity é um thin launcher + UnityPlayer.so + _Data/ [id: LEARN-20260825-007]
+- 2026-08-25 | fact | argv0 do spawn não aparece em /proc/<pid>/cmdline [id: LEARN-20260825-008]
+- 2026-08-25 | fact | lib/ gitignored é produto de build; .d.ts de subpath export deve ser gerado, não commitado [id: LEARN-20260825-009]
+- 2026-08-25 | antipattern | Override TRANSITORIO de lint com target morto deixa regra sem efeito [id: LEARN-20260825-010]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -380,3 +383,45 @@ tags: [unity, build, linux, instalador]
 ## player Linux do Unity é um thin launcher + UnityPlayer.so + _Data/
 - **Observação:** O *.x86_64 gerado pelo build Linux é um thin launcher ~4KB; a engine real é
 - **Ação:** Para build/instalação de Linux player, tratar o trio (launcher + .so + _Data) como
+
+---
+id: LEARN-20260825-008
+date: "2026-08-25"
+type: fact
+confidence: high
+source: diff
+status: active
+supersedes: ""
+tags: node, spawn, procfs, teste
+---
+## argv0 do spawn não aparece em /proc/<pid>/cmdline
+- **Observação:** Em testes que simulam um processo (ex: cloudflared falso) com spawn(..., { argv0: 'cloudflared' }), o argv0 é feature de nível libc (muda argv[0] visto pelo script) mas NUNCA aparece em /proc/<pid>/cmdline. E o /bin/sh -c 'comando' exec-otimiza para o binário (cmdline = "sleep 60", não "sh -c sleep 60"). Se a varredura/identificação lê procfs, o teste que depende de argv0 para rotular o processo vai falhar. Solução: injetar a identidade (identify/readProcessCmdline) via DI, ou usar um script wrapper real.
+- **Ação:** Em testes de código que identifica processos por /proc/cmdline, injetar a leitura via dependência (seam DI) em vez de depender de argv0.
+
+---
+id: LEARN-20260825-009
+date: "2026-08-25"
+type: fact
+confidence: high
+source: repo-doc
+status: active
+supersedes: ""
+tags: package.json, exports, types, distribuição
+---
+## lib/ gitignored é produto de build; .d.ts de subpath export deve ser gerado, não commitado
+- **Observação:** Quando um subpath de exports (ex: "./client") aponta para um arquivo em lib/ (gitignored, produto de build), o .d.ts irmão não pode ser commitado (seria ignorado). A solução é manter a fonte do .d.ts numa pasta versionada (ex: client/) e copiá-la para lib/ no script de build, referenciando lib/client.d.ts no exports[subpath].types. attw valida isso (UntypedResolution desaparece).
+- **Ação:** Para subpaths de exports com artefato de build em dir gitignored, gerar o .d.ts no build a partir de fonte commitada.
+
+---
+id: LEARN-20260825-010
+date: "2026-08-25"
+type: antipattern
+confidence: medium
+source: diff
+status: active
+supersedes: ""
+tags: eslint, oxlint, refactor, monólito
+---
+## Override TRANSITORIO de lint com target morto deixa regra sem efeito
+- **Observação:** Após dissolver um monólito, os overrides TRANSITORIO que listavam o arquivo-único original ficam com target morto se o arquivo de teste for deslocado (ex: test/index.test.ts -> test/unit/index.test.ts). O override perde efeito sobre o novo path, e a regra que deveria ser rebaixada para warn volta a valer a 'error' ou fica órfã. Muitos warnings de no-unnecessary-condition em co-variância podem surgir quando o override deixou de cobrir.
+- **Ação:** Ao mover/renomear arquivos cobertos por overrides TRANSITORIO de lint, atualizar o 'files' do override (ou removê-lo se o monólito já foi dissolvido). Grep por paths antigos nos configs de lint após refactors.
