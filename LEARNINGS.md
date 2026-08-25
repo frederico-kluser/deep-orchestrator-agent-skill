@@ -22,6 +22,9 @@
 - 2026-08-24 | gotcha | Gate de integração com pipe | tail mascara o exit code do unittest [id: LEARN-20260824-006]
 - 2026-08-24 | fact | systemd: ExecStartPre com systemctl stop do próprio glob cancela o JOB_START [id: LEARN-20260824-007]
 - 2026-08-24 | gotcha | Testing subwave em paralelo com fix pode documentar comportamento pré-fix e quebrar o gate [id: LEARN-20260824-008]
+- 2026-08-24 | gotcha | ScreenCapture indisponível na asmdef Game.Runtime do template [id: LEARN-20260824-009]
+- 2026-08-24 | gotcha | Batchmode `-quit` + editor `isPlaying` captura screenshot frágil [id: LEARN-20260824-010]
+- 2026-08-24 | antipattern | Sub-agente em background pode ressuscitar arquivos que o orquestrador removeu [id: LEARN-20260824-011]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -230,3 +233,45 @@ tags: [subwave, testes, gate]
 ## Testing subwave em paralelo com fix pode documentar comportamento pré-fix e quebrar o gate
 - **Observação:** Testes das subwaves escritos contra o comportamento anterior ao fix (mode+target=logo; mensagem de reconexão) passaram na worktree da subwave mas falharam no gate do snapshot integrado — o snapshot precisou ser recriado após o merge do fix e os testes atualizados.
 - **Ação:** Ao integrar testing subwaves, conferir se os testes documentam o estado ATUAL do main (especialmente quando um fix de semântica mergeou no meio); gate vermelho por teste desatualizado = atualizar o teste, não reverter o fix.
+
+---
+id: LEARN-20260824-009
+date: "2026-08-24"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [unity, asmdef, screenshot, poc]
+---
+## ScreenCapture indisponível na asmdef Game.Runtime do template
+- **Observação:** No scaffold 3d-cross-platform da skill, `UnityEngine.ScreenCapture` NÃO compila
+- **Ação:** Para screenshot de prova em POC, use captura externa do binário rodando (ffmpeg/
+
+---
+id: LEARN-20260824-010
+date: "2026-08-24"
+type: gotcha
+confidence: medium
+source: sub-agent
+status: active
+supersedes: ""
+tags: [unity, batchmode, screenshot]
+---
+## Batchmode `-quit` + editor `isPlaying` captura screenshot frágil
+- **Observação:** Rodar `-executeMethod` com `-quit` que entra em Play para capturar screenshot
+- **Ação:** Para screenshot determinístico fora do player, prefira rodar o build real (ou o
+
+---
+id: LEARN-20260824-011
+date: "2026-08-24"
+type: antipattern
+confidence: medium
+source: diff
+status: active
+supersedes: ""
+tags: [orquestrador, sub-agente, background]
+---
+## Sub-agente em background pode ressuscitar arquivos que o orquestrador removeu
+- **Observação:** Na Onda 4, o sub-agente continuou vivo em background mesmo após notificações
+- **Ação:** Quando um sub-agente lança builds/processos em background na ÚLTIMA onda, verifique
