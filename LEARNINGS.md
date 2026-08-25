@@ -25,6 +25,10 @@
 - 2026-08-24 | gotcha | ScreenCapture indisponível na asmdef Game.Runtime do template [id: LEARN-20260824-009]
 - 2026-08-24 | gotcha | Batchmode `-quit` + editor `isPlaying` captura screenshot frágil [id: LEARN-20260824-010]
 - 2026-08-24 | antipattern | Sub-agente em background pode ressuscitar arquivos que o orquestrador removeu [id: LEARN-20260824-011]
+- 2026-08-25 | gotcha | Gates de repo com node_modules instalado dão falso vermelho (B-09/L-03/L-04) [id: LEARN-20260825-001]
+- 2026-08-25 | antipattern | set -euo pipefail + pipeline de grep sem guarda em $(...) mata script com exit 1 e stderr VAZIO [id: LEARN-20260825-002]
+- 2026-08-25 | antipattern | Descompasso de vocabulário entre main e renderer (phase em inglês vs pt-BR; fraction vs progress) mascarava o progresso inteiro [id: LEARN-20260825-003]
+- 2026-08-25 | fact | B-03 do gate-build quebra com tsconfig contendo comentários JSONC (pré-existente no projeto) [id: LEARN-20260825-004]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -275,3 +279,59 @@ tags: [orquestrador, sub-agente, background]
 ## Sub-agente em background pode ressuscitar arquivos que o orquestrador removeu
 - **Observação:** Na Onda 4, o sub-agente continuou vivo em background mesmo após notificações
 - **Ação:** Quando um sub-agente lança builds/processos em background na ÚLTIMA onda, verifique
+
+---
+id: LEARN-20260825-001
+date: "2026-08-25"
+type: gotcha
+confidence: high
+source: diff
+status: active
+supersedes: ""
+tags: [gate, node_modules, ci-order, snapshot]
+---
+## Gates de repo com node_modules instalado dão falso vermelho (B-09/L-03/L-04)
+- **Observação:** No estudo de caso (repo com app/ npm), rodar gate-build/gate-lint DEPOIS do npm ci acusou B-09 CRLF (75 arquivos), L-03 e L-04 em app/node_modules/** — artefatos de instalação, não regressões. O CI do repo roda os gates de repo ANTES de instalar deps.
+- **Ação:** Nos snapshots/gates, rodar SEMPRE os gates de repo (gate-build/gate-lint/validate/spec-conformance/smoke) ANTES do npm ci, ou com node_modules movido para FORA do repo (ex.: sob $CHILD_ROOT/nm-tmp) — nunca renomear para .nm-aside DENTRO do repo (gate_find_into não poda nomes diferentes).
+
+---
+id: LEARN-20260825-002
+date: "2026-08-25"
+type: antipattern
+confidence: high
+source: diff
+status: active
+supersedes: ""
+tags: [shell, pipefail, probe, silent-death]
+---
+## set -euo pipefail + pipeline de grep sem guarda em $(...) mata script com exit 1 e stderr VAZIO
+- **Observação:** challenge-verify.sh (skill bash do study-method) morria silenciosamente (exit 1, stderr 0 bytes) quando um probe grep|awk não casava nada numa substituição de comando — errexit + pipefail convertem "grep sem match" em morte do script sem mensagem. O usuário viu "challenge-verify.sh falhou (exit 1):" com o campo stderr vazio.
+- **Ação:** Em scripts com set -euo pipefail, TUDO pipeline cuja entrada pode ser vazia (grep/sed/awk encadeados) precisa de guarda `|| true` (ou contexto if) devolvendo valor neutro — e revisores adversariais devem varrer `$(... | grep ...)` sistematicamente.
+
+---
+id: LEARN-20260825-003
+date: "2026-08-25"
+type: antipattern
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [electron, ipc, payload-contract, renderer]
+---
+## Descompasso de vocabulário entre main e renderer (phase em inglês vs pt-BR; fraction vs progress) mascarava o progresso inteiro
+- **Observação:** O main do app emite {phase:'research'|... , fraction} e o parser do renderer só lia stage/phase-ptBR/progress — a UI ficava presa no estado inicial (que ainda por cima mapeava para a ÚLTIMA etapa do Stepper). Duas camadas de bug: vocabulário divergente + fallback silencioso que "funciona" sem avançar.
+- **Ação:** Ao revisar fluxos main→renderer por IPC, conferir os payloads REAIS emitidos contra o que o parser consome (grep nos emit() do main); fallbacks de parser devem ser visíveis em teste com os payloads reais.
+
+---
+id: LEARN-20260825-004
+date: "2026-08-25"
+type: fact
+confidence: high
+source: repo-doc
+status: active
+supersedes: ""
+tags: [gate, tsconfig, jsonc]
+---
+## B-03 do gate-build quebra com tsconfig contendo comentários JSONC (pré-existente no projeto)
+- **Observação:** app/tsconfig.node.json contém comentários // (JSONC) — válido para tsc, inválido para python json.load do B-03. O CI do próprio projeto está vermelho desde ondas 12/16 por isso. Não é regressão de onda nenhuma; documentado como exceção de baseline.
+- **Ação:** Em projetos com tsconfig comentado, esperar B-03 vermelho e documentar como baseline; não corrigir em tarefa alheia (scope creep).
