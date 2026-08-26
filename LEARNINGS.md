@@ -39,6 +39,10 @@
 - 2026-08-25 | antipattern | Autoria LLM não mantém assinatura consistente entre stub/test/reference — e a semente com assinatura toy contamina a validação [id: LEARN-20260825-012]
 - 2026-08-25 | gotcha | Resposta malformada do juiz (exit 5 no ciclo --apply) abortava a aula inteira; content vazio do autor abortava sem retry [id: LEARN-20260825-013]
 - 2026-08-25 | fact | Prompt do autor com exemplo concreto (assinatura) resolveu o que regra descritiva não resolveu [id: LEARN-20260825-014]
+- 2026-08-26 | convention | Renderer (src) pode importar módulos puros de electron/main desde que sem import de electron e cobertos por tsconfig.node [id: LEARN-20260826-001]
+- 2026-08-26 | antipattern | Sub-agentes usam mcp unity por engano para editar arquivos TS [id: LEARN-20260826-002]
+- 2026-08-26 | gotcha | Gate final em BASE_DIR pode falhar por AMBIENTE (node_modules desatualizado) apos dep nova [id: LEARN-20260826-003]
+- 2026-08-26 | fact | Editor de testes em fio: node:test com sqlite :memory: precisa PRAGMA foreign_keys ON p/ pegar bugs FK [id: LEARN-20260826-004]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -485,3 +489,59 @@ tags: [llm, prompt]
 ## Prompt do autor com exemplo concreto (assinatura) resolveu o que regra descritiva não resolveu
 - **Observação:** A regra dos identificadores fixos (crate desafio etc.) funcionou no E2E (o teste importou use desafio::...); a regra de assinatura com EXEMPLO Rust completo (pub fn maior_elemento_vetor(vetor: Vec<i32>) -> Option<i32>) também. Modelos seguem exemplos literais melhor que descrições.
 - **Ação:** Regras de código em prompts de autoria DEVEM incluir exemplo concreto por linguagem.
+
+---
+id: LEARN-20260826-001
+date: "2026-08-26"
+type: convention
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [electron, renderer, import, dominio]
+---
+## Renderer (src) pode importar módulos puros de electron/main desde que sem import de electron e cobertos por tsconfig.node
+- **Observação:** answerFlow.ts em src/lib importou lessonEngine (electron/main/domain) como VALOR; LessonView (src/views) precisou de 3 niveis de path, nao 2. O tsconfig.json (renderer) so inclui src+shared mas resolve bundler. Import evaluvido compila sem mudar tsconfig.
+- **Ação:** Ao cruzar electron/main de src, garantir modulo puro (sem import 'electron') e usar profundidade de path correta.
+
+---
+id: LEARN-20260826-002
+date: "2026-08-26"
+type: antipattern
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [prompt, fix-agent, unity-mcp]
+---
+## Sub-agentes usam mcp unity por engano para editar arquivos TS
+- **Observação:** Um agente de FIX tentou 3x usar mcp__unity__apply_text_edits num arquivo .ts antes de cair no Edit/Bash. Perdeu tempo.
+- **Ação:** Em prompts de sub-agente de fix, reforcar: 'MACETE: para editar arquivos TS/TSX use apenas Read/Edit/Write — IGNORE ferramentas de Unity (mcp__unity__*)'.
+
+---
+id: LEARN-20260826-003
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: model-output
+status: active
+supersedes: ""
+tags: [gate, deps, electron]
+---
+## Gate final em BASE_DIR pode falhar por AMBIENTE (node_modules desatualizado) apos dep nova
+- **Observação:** Apos adicionar better-sqlite3 nas worktrees, o gate final em BASE_DIR (main) falhou 'Cannot find module better-sqlite3' porque node_modules local precedia a dep. Nao era bug de codigo; npm install resolveu.
+- **Ação:** Distinguir gate vermelho por AMBIENTE (deps novas) de por CODIGO antes de gerar fix.
+
+---
+id: LEARN-20260826-004
+date: "2026-08-26"
+type: fact
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [test, sqlite, fk]
+---
+## Editor de testes em fio: node:test com sqlite :memory: precisa PRAGMA foreign_keys ON p/ pegar bugs FK
+- **Observação:** better-sqlite3 :memory: com FK ON (connection.ts) revelou que recordAnswer/recordHintBreak lançavam FK p/ lesson inexistente — bug real B1.
+- **Ação:** Manter PRAGMA foreign_keys ON em testes de repo para pegar violacoes de FK.
