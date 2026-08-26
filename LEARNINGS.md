@@ -43,6 +43,10 @@
 - 2026-08-26 | antipattern | Sub-agentes usam mcp unity por engano para editar arquivos TS [id: LEARN-20260826-002]
 - 2026-08-26 | gotcha | Gate final em BASE_DIR pode falhar por AMBIENTE (node_modules desatualizado) apos dep nova [id: LEARN-20260826-003]
 - 2026-08-26 | fact | Editor de testes em fio: node:test com sqlite :memory: precisa PRAGMA foreign_keys ON p/ pegar bugs FK [id: LEARN-20260826-004]
+- 2026-08-26 | gotcha | SSH de comando único no macOS roda shell NAO-login sem /opt/homebrew/bin no PATH [id: LEARN-20260826-005]
+- 2026-08-26 | antipattern | NUNCA gravar credencial viva em arquivo de estado do orquestrador [id: LEARN-20260826-006]
+- 2026-08-26 | gotcha | Scripts compartilhados Linux/macOS: bash 3.2 e date BSD [id: LEARN-20260826-007]
+- 2026-08-26 | gotcha | Verificacao de comandos do zsh em maquina remota: zsh -l -i -c [id: LEARN-20260826-008]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -545,3 +549,59 @@ tags: [test, sqlite, fk]
 ## Editor de testes em fio: node:test com sqlite :memory: precisa PRAGMA foreign_keys ON p/ pegar bugs FK
 - **Observação:** better-sqlite3 :memory: com FK ON (connection.ts) revelou que recordAnswer/recordHintBreak lançavam FK p/ lesson inexistente — bug real B1.
 - **Ação:** Manter PRAGMA foreign_keys ON em testes de repo para pegar violacoes de FK.
+
+---
+id: LEARN-20260826-005
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: macos, ssh, path, homebrew, diagnostico
+---
+## SSH de comando único no macOS roda shell NAO-login sem /opt/homebrew/bin no PATH
+- **Observação:** Em "configurar Mac Mini via SSH" (2026-08-26), a premissa "Mac sem brew" era falso-negativo de `command -v brew` num shell nao-login via ssh; o mesmo padrao se repetiu com git-lfs e node. Diagnostico errado em FASE 1 custa uma correcao de premissa e um WARNING de revisao.
+- **Ação:** Em recon de maquinas macOS via ssh, usar caminho absoluto (/opt/homebrew/bin/X) ou `zsh -l -c "cmd"`; registrar o quirk no plano e nos prompts dos sub-agentes.
+
+---
+id: LEARN-20260826-006
+date: "2026-08-26"
+type: antipattern
+confidence: high
+source: diff
+status: active
+supersedes: ""
+tags: seguranca, task-plan, credenciais
+---
+## NUNCA gravar credencial viva em arquivo de estado do orquestrador
+- **Observação:** Em "configurar Mac Mini via SSH" (2026-08-26), o orquestrador gravou a senha SSH fornecida no TASK_PLAN.md (handoff); a revisao adversarial das credenciais flagou (WARNING material) e a senha foi redigida. A regra "senha nunca em arquivo" vale para TODOS, inclusive o orquestrador.
+- **Ação:** Em tarefas com credenciais, o TASK_PLAN.md referencia a credencial por variável de ambiente (ex.: MAC_PASS), nunca o valor; conferir com grep antes de cada commit de estado.
+
+---
+id: LEARN-20260826-007
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: macos, bash, portabilidade, date, mapfile
+---
+## Scripts compartilhados Linux/macOS: bash 3.2 e date BSD
+- **Observação:** Em "configurar Mac Mini via SSH" (2026-08-26), o claude-contas quebrava no Mac por `mapfile` (bash 4+; macOS tem bash 3.2.57) e por GNU `date -d` (BSD date usa `date -j -f`). Fix validado: `F=(); while IFS= read -r l; do F+=("$l"); done < <(...)` preservando linhas vazias (nunca IFS=$'\t' read) + helper `_data_utc/_data_local` com fallback GNU->BSD, byte-verificado por reconstrucao de patch na revisao adversarial.
+- **Ação:** Sub-agentes que adaptam scripts locais para macOS devem validar com /bin/bash -n no Mac e testar o fallback BSD de data com entrada real do formato do endpoint.
+
+---
+id: LEARN-20260826-008
+date: "2026-08-26"
+type: gotcha
+confidence: medium
+source: repo-doc
+status: active
+supersedes: ""
+tags: macos, zsh, verificacao
+---
+## Verificacao de comandos do zsh em maquina remota: zsh -l -i -c
+- **Observação:** Em "configurar Mac Mini via SSH" (2026-08-26), a pergunta falsificavel "zsh -l -c resolve os comandos?" era invalida: -l (login) nao sourcea .zshrc e -c (nao-interativo) nao pega funcoes; no macOS o PATH do brew vive no .zprofile (login) e os comandos no .zshrc (interativo). O metodo correto e `zsh -l -i -c '<cmd>'`.
+- **Ação:** Em verificacoes de comandos de shell definidos em .zshrc, usar `zsh -l -i -c` (ou source explicito) — nao `zsh -l -c` nem `zsh -c` puro.
