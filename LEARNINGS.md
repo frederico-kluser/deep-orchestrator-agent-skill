@@ -47,6 +47,13 @@
 - 2026-08-26 | antipattern | NUNCA gravar credencial viva em arquivo de estado do orquestrador [id: LEARN-20260826-006]
 - 2026-08-26 | gotcha | Scripts compartilhados Linux/macOS: bash 3.2 e date BSD [id: LEARN-20260826-007]
 - 2026-08-26 | gotcha | Verificacao de comandos do zsh em maquina remota: zsh -l -i -c [id: LEARN-20260826-008]
+- 2026-08-26 | gotcha | Pré-comandos de skill rodam na expansão do slash e 16/26 context scripts do DAF fazem mkdir no cwd — teste de skill contra repo real polui com dirs untracked [id: LEARN-20260826-009]
+- 2026-08-26 | fact | O loader do Claude Code injeta o corpo da skill como user text "Base directory for this skill: <dir>" e INTERPOLA $N/$ARGUMENTS posicionalmente (corrompe cifrões literais do corpo) e ${CLAUDE_PLUGIN_ROOT} por caminho absoluto [id: LEARN-20260826-010]
+- 2026-08-26 | gotcha | status-context.sh do DAF v1.33.0: grep -c || echo "0" produz "0
+- 2026-08-26 | fact | Skills com context:fork (oracle/arquiteto) gravam corpo+resposta no transcript do SUBAGENTE — o run pai fica com input_tokens 0/num_turns 0 [id: LEARN-20260826-012]
+- 2026-08-26 | fact | deepclaude (Claude Code + DeepSeek) não exporta CLAUDE_PLUGIN_ROOT para o subprocesso do context script — costs-context.sh reporta "Pricing FALTANDO" falso em todas as sessões [id: LEARN-20260826-013]
+0" → [ "0
+0" -gt 0 ] → stderr "esperava número inteiro" entra no corpo injetado da skill /daf:status [id: LEARN-20260826-011]
 
 <!-- O índice lista as entradas ativas: - YYYY-MM-DD | <type> | <título> [id: LEARN-...] -->
 
@@ -605,3 +612,73 @@ tags: macos, zsh, verificacao
 ## Verificacao de comandos do zsh em maquina remota: zsh -l -i -c
 - **Observação:** Em "configurar Mac Mini via SSH" (2026-08-26), a pergunta falsificavel "zsh -l -c resolve os comandos?" era invalida: -l (login) nao sourcea .zshrc e -c (nao-interativo) nao pega funcoes; no macOS o PATH do brew vive no .zprofile (login) e os comandos no .zshrc (interativo). O metodo correto e `zsh -l -i -c '<cmd>'`.
 - **Ação:** Em verificacoes de comandos de shell definidos em .zshrc, usar `zsh -l -i -c` (ou source explicito) — nao `zsh -l -c` nem `zsh -c` puro.
+
+---
+id: LEARN-20260826-009
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [deepclaude, skills, daf, containment]
+---
+## Pré-comandos de skill rodam na expansão do slash e 16/26 context scripts do DAF fazem mkdir no cwd — teste de skill contra repo real polui com dirs untracked
+- **Observação:** Sessões relate-only ainda executam a diretiva !`bash ...` do SKILL.md; 16 dos 26 context scripts do plugin DAF criam docs/daf/<skill>/ (e .claude/agent-memory/*) no cwd. Em repo real, git status não mostra dirs vazios — contaminação invisível; com escrita de arquivo (oracle fork) vira untracked.
+- **Ação:** Para qualquer teste empírico de skill com deepclaude/CLI, usar clones locais (git clone --local) como cwd e auditar os context scripts antes; nunca cwd em repo real.
+
+---
+id: LEARN-20260826-010
+date: "2026-08-26"
+type: fact
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [claude-code, skills, injection, daf]
+---
+## O loader do Claude Code injeta o corpo da skill como user text "Base directory for this skill: <dir>" e INTERPOLA $N/$ARGUMENTS posicionalmente (corrompe cifrões literais do corpo) e ${CLAUDE_PLUGIN_ROOT} por caminho absoluto
+- **Observação:** Verificado em deepclaude (claude v2.1.246) e no caminho do Agent SDK (pipeline da plataforma) — expansões idênticas. Corpos com $0.85 viram <arg0>.85; $ARGUMENTS vira o prompt inteiro dezenas de vezes. A métrica de "linhas ausentes" precisa normalizar essas expansões ou conta falso-negativo.
+- **Ação:** Ao medir completude de skill por transcript, normalizar $N/$ARGUMENTS/${CLAUDE_PLUGIN_ROOT} e reportar corrupções à parte; ao escrever SKILL.md, escapar cifrões.
+
+---
+id: LEARN-20260826-011
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [daf, skills, bash, prod]
+---
+## status-context.sh do DAF v1.33.0: grep -c || echo "0" produz "0\n0" → [ "0\n0" -gt 0 ] → stderr "esperava número inteiro" entra no corpo injetado da skill /daf:status
+- **Observação:** Determinístico (18/18 com review doc sem 🔧; 0/2 sem). Dois gatilhos (has_fix_now linha 72, has_rework_after linha 74). O estado-gatilho existe hoje em frontend-test-project (ET-4.md) — vivo em prod-equivalente. O harness injeta stdout+stderr da diretiva no corpo.
+- **Ação:** Corrigir no plugin (grep -c ... || true ou capturar exit); ao diagnosticar "skill não carrega", olhar stderr de context scripts no corpo.
+
+---
+id: LEARN-20260826-012
+date: "2026-08-26"
+type: fact
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [claude-code, fork, skills, transcript]
+---
+## Skills com context:fork (oracle/arquiteto) gravam corpo+resposta no transcript do SUBAGENTE — o run pai fica com input_tokens 0/num_turns 0
+- **Observação:** O transcript da sessão principal não contém a mensagem "Base directory for this skill:"; ela está em <session>/subagents/agent-*.jsonl. Ler só o pai faz parecer que a skill não carregou.
+- **Ação:** Ao auditar forks, procurar em subagents/ antes de concluir "skill não carregou".
+
+---
+id: LEARN-20260826-013
+date: "2026-08-26"
+type: fact
+confidence: medium
+source: sub-agent
+status: active
+supersedes: ""
+tags: [deepclaude, env, skills]
+---
+## deepclaude (Claude Code + DeepSeek) não exporta CLAUDE_PLUGIN_ROOT para o subprocesso do context script — costs-context.sh reporta "Pricing FALTANDO" falso em todas as sessões
+- **Observação:** O placeholder ${CLAUDE_PLUGIN_ROOT} no CORPO é substituído pelo loader, mas a env não chega ao script bash; o pre-check do costs mente (pricing.json existe). Qualquer conclusão comportamental baseada nessa pré-condição é viciada.
+- **Ação:** Ao testar behavior de skills do DAF fora do ambiente de prod, verificar se o context script recebeu as envs esperadas antes de atribuir desvio ao modelo.
