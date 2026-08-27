@@ -59,6 +59,10 @@
 - 2026-08-26 | fact | Porta HTTP sem throttle para conversas de prod: rotas admin GET /api/admin/users/<id>/conversations[/<convId>] com cookie cunhado (SESSION_SECRET via az containerapp secret show --secret-name) [id: LEARN-20260826-018]
 - 2026-08-26 | gotcha | security-guard.sh bloqueia 'secret list --show-values' (dump do conjunto) mas ACEITA leitura direcionada 'az containerapp secret show --secret-name X --query value' [id: LEARN-20260826-019]
 - 2026-08-26 | gotcha | JS embutido em comandos bash (heredoc→base64→node -e) não pode conter sequências de escape 
+- 2026-08-26 | gotcha | "Diff inline em prompt de revisor: shell $(...) não executa — gravar em arquivo sob DO_STATE" [id: LEARN-20260826-021]
+- 2026-08-26 | gotcha | "Snapshot de integração criado após merge FALHO fica stale — recriar no estado pós-merge" [id: LEARN-20260826-022]
+- 2026-08-26 | gotcha | "Fix que reproduz mudanças de worktree irmã à mão conflita no squash — resolver dentro da filha (merge da raiz + delta)" [id: LEARN-20260826-023]
+- 2026-08-26 | convention | "Carve-out de segurança (!!pinned ||) pode ficar obsoleto por features novas — revisão adversarial do diff integrado é a rede" [id: LEARN-20260826-024]
  — o trânsito JSON/heredoc quebra a string [id: LEARN-20260826-020]
 0" → [ "0
 0" -gt 0 ] → stderr "esperava número inteiro" entra no corpo injetado da skill /daf:status [id: LEARN-20260826-011]
@@ -788,3 +792,59 @@ tags: [bash, node, quoting]
 ## JS embutido em comandos bash (heredoc→base64→node -e) não pode conter sequências de escape \n — o trânsito JSON/heredoc quebra a string
 - **Observação:** Várias sessões quebraram com SyntaxError porque \n dentro de strings JS virou newline real no caminho JSON→heredoc. Trabalho: usar String.fromCharCode(10) e evitar backslashes no JS embutido; o idioma de quoting '\'' para o --command do az exec é o que funciona.
 - **Ação:** Em scripts node -e via az exec/heredoc: zero backslashes no JS; newline = String.fromCharCode(10); sem regex com \s.
+
+---
+id: LEARN-20260826-021
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [orquestracao, revisao-adversarial]
+---
+## "Diff inline em prompt de revisor: shell $(...) não executa — gravar em arquivo sob DO_STATE"
+- **Observação:** Ao montar o prompt do revisor adversarial com `$(git diff ...)` dentro do texto, o literal shell chega ao sub-agente sem executar — o revisor não vê o diff. A correção foi salvar o diff em $DO_STATE/<onda>.diff e passar o PATH no prompt (legível sob BASE_DIR). Diff >~400 linhas também estoura o prompt confortável.
+- **Ação:** Sempre gravar o diff em arquivo sob $DO_STATE e referenciar o path no prompt do revisor; nunca embutir `$(...)` literal.
+
+---
+id: LEARN-20260826-022
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [orquestracao, merge]
+---
+## "Snapshot de integração criado após merge FALHO fica stale — recriar no estado pós-merge"
+- **Observação:** Um squash-merge falhou (conflito) e o do-wt.sh criou o snapshot int-ondaN-* mesmo assim, cortado do HEAD pré-merge. O gate rodaria sobre um estado sem o merge. A correção: remover/drop-branch o snapshot stale e recriá-lo após o merge limpo.
+- **Ação:** Após merge com conflito, verificar se o snapshot daquele merge nasceu do estado certo; se não, recriar (remove + new) antes do gate.
+
+---
+id: LEARN-20260826-023
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [orquestracao, merge]
+---
+## "Fix que reproduz mudanças de worktree irmã à mão conflita no squash — resolver dentro da filha (merge da raiz + delta)"
+- **Observação:** Um fix worktree precisava reproduzir as mudanças de uma irmã não-mergeada (setup-azure) para compilar; na hora do squash, os hunks sobrepuseram os da irmã já mergeada → conflito em 3 arquivos. Resolução F4-07.2 funcionou: merge da raiz dentro da filha, manter RAZ + delta do fix, commit, re-merge limpo. O resíduo de índice do squash falho na raiz precisou de `gwt restore` dos arquivos tocados antes do re-merge.
+- **Ação:** Quando um fix depender de mudanças não-mergeadas, preferir sequenciar o merge da irmã ANTES de cortar o fix; se já cortado, seguir F4-07.2 e limpar o resíduo da raiz com restore antes do re-merge.
+
+---
+id: LEARN-20260826-024
+date: "2026-08-26"
+type: convention
+confidence: high
+source: sub-agent
+status: active
+supersedes: ""
+tags: [seguranca, revisao]
+---
+## "Carve-out de segurança (!!pinned ||) pode ficar obsoleto por features novas — revisão adversarial do diff integrado é a rede"
+- **Observação:** O guard `!!pinned || gitlabMcpFitsTurn(...)` era seguro enquanto init era GitLab-only por construção; quando a feature deu azure ao init (propósito azure-init-rw), o PAT azure passaria ao MCP GitLab. A revisão adversarial do diff integrado + o handoff do sub-agente flagraram; o fix foi um worktree próprio com teste de reversão. Lição: a premissa documentada de um carve-out de segurança pode morrer em ondas futuras — o comentário do código deve dizer QUAL premissa o sustenta, e a revisão adversarial deve checar premissas de segurança.
+- **Ação:** Ao revisar diffs de features, conferir cada comentário que diz "seguro porque <premissa>" contra o estado integrado; premissas de provedor/credencial são as mais traiçoeiras.
