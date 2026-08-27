@@ -25,8 +25,8 @@ Ao FIM da execução há uma segunda interação, também pelo Plannotator: o **
 A skill é distribuída como um repositório git; a **casa da skill (`$SKILL_HOME`)** é a **raiz** do repositório — o diretório que contém `SKILL.md`, `scripts/` e `prompts/`. Instalação incompleta = FASE 0 aborta com `PARE: do-context.sh nao encontrado`.
 
 - O `SKILL.md` da raiz é um **symlink** para `./.claude/skills/deep-orchestrator-agent-skill/SKILL.md` (padrão Claude Code). Desde a v3.5.1, `scripts/` e `prompts/` são espelhados **por symlink** dentro de `.claude/skills/deep-orchestrator-agent-skill/` — assim **qualquer** dos dois alvos (a raiz ou a pasta `.claude`) é uma casa válida, e um harness que resolva `SKILL_HOME` para a pasta interna não fica sem scripts. `templates/` existiu até a v3.6.0 e foi removido.
-- **Instalar** (publica por symlink para todos os agentes conhecidos — Claude Code, `~/.agents`, jcode, pi): `./scripts/sync-global-skill.sh` (opções: `--dry-run`, `--strict`, `--quiet`). Manualmente: `ln -s /caminho/do/repo ~/.agents/skills/deep-orchestrator-agent-skill` (a raiz do repo, não a pasta interna).
-- **DeepSeek Harness (DSH)**: descobre skills em `$DSH_AGENTS_HOME/skills` (default `~/.agents`) e `$DSH_HOME/skills` (default `~/.dsh`). A FASE 0 resolve nessas duas raízes — o caminho de instalação do DSH pode ser `~/.agents/skills` (compartilhado com pi/jcode/opencode) **ou** `~/.dsh/skills`.
+- **Instalar**: a skill NÃO assume onde cada agente vive — crie UMA entrada onde o SEU harness descobre skills (um symlink para a raiz do repo, não a pasta interna; ex.: `ln -s /caminho/do/repo <diretório-de-skills-do-seu-harness>/deep-orchestrator-agent-skill`). Confira a doc do seu harness para o caminho de descoberta. Qualquer casa é válida — a FASE 0 resolve `$SKILL_HOME` pela localização dos próprios scripts, nunca por um caminho fixo. Depois verifique com `./scripts/check-install.sh --root <casa>`.
+- **Harnesses** (Claude Code, DSH, pi, jcode, opencode...): cada um descobre skills à sua maneira — crie o symlink no caminho que o SEU usa (a FASE 0 testa primeiro as variáveis do harness, ex. `$CLAUDE_SKILL_DIR`, e depois alguns diretórios comuns apenas como última tentativa). Sem script de "publicação global": instalar é um comando seu, um symlink, e pronto.
 - **Verificar** uma instalação: `./scripts/check-install.sh [--root <dir>]` — exit 0 = completo (SKILL.md + ferramentas executáveis + prompts), 1 = faltando itens, 2 = uso inválido. Rode depois de qualquer instalação/atualização.
 - Um clone legado por **cópia** (ex.: `~/.local/share/deep-orchestrator/`) congela a versão do dia — prefira o symlink (`sync-global-skill.sh` converte cópias em symlinks automaticamente, preservando backup em `.bak-<data>`).
 
@@ -86,8 +86,7 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 - **O plano nunca sai da máquina sozinho** — duas travas independentes, ambas ligadas por default:
   - `PLANNOTATOR_SHARE=disabled` impede o **upload** do texto do plano para o serviço de paste, que o Plannotator faria em sessão remota. Libere com `DO_PLAN_SHARE=1`.
   - `PLANNOTATOR_REMOTE=0` mantém o servidor em **127.0.0.1**. Sem isso, qualquer shell com `SSH_TTY`/`SSH_CONNECTION` no ambiente — o caso normal de um servidor de desenvolvimento — faria o Plannotator escutar em `0.0.0.0:19432`; e como `/api/approve` **não tem autenticação**, qualquer pessoa que alcançasse a máquina leria o plano e poderia **aprová-lo por você**, levando o orquestrador a criar worktrees e commitar. Para revisar por SSH, use um túnel: `ssh -L 19432:127.0.0.1:19432 <host>`. `DO_PLAN_REMOTE=1` expõe na rede de propósito, com aviso em voz alta.
-- **`scripts/sync-global-skill.sh`**: publica a skill para todos os agentes por **symlink**, trocando as importações por cópia que congelam a versão (o jcode importa copiando: uma cópia de meses atrás roda um orquestrador de duas versões atrás). Só mexe na entrada `deep-orchestrator-agent-skill`, só substitui um diretório depois de confirmar que ele é uma cópia desta mesma skill, guarda backup, e não cria diretório de agente que não existe.
-- **Testes**: `scripts/test-plan-approval.sh` — 111 asserções, tudo mockado (binário e instalador falsos num PATH temporário), **sem rede, sem navegador e sem instalar nada**.
+- **Testes**: `scripts/test-plan-approval.sh` — 133 asserções (130 PASS; 3 falhas de ambiente macOS conhecidas: `timeout(1)` ausente), tudo mockado (binário e instalador falsos num PATH temporário), **sem rede, sem navegador e sem instalar nada**.
 
 ## Novidades na v3.3.0
 
@@ -210,13 +209,12 @@ deep-orchestrator-agent-skill/
 │   ├── check-search-credits.sh  # verificador multi-tier pré-onda (exit 0/1/2)
 │   ├── check-plannotator.sh     # FASE 2.5 — resolve/instala o Plannotator (exit 0/1/2)
 │   ├── plan-approval.sh         # FASE 2.5 — uma rodada de aprovação no Plannotator
-│   ├── sync-global-skill.sh     # publica a skill por symlink para todos os agentes
 │   ├── brave-search.sh          # fonte da função search_brave_api() — Tier 2
 │   ├── check-brave-credits.sh   # (DEPRECATED) — use check-search-credits.sh
 │   ├── test-contencao.sh        # testes de regressão do MODO CONTIDO (85 asserções)
 │   ├── test-search.sh           # testes da cadeia de busca 3-tier (64 asserções)
 │   ├── test-evolve.sh           # testes do motor de prefs/questionário/evolução (suíte F1–Fxx)
-│   └── test-plan-approval.sh    # testes do portão de aprovação (111 asserções, mockado)
+│   └── test-plan-approval.sh    # testes do portão de aprovação (133 asserções, mockado)
 ├── prompts/
 │   ├── ecc-prompts.md           # 7 templates de prompt portados do ECC
 │   ├── ecc-skills.md            # 7 skills ECC portados

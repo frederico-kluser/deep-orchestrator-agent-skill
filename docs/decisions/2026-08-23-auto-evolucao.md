@@ -160,6 +160,12 @@ abaixo é inferida.
 
 ### D11 — RESOLUÇÃO
 
+> **Revisada em 2026-08-27 (v3.8.0):** o `scripts/sync-global-skill.sh` foi
+> REMOVIDO do repo — a skill não assume onde cada agente vive em outras
+> máquinas. Instalação é manual: um symlink no caminho de descoberta do
+> harness, verificado por `check-install.sh`. A resolução de `SKILL_HOME`
+> pela localização dos próprios scripts (o núcleo desta decisão) permanece.
+
 - **Decisão:** o script resolve `SKILL_HOME` pela **própria localização**:
   `cd "$(dirname "$BASH_SOURCE")" && pwd -P` (resolver o symlink) →
   `git rev-parse --show-toplevel` (achar a raiz do repo). Instalação por **cópia

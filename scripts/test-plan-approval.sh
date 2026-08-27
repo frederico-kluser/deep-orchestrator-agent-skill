@@ -58,7 +58,6 @@
 #        R2 rodada interrompida (snapshot 0444 sem linha no trail) não trava
 #        R3 falha de I/O no snapshot é 13, não 2 ("deriva de título")
 #        R4 json_escape não come a letra `t` (sed do BSD não conhece \t)
-#        R5 sync-global-skill não se autodestrói quando o destino É a casa
 #        R6 cópia velha vira symlink verificado; diretório alheio é preservado
 #        R7 DO_REUSE não reaproveita env com PLAN_APPROVAL divergente
 #        R8 FASE 0 cria o diretório do plano quando o portão está ON
@@ -100,8 +99,8 @@ newcase() {
   export CASE CASE_BIN
   export HOME="$CASE/home"
   # CLAUDE_CONFIG_DIR real (ex.: ~/.claude-k2.frederico) sobrevive ao HOME
-  # falso e faria o sync-global-skill escrever na configuração DE VERDADE do
-  # usuário durante o teste. Ancorar no HOME do caso é obrigatório.
+  # falso e faria um script de instalação escrever na configuração DE VERDADE
+  # do usuário durante o teste. Ancorar no HOME do caso é obrigatório.
   export CLAUDE_CONFIG_DIR="$CASE/home/.claude"
   export PATH="$CASE_BIN:$ORIG_PATH"
   export DO_STATE="$CASE/state"
@@ -683,51 +682,6 @@ has "R4 'not-attempted' intacto" "$out" '"install_result": "not-attempted"'
 has "R4 caminho com 't' intacto" "$out" "plannotator"
 chk "R4 nenhum TAB literal vazou no JSON" \
   "$(printf '%s' "$out" | tr -cd '\t' | wc -c | tr -d ' ')" "0"
-
-# R5 (P2) — sync-global-skill NUNCA destrói a própria casa da skill.
-SYNC="$SKILL/scripts/sync-global-skill.sh"
-newcase r5
-mkdir -p "$HOME/.claude/skills"
-# cenário do README: a skill INSTALADA É o destino (clone direto).
-cp -r "$SKILL" "$HOME/.claude/skills/deep-orchestrator-agent-skill"
-out=$("$HOME/.claude/skills/deep-orchestrator-agent-skill/scripts/sync-global-skill.sh" 2>&1); rc=$?
-chk "R5 exit 0" "$rc" "0"
-has "R5 reconhece que o destino é a própria casa" "$out" "É a própria casa da skill"
-chk "R5 a skill continua legível (sem ELOOP)" \
-  "$([ -r "$HOME/.claude/skills/deep-orchestrator-agent-skill/SKILL.md" ] && echo sim || echo nao)" "sim"
-chk "R5 scripts/ continua alcançável" \
-  "$([ -d "$HOME/.claude/skills/deep-orchestrator-agent-skill/scripts" ] && echo sim || echo nao)" "sim"
-chk "R5 nenhum .bak criado" \
-  "$(ls -d "$HOME/.claude/skills"/deep-orchestrator-agent-skill.bak-* 2>/dev/null | wc -l | tr -d ' ')" "0"
-# Irmão do R5: um symlink CORRETO também resolve para $SOURCE. Ele NÃO pode ser
-# anunciado como "é a própria casa" — é o caso mais comum e a mensagem errada
-# mascararia o que o script de fato fez.
-newcase r5b
-mkdir -p "$HOME/.agents/skills"
-ln -sfn "$SKILL" "$HOME/.agents/skills/deep-orchestrator-agent-skill"
-out=$("$SYNC" 2>&1)
-has "R5b symlink correto é anunciado como symlink" "$out" "symlink já aponta para a casa da skill"
-hasnt "R5b e NÃO como 'a própria casa'" "$out" "É a própria casa da skill"
-
-# R6 (P2) — cópia velha VIRA symlink, e só é aceita se der para ler através.
-newcase r6
-mkdir -p "$HOME/.jcode/skills/deep-orchestrator-agent-skill"
-printf -- '---\nname: deep-orchestrator-agent-skill\n---\nvelho\n' > "$HOME/.jcode/skills/deep-orchestrator-agent-skill/SKILL.md"
-out=$("$SKILL/scripts/sync-global-skill.sh" 2>&1)
-has "R6 cópia trocada por symlink" "$out" "jcode: CÓPIA"
-chk "R6 destino é symlink" \
-  "$([ -L "$HOME/.jcode/skills/deep-orchestrator-agent-skill" ] && echo sim || echo nao)" "sim"
-chk "R6 e resolve para a casa da skill" \
-  "$(cd "$HOME/.jcode/skills/deep-orchestrator-agent-skill" && pwd -P)" "$SKILL"
-chk "R6 backup da cópia preservado" \
-  "$(ls -d "$HOME/.jcode/skills"/deep-orchestrator-agent-skill.bak-* 2>/dev/null | wc -l | tr -d ' ')" "1"
-# diretório de terceiro NUNCA é tocado
-mkdir -p "$HOME/.pi/agent/skills/deep-orchestrator-agent-skill"
-printf -- '---\nname: outra-coisa\n---\n' > "$HOME/.pi/agent/skills/deep-orchestrator-agent-skill/SKILL.md"
-out=$("$SKILL/scripts/sync-global-skill.sh" 2>&1)
-chk "R6 diretório alheio preservado" \
-  "$([ -f "$HOME/.pi/agent/skills/deep-orchestrator-agent-skill/SKILL.md" ] && echo sim || echo nao)" "sim"
-has "R6 e reportado, não apagado" "$out" "PRESERVADO"
 
 echo "=== DC4: com o portão DESLIGADO, a FASE 2.5 é inerte ==="
 # A garantia mais importante da feature: quem NÃO pediu um plano tem exatamente

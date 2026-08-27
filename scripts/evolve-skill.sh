@@ -43,7 +43,7 @@
 #   • a casa da skill é resolvida pela localização DESTE script, com pwd -P
 #     colapsando a cadeia de symlinks — o cwd de invocação é irrelevante;
 #   • sem repositório git válido → exit 2 (skill instalada por CÓPIA: rode
-#     scripts/sync-global-skill.sh para converter para symlink);
+#     instale a skill como symlink para o repositório);
 #   • guarda de identidade: só opera se o SKILL.md contém exatamente
 #     'name: deep-orchestrator-agent-skill';
 #   • ALLOWLIST do CORPO (relativos a SKILL_REPO): SKILL.md (raiz E
@@ -94,7 +94,7 @@ fi
 # por CÓPIA num lugar sem repositório: não há onde commitar a evolução do corpo.
 SKILL_REPO="$(git -C "$SKILL_HOME" rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -z "$SKILL_REPO" ]; then
-  err "skill instalada por CÓPIA sem git — rode scripts/sync-global-skill.sh para converter para symlink"
+  err "skill instalada por CÓPIA sem git — reinstale-a como symlink para o repositório (a FASE 0 resolve scripts/ pela localização da própria skill)"
   exit 2
 fi
 

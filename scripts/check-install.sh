@@ -13,7 +13,7 @@
 #
 # Layout aceito (qualquer um dos dois resolvidos como $SKILL_HOME):
 #   • a RAIZ do repositório (SKILL.md real ou symlink + scripts/ + prompts/),
-#     que é o alvo do sync-global-skill.sh; ou
+#     que pode ser o alvo de uma instalação manual por symlink; ou
 #   • a pasta .claude/skills/deep-orchestrator-agent-skill/ (padrão Claude
 #     Code), que espelha scripts/ e prompts/ por symlink para a
 #     raiz — também é uma casa válida desde a v3.5.1.
@@ -97,7 +97,6 @@ check "scripts/ search-parallel.sh"   "$ROOT/scripts/search-parallel.sh" x
 check "scripts/ check-search-credits.sh" "$ROOT/scripts/check-search-credits.sh" x
 check "scripts/ check-plannotator.sh" "$ROOT/scripts/check-plannotator.sh" x
 check "scripts/ plan-approval.sh"     "$ROOT/scripts/plan-approval.sh" x
-check "scripts/ sync-global-skill.sh" "$ROOT/scripts/sync-global-skill.sh" x
 check "scripts/ evolve-skill.sh"      "$ROOT/scripts/evolve-skill.sh" x
 check "scripts/ do-prefs.sh"          "$ROOT/scripts/do-prefs.sh" x
 check "scripts/ evolution-survey.sh"  "$ROOT/scripts/evolution-survey.sh" x
