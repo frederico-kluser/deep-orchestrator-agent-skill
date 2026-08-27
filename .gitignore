@@ -5,3 +5,8 @@ EXPLAINER.html
 # usuário ficaria com '?? .deep-orchestrator/' no git status dele, contendo o
 # documento do plano e os comentários que ele mesmo escreveu na revisão.
 .deep-orchestrator/
+# Prefs de evolução (v3.8.0): memória consultiva da skill — dicas globais
+# (global-tips.md) e propostas pendentes. NUNCA versionada: a evolução não
+# polui o repo da skill. O script scripts/do-prefs.sh garante a mesma linha
+# no .gitignore de cada projeto onde prefs forem salvas.
+.deep-orchestrator-preferences/
