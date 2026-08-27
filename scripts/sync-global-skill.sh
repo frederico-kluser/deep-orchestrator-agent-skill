@@ -19,6 +19,7 @@
 # Destinos (só os que JÁ existem — nenhum agente é "instalado" por aqui):
 #   ~/.claude/skills/            Claude Code   (respeita $CLAUDE_CONFIG_DIR)
 #   ~/.agents/skills/            pi · jcode · opencode (raiz comum)
+#   ~/.dsh/skills/               DSH — DeepSeek Harness (respeita $DSH_HOME)
 #   ~/.jcode/skills/             jcode  (importa por CÓPIA — o caso que dói)
 #   ~/.pi/agent/skills/          pi     (skills globais, sempre confiáveis)
 #
@@ -213,6 +214,7 @@ say "  casa da skill: $SOURCE"
 # CLAUDE_CONFIG_DIR existe e é usado: hardcodar ~/.claude erra em quem o define.
 link_into "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills" "claude-code"
 link_into "$HOME/.agents/skills"                        "agents (pi/jcode/opencode)"
+link_into "${DSH_HOME:-$HOME/.dsh}/skills"              "dsh (DeepSeek Harness)"
 link_into "$HOME/.jcode/skills"                         "jcode"
 link_into "$HOME/.pi/agent/skills"                      "pi"
 
