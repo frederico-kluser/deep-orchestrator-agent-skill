@@ -1,72 +1,48 @@
 #!/usr/bin/env bash
-# Testes de aceitação do motor de AUTO-EVOLUÇÃO — E1..E30 (v3.7.0)
+# Testes de aceitação do motor de EVOLUÇÃO v3.8.0 — F1..F13, S1..S10, E1..E6
 #
 # Cada caso roda ISOLADO num repo fake da skill (git init + SKILL.md com
-# identidade + scripts/evolve-skill.sh COPIADO), com HOME/tmp próprios, SEM
-# rede. O script sob teste resolve a casa da skill pela própria localização
-# (pwd -P) — por isso o fixture precisa de uma CÓPIA do script dentro do repo
-# fake; o cwd de invocação é irrelevante (E1 prova isso).
-#   E1:  resolução — invocado de cwd FORA do repo fake, add/search/diff/
-#        apply/consolidate/status funcionam contra ele
-#   E2:  guarda de identidade — SKILL.md sem 'name: ...' → exit 3
-#   E3:  instalação por CÓPIA sem .git → exit 2 com a mensagem sync-global-skill.sh
-#   E4:  add valida — candidato sem source → exit 2 e NADA escrito (lote atômico)
-#   E5:  secret_scan — api_key=abc123 → exit 2 e o valor NUNCA impresso;
-#        "O token de acesso expira" → PASSA (exit 0)
-#   E6:  dedupe no add — mesma entrada 2× → 1 entrada, 2ª reportada duplicada
-#   E7:  ids — primeiro add real = LEARN-<hoje>-001, segundo = -002 (template
-#        em fence + placeholder no arquivo não deslocam)
-#   E8:  parser/fence — LEARNINGS.md real (template ```markdown) → status conta
-#        0 entradas; add anexa ao final; consolidate --dry-run NÃO toca o arquivo
-#   E9:  consolidate contradição — par (mesmo type+tags+título similar, datas
-#        distintas) → a nova vence; a antiga vira superseded + supersedes +
-#        ~~…~~ (obsoleto …); NADA é apagado
-#   E10: dedupe do consolidate — par idêntico → só a nova no LEARNINGS.md;
-#        a antiga no archive 1×; 2º run arquiva 0
-#   E11: anti-poisoning — entradas source=web NUNCA viram proposta de promoção
-#   E12: promoção proposta — 2 entradas source=user (datas distintas) → imprime
-#        PROPOSTA sem escrever no SKILL.md
-#   E13: orçamento — LEARNINGS.md perto do teto → add avisa ORÇAMENTO;
-#        consolidate move as mais antigas ao learnings_archive.md
-#   E14: apply default inteligente — só LEARNINGS.md mudou → commit DIRETO no
-#        branch atual (evolve(learnings): …); SKILL.md também mudou → branch
-#        evolve/YYYY-MM-DD e commit lá
-#   E15: allowlist/staged — segredo.txt criado E staged → apply --direct exit 4,
-#        NÃO commitado, staged INTACTO; staged só na allowlist → commit normal
-#   E16: flock — lock segurado em outro processo → apply sai != 0 COM mensagem
-#        no stderr (não mudo)
-#   E17: search — termo presente → exit 0 com id|data|type|confidence|source|
-#        título; ausente → exit 1
-#   E18: add paralelo — 5 pares de add concorrentes → 10 entradas, 10 ids únicos
-#   E19: --dry-run — add e consolidate NÃO escrevem nada (git status limpo)
-#   E20: apply idempotente — sem mudanças → exit 0, sem commit novo
-#   E21: add aceita o formato do TEMPLATE (corpo '- **Observação:**'/
-#        '- **Ação:**' + título '## ') e o anexa; frontmatter VENCE se ambas
-#        presentes (F-A1)
-#   E22: mudança no SKILL.md REAL (.claude/skills/.../SKILL.md) → apply sem
-#        flags cria branch evolve/YYYY-MM-DD (NUNCA commit direto) e commita lá
-#        (F-A2)
-#   E23: superseded NÃO aparece no Índice após consolidate, mas permanece no
-#        corpo marcada (F-3)
-#   E24: add com entrada vazia → exit 0, 'nada a adicionar', nada escrito (F-4)
-#   E25: contrato — 'contract: comando-inexistente-xyz' → consolidate marca
-#        superseded 'contrato quebrado'; 'contract: bash' passa (F-5)
-#   E26: supersessão por CONFIANÇA — web (nova) NUNCA supersede user (antiga):
-#        a user vence, a web é marcada superseded; a web NÃO é proposta na
-#        mesma execução (estado pós-supersessão) (F-10)
-#   E27: índice > 30 linhas → add avisa 'ÍNDICE: rode consolidate' (F-6)
-#   E28: dois candidatos body-only (títulos diferentes) separados por '---' →
-#        add anexa 2 entradas, NENHUMA descartada (o 2º bloco não é mesclado
-#        silenciosamente no 1º) (F-11a)
-#   E29: promoção ≥2 restaurada — entrada ativa repo-doc + duplicata arquivada
-#        (mesmo título+type, data diferente) → consolidate --dry-run propõe com
-#        '2 ocorrência(s) em datas distintas'; idêntica situação com fonte
-#        UNTRUSTED (web) → NENHUMA proposta (F-11b)
-#   E30: múltiplas linhas '- **Observação:**' no mesmo bloco são JUNTADAS
-#        (preservadas) na entrada anexada (F-11b)
+# identidade + scripts/do-prefs.sh, scripts/evolution-survey.sh,
+# scripts/evolve-skill.sh e scripts/lib/* COPIADOS), com HOME/tmp próprios,
+# SEM rede. Os scripts sob teste resolvem a casa da skill pela própria
+# localização (pwd -P) — por isso o fixture precisa de uma CÓPIA dos scripts
+# dentro do repo fake; o cwd de invocação é irrelevante.
+#   F1:  load com dirs ausentes → exit 0, seções '(ausente)'
+#   F2:  add-project cria dirs + header + entrada P-<hoje>-001 (scope/status
+#        corretos) + .gitignore do projeto ganha a linha (idempotente)
+#   F3:  dedupe no add-project — mesma entrada 2× → 2ª duplicada, ignorada
+#   F4:  add-global escreve em global-tips.md do SKILL_HOME fake
+#   F5:  pending-add grava status: pending em pending/proposals.md
+#   F6:  lote atômico — 2 candidatos, 1 sem scope → exit 2 e NADA escrito
+#   F7:  secret scan — api_key=abc123 → exit 2 e o valor NUNCA impresso
+#   F8:  scope divergente — add-project com scope: global → exit 2, nada escrito
+#   F9:  aprovação remove o pendente equivalente (nunca zumbi)
+#   F10: ensure-gitignore preserva conteúdo do usuário + idempotente + cria
+#        o arquivo se ausente
+#   F11: identidade errada do SKILL.md → exit 3 (add-global)
+#   F12: add com entrada vazia → exit 0, 'nada a adicionar', nada escrito (D9)
+#   F13: aspas ao redor de title/observacao/acao são removidas no armazenamento
+#   S1:  round com annotated + gramática → exit 0; snapshot imutável; título
+#        travado
+#   S2:  answers → answers.json correto (jq E python3 — forçando a rota)
+#   S3:  gramática fora do padrão → resposta ausente → apply pendes a proposta
+#   S4:  approved sem feedback → exit 0, answers vazio → apply pendes TUDO
+#   S5:  dismissed → exit 11
+#   S6:  toolfail (stdout ilegível) → exit 13; retry vira rev-002
+#   S7:  apply roteia sim·global → global-tips; sim·projeto → learnings;
+#        nao → descartada; config: → project-config.md; contagens corretas
+#   S8:  apply idempotente — 2ª chamada com o mesmo answers.json → skip
+#   S9:  deriva de título → exit 2
+#   S10: sem jq E sem python3 no PATH → round sai 2 com mensagem acionável
+#   E1:  evolve-skill.sh search encontra em global-tips.md e em prefs do
+#        projeto (--project)
+#   E2:  evolve-skill.sh add → exit 2 com a mensagem de migração
+#   E3:  evolve-skill.sh status mostra versão e prefs
+#   E4:  apply de corpo → branch evolve/<hoje> SEMPRE (nunca commit direto)
+#   E5:  apply com staged fora da allowlist → exit 4, índice INTACTO
+#   E6:  diff --stat funciona sobre os paths do corpo
 set -uo pipefail
 SKILL=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
-EVOLVE_SRC="$SKILL/scripts/evolve-skill.sh"
 LAB="${TMPDIR:-/tmp}/evolve-accept-$$"
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  \033[32mPASS\033[0m %s\n' "$*"; }
@@ -74,564 +50,403 @@ bad()  { FAIL=$((FAIL+1)); printf '  \033[31mFAIL\033[0m %s\n' "$*"; }
 chk()  { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (esperado='$3' obtido='$2')"; fi; }
 
 rm -rf "$LAB"; mkdir -p "$LAB"; cd "$LAB"
-trap 'rm -rf -- "$LAB"' EXIT   # nunca deixar labs /tmp/evolve-accept-* órfãos
+trap 'rm -rf -- "$LAB"' EXIT
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 
 TODAY=$(date +%Y%m%d)
 TODAY_C=$(date +%F)
-REALID='^id: LEARN-[0-9]{8}-[0-9]{3}$'
 
-# --- fixture: repo fake da skill (evolve-skill.sh COPIADO; cwd fica fora) -----
+# --- fixture: repo fake da skill (scripts COPIADOS; cwd fica fora) ------------
 newcase() { # <nome> — dir próprio do caso com repo fake isolado
   CASE="$LAB/$1"
   rm -rf "$CASE"
-  mkdir -p "$CASE/repo/scripts"
+  mkdir -p "$CASE/repo/scripts/lib"
   git init -q -b main "$CASE/repo"
   git -C "$CASE/repo" config user.name t
   git -C "$CASE/repo" config user.email t@t
-  cp "$EVOLVE_SRC" "$CASE/repo/scripts/evolve-skill.sh"
-  chmod +x "$CASE/repo/scripts/evolve-skill.sh"
+  cp "$SKILL/scripts/do-prefs.sh" "$SKILL/scripts/evolution-survey.sh" \
+     "$SKILL/scripts/evolve-skill.sh" "$CASE/repo/scripts/"
+  cp "$SKILL/scripts/lib/evolve-common.sh" "$SKILL/scripts/lib/plannotator-common.sh" \
+     "$CASE/repo/scripts/lib/"
+  chmod +x "$CASE/repo/scripts/"*.sh
+  DO_PREFS="$CASE/repo/scripts/do-prefs.sh"
+  SURVEY="$CASE/repo/scripts/evolution-survey.sh"
   EVOLVE="$CASE/repo/scripts/evolve-skill.sh"
+  SKILL_REPO="$CASE/repo"
+  GLOBAL_TIPS="$SKILL_REPO/.deep-orchestrator-preferences/global-tips.md"
+  GLOBAL_PENDING="$SKILL_REPO/.deep-orchestrator-preferences/pending/proposals.md"
   cd "$CASE" || exit 1
 }
 
 write_skill() { # SKILL.md com identidade correta (grep -qx exige a linha exata)
-  cat > "$CASE/repo/SKILL.md" <<'EOF'
+  cat > "$SKILL_REPO/SKILL.md" <<'EOF'
 ---
 name: deep-orchestrator-agent-skill
-description: fixture de teste do motor de auto-evolucao
+description: fixture de teste do motor de evolucao v3.8.0
 metadata:
-  version: "3.7.0"
+  version: "3.8.0"
 ---
 EOF
 }
 
-seed_learnings() { # LEARNINGS.md REAL (header + template em code fence) como fixture
-  cp "$SKILL/LEARNINGS.md" "$CASE/repo/LEARNINGS.md"
-}
-
 commit_all() { # <msg> — commita tudo do repo fake
-  git -C "$CASE/repo" add -A
-  git -C "$CASE/repo" commit -qm "$1"
+  git -C "$SKILL_REPO" add -A
+  git -C "$SKILL_REPO" commit -qm "$1"
 }
 
-candidate() { # <arquivo> <título> <type> <confidence> <source> <tags> <obs> <acao>
+# proj_fixture: cria um repo fake de PROJETO separado
+proj_fixture() { # <nome>
+  PROJ="$CASE/$1"
+  rm -rf "$PROJ"; mkdir -p "$PROJ"
+  git init -q -b main "$PROJ"
+  git -C "$PROJ" config user.name t
+  git -C "$PROJ" config user.email t@t
+  printf 'node_modules/\n' > "$PROJ/.gitignore"
+  git -C "$PROJ" add -A && git -C "$PROJ" commit -qm init
+  PROJ_PREFS="$PROJ/.deep-orchestrator-preferences"
+}
+
+candidate() { # <arquivo> <key> <título> <scope> <type> <confidence> <source> <obs> <acao>
   local f="$1"; shift
   {
     printf -- '---\n'
-    printf 'title: %s\n' "$1"
-    printf 'type: %s\n' "$2"
-    printf 'confidence: %s\n' "$3"
-    printf 'source: %s\n' "$4"
-    printf 'tags: %s\n' "$5"
-    printf 'observacao: %s\n' "$6"
-    printf 'acao: %s\n' "$7"
+    printf 'key: %s\n' "$1"
+    printf 'title: "%s"\n' "$2"
+    printf 'scope: %s\n' "$3"
+    printf 'type: %s\n' "$4"
+    printf 'confidence: %s\n' "$5"
+    printf 'source: %s\n' "$6"
+    printf 'tags: [test]\n'
+    printf 'observacao: "%s"\n' "$7"
+    printf 'acao: "%s"\n' "$8"
     printf -- '---\n'
   } > "$f"
 }
 
-candidate_append() { # <arquivo> ... — bloco ADICIONAL (sem '---' inicial; blocos
-  # precisam ficar ADJACENTES: linha em branco entre blocos criaria um candidato
-  # vazio e o lote seria rejeitado)
-  local f="$1"; shift
-  {
-    printf 'title: %s\n' "$1"
-    printf 'type: %s\n' "$2"
-    printf 'confidence: %s\n' "$3"
-    printf 'source: %s\n' "$4"
-    printf 'tags: %s\n' "$5"
-    printf 'observacao: %s\n' "$6"
-    printf 'acao: %s\n' "$7"
-    printf -- '---\n'
-  } >> "$f"
-}
-
-entry() { # <id> <date> <type> <conf> <source> <tags> <title> <obs> <acao>
-  printf -- '---\nid: %s\ndate: "%s"\ntype: %s\nconfidence: %s\nsource: %s\nstatus: active\nsupersedes: ""\ntags: %s\n---\n## %s\n- **Observação:** %s\n- **Ação:** %s\n' \
-    "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9"
-}
-
-learnings_head() { # <título1> <type1> <id1> [<título2> <type2> <id2> ...] — cabeçalho + Índice
-  printf '# LEARNINGS — deep-orchestrator-agent-skill\n\n> Memória episódica (fixture de teste).\n\n## Índice\n\n'
-}
-
-echo "=== E1: resolução — cwd FORA do repo fake; CLI completa funciona ==="
-newcase e1
-write_skill; seed_learnings; commit_all init
-candidate "$CASE/c1.txt" "Cache invalidation gotcha" gotcha high user "[cache, build]" "invalidar o cache de build" "rodar clean antes"
-"$EVOLVE" add "$CASE/c1.txt" >/dev/null 2>&1; chk "E1 add exit 0" "$?" "0"
-chk "E1 primeiro id = LEARN-<hoje>-001" "$(grep -E "$REALID" "$CASE/repo/LEARNINGS.md" | head -1 | sed 's/^id: //')" "LEARN-$TODAY-001"
-"$EVOLVE" search cache >/dev/null 2>&1;   chk "E1 search exit 0" "$?" "0"
-"$EVOLVE" diff >/dev/null 2>&1;           chk "E1 diff exit 0" "$?" "0"
-"$EVOLVE" apply >/dev/null 2>&1;          chk "E1 apply exit 0" "$?" "0"
-chk "E1 branch atual preservado (main)" "$(git -C "$CASE/repo" rev-parse --abbrev-ref HEAD)" "main"
-"$EVOLVE" consolidate --dry-run >/dev/null 2>&1; chk "E1 consolidate exit 0" "$?" "0"
-"$EVOLVE" status >/dev/null 2>&1;         chk "E1 status exit 0" "$?" "0"
-
-echo "=== E2: guarda de identidade — SKILL.md sem o name esperado → exit 3 ==="
-newcase e2
-printf -- '---\nname: outra-skill\ndescription: fixture\nmetadata:\n  version: "3.7.0"\n---\n' > "$CASE/repo/SKILL.md"
-"$EVOLVE" status >/dev/null 2>&1; chk "E2 exit 3" "$?" "3"
-out=$("$EVOLVE" status 2>&1)
-case "$out" in *"não é a casa desta skill"*) ok "E2 mensagem clara de identidade" ;;
-  *) bad "E2 sem mensagem de identidade: $out" ;; esac
-
-echo "=== E3: instalação por CÓPIA sem .git → exit 2 + sync-global-skill.sh ==="
-newcase e3
-rm -rf "$CASE"
-mkdir -p "$CASE/nogit/scripts"
-cp "$EVOLVE_SRC" "$CASE/nogit/scripts/evolve-skill.sh"
-chmod +x "$CASE/nogit/scripts/evolve-skill.sh"
-printf -- '---\nname: deep-orchestrator-agent-skill\ndescription: fixture\nmetadata:\n  version: "3.7.0"\n---\n' > "$CASE/nogit/SKILL.md"
-out=$("$CASE/nogit/scripts/evolve-skill.sh" status 2>&1); rc=$?
-chk "E3 exit 2" "$rc" "2"
-case "$out" in *sync-global-skill.sh*) ok "E3 mensagem manda rodar sync-global-skill.sh" ;;
-  *) bad "E3 sem a instrução de conversão: $out" ;; esac
-
-echo "=== E4: add valida — candidato sem source → exit 2 e NADA escrito ==="
-newcase e4
-write_skill; seed_learnings; commit_all init
-printf -- '---\ntitle: Sem source\ntype: fact\nconfidence: high\ntags: [a]\nobservacao: obs\nacao: acao\n---\n' > "$CASE/bad.txt"
-out=$("$EVOLVE" add "$CASE/bad.txt" 2>&1); rc=$?
-chk "E4 exit 2" "$rc" "2"
-chk "E4 lote rejeitado (mensagem)" "$(echo "$out" | grep -c 'lote REJEITADO' || true)" "1"
-chk "E4 nada escrito (porcelain)" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
-chk "E4 nenhum id novo" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "0"
-
-echo "=== E5: secret_scan — api_key=abc123 rejeitado (valor nunca impresso); token textual passa ==="
-newcase e5
-write_skill; seed_learnings; commit_all init
-printf -- '---\ntitle: Vazou segredo\ntype: fact\nconfidence: high\nsource: user\ntags: [s]\nobservacao: a api_key=abc123 foi usada\nacao: nao repetir\n---\n' > "$CASE/secret.txt"
-out=$("$EVOLVE" add "$CASE/secret.txt" 2>&1); rc=$?
-chk "E5 api_key=... → exit 2" "$rc" "2"
-chk "E5 segredo detectado (mensagem)" "$(echo "$out" | grep -c 'segredo' || true)" "1"
-chk "E5 valor NUNCA impresso (stdout+stderr)" "$(echo "$out" | grep -c 'abc123' || true)" "0"
-chk "E5 nada escrito" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "0"
-candidate "$CASE/ok.txt" "Token expira" fact high user "[t]" "O token de acesso expira em 30 dias" "renovar antes"
-out2=$("$EVOLVE" add "$CASE/ok.txt" 2>&1); rc2=$?
-chk "E5 'O token de acesso expira' passa (exit 0)" "$rc2" "0"
-chk "E5 entrada escrita" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "1"
-
-echo "=== E6: dedupe no add — mesma entrada 2× → 1 entrada, 2ª duplicada ==="
-newcase e6
-write_skill; seed_learnings; commit_all init
-candidate "$CASE/dup.txt" "Mesma entrada" fact high user "[a]" "obs" "acao"
-candidate_append "$CASE/dup.txt" "Mesma entrada" fact high user "[a]" "obs" "acao"
-out=$("$EVOLVE" add "$CASE/dup.txt" 2>&1); rc=$?
-chk "E6 exit 0" "$rc" "0"
-chk "E6 2ª reportada duplicada" "$(echo "$out" | grep -c 'duplicada, ignorada' || true)" "1"
-chk "E6 só 1 entrada real" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "1"
-
-echo "=== E7: ids sequenciais — 001, 002 (template em fence NÃO desloca) ==="
-newcase e7
-write_skill; seed_learnings; commit_all init
-candidate "$CASE/a.txt" "Primeira entrada" fact high user "[a]" "obs1" "acao1"
-candidate "$CASE/b.txt" "Segunda entrada" fact medium repo-doc "[b]" "obs2" "acao2"
-"$EVOLVE" add "$CASE/a.txt" >/dev/null 2>&1
-"$EVOLVE" add "$CASE/b.txt" >/dev/null 2>&1
-ids=$(grep -E "$REALID" "$CASE/repo/LEARNINGS.md" | sed 's/^id: //' | tr '\n' ' ')
-chk "E7 primeiro id = -001" "$(echo "$ids" | awk '{print $1}')" "LEARN-$TODAY-001"
-chk "E7 segundo id = -002" "$(echo "$ids" | awk '{print $2}')" "LEARN-$TODAY-002"
-chk "E7 template com placeholder preservado" "$(grep -c 'id: LEARN-YYYYMMDD-NNN' "$CASE/repo/LEARNINGS.md")" "1"
-
-echo "=== E8: parser ignora code fence — status conta 0; add anexa ao final; dry-run não toca ==="
-newcase e8
-write_skill; seed_learnings; commit_all init
-out=$("$EVOLVE" status 2>&1)
-chk "E8 status conta 0 entradas (template ignorado)" "$(echo "$out" | grep -cE 'entradas +: 0 \(ativas 0' || true)" "1"
-candidate "$CASE/a.txt" "Entrada real" gotcha high user "[g]" "obs" "acao"
-"$EVOLVE" add "$CASE/a.txt" >/dev/null 2>&1
-chk "E8 add anexou ao FINAL do arquivo" "$(tail -6 "$CASE/repo/LEARNINGS.md" | grep -cE '^## Entrada real$' || true)" "1"
-cp "$CASE/repo/LEARNINGS.md" "$CASE/antes.md"
-"$EVOLVE" consolidate --dry-run >/dev/null 2>&1
-chk "E8 consolidate --dry-run NÃO toca o arquivo" "$(cmp -s "$CASE/antes.md" "$CASE/repo/LEARNINGS.md" && echo sim || echo nao)" "sim"
-chk "E8 template em fence intacto" "$(grep -c '^```markdown$' "$CASE/repo/LEARNINGS.md")" "1"
-
-echo "=== E9: consolidate — contradição (type+tags+título similar, datas distintas) ==="
-newcase e9
-write_skill
-{
-  learnings_head
-  printf -- '- 2026-08-01 | gotcha | Sempre use o flag cache ao rodar builds [id: LEARN-20260801-001]\n'
-  printf -- '- 2026-08-22 | gotcha | Sempre use cache ao rodar builds [id: LEARN-20260822-001]\n\n'
-  entry LEARN-20260801-001 2026-08-01 gotcha high user "[build, cache]" "Sempre use o flag cache ao rodar builds" "versao antiga" "usar cache"
-  printf '\n'
-  entry LEARN-20260822-001 2026-08-22 gotcha high user "[build, cache]" "Sempre use cache ao rodar builds" "versao nova" "usar cache"
-} > "$CASE/repo/LEARNINGS.md"
-commit_all init
-out=$("$EVOLVE" consolidate --apply 2>&1); rc=$?
-chk "E9 consolidate --apply exit 0" "$rc" "0"
-chk "E9 superseded reportado" "$(echo "$out" | grep -c 'superseded: LEARN-20260801-001 (2026-08-01)' || true)" "1"
-chk "E9 antiga vira status: superseded" "$(grep -c '^status: superseded$' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E9 antiga ganha supersedes" "$(grep -c '^supersedes: "LEARN-20260822-001"$' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E9 corpo marcado ~~…~~ (obsoleto …)" "$(grep -c '^## ~~Sempre use o flag cache ao rodar builds~~' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E9 NADA apagado (2 ids presentes)" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md")" "2"
-
-echo "=== E10: consolidate — dedupe de par idêntico; archive 1×; 2º run arquiva 0 ==="
-newcase e10
-write_skill
-{
-  learnings_head
-  printf -- '- 2026-08-01 | gotcha | Mesmo titulo [id: LEARN-20260801-001]\n'
-  printf -- '- 2026-08-22 | gotcha | Mesmo titulo [id: LEARN-20260822-001]\n\n'
-  entry LEARN-20260801-001 2026-08-01 gotcha high user "[build]" "Mesmo titulo" "obs A" "acao A"
-  printf '\n'
-  entry LEARN-20260822-001 2026-08-22 gotcha high user "[build]" "Mesmo titulo" "obs B" "acao B"
-} > "$CASE/repo/LEARNINGS.md"
-commit_all init
-"$EVOLVE" consolidate --apply >/dev/null 2>&1; rc=$?
-chk "E10 1ª consolidação exit 0" "$rc" "0"
-chk "E10 LEARNINGS só com a nova" "$(grep -cE '^id: LEARN-20260822-001$' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E10 antiga no archive 1×" "$(grep -cE '^id: LEARN-20260801-001$' "$CASE/repo/learnings_archive.md")" "1"
-out2=$("$EVOLVE" consolidate --apply 2>&1)
-chk "E10 2º run arquiva 0 duplicatas" "$(echo "$out2" | grep -c '0 duplicata(s) arquivada(s)' || true)" "1"
-chk "E10 archive não cresceu na 2ª" "$(grep -cE '^id: LEARN-20260801-001$' "$CASE/repo/learnings_archive.md")" "1"
-
-echo "=== E11: anti-poisoning — source=web NUNCA vira proposta de promoção ==="
-newcase e11
-write_skill
-{
-  learnings_head
-  printf -- '- 2026-08-01 | fact | Achado da web [id: LEARN-20260801-001]\n'
-  printf -- '- 2026-08-22 | fact | Achado da web [id: LEARN-20260822-001]\n\n'
-  entry LEARN-20260801-001 2026-08-01 fact high web "[web]" "Achado da web" "obs A" "acao A"
-  printf '\n'
-  entry LEARN-20260822-001 2026-08-22 fact high web "[web]" "Achado da web" "obs B" "acao B"
-} > "$CASE/repo/LEARNINGS.md"
-commit_all init
-out=$("$EVOLVE" consolidate --dry-run 2>&1); rc=$?
-chk "E11 consolidate exit 0" "$rc" "0"
-chk "E11 nenhuma PROPOSTA de promoção" "$(echo "$out" | grep -c 'PROPOSTAS DE PROMOÇÃO' || true)" "0"
-chk "E11 relatório 'propostas: nenhuma'" "$(echo "$out" | grep -c 'propostas de promoção: nenhuma' || true)" "1"
-
-echo "=== E12: promoção PROPOSTA (source=user, datas distintas) sem escrever no SKILL.md ==="
-newcase e12
-write_skill
-{
-  learnings_head
-  printf -- '- 2026-08-01 | gotcha | Usuario confirmou o fluxo X [id: LEARN-20260801-001]\n'
-  printf -- '- 2026-08-22 | gotcha | Usuario confirmou o fluxo X [id: LEARN-20260822-001]\n\n'
-  entry LEARN-20260801-001 2026-08-01 gotcha high user "[fluxo]" "Usuario confirmou o fluxo X" "obs A" "acao A"
-  printf '\n'
-  entry LEARN-20260822-001 2026-08-22 gotcha high user "[fluxo]" "Usuario confirmou o fluxo X" "obs B" "acao B"
-} > "$CASE/repo/LEARNINGS.md"
-commit_all init
-cp "$CASE/repo/SKILL.md" "$CASE/SKILL.antes"
-out=$("$EVOLVE" consolidate --dry-run 2>&1); rc=$?
-chk "E12 consolidate --dry-run exit 0" "$rc" "0"
-chk "E12 imprime PROPOSTAS DE PROMOÇÃO" "$(echo "$out" | grep -c 'PROPOSTAS DE PROMOÇÃO' || true)" "1"
-nprop=$(echo "$out" | grep -c 'promover para o corpo da skill (SKILL.md/prompts)' || true)
-if [ "$nprop" -ge 1 ]; then ok "E12 linha(s) de proposta (texto)"; else bad "E12 sem linha de proposta"; fi
-chk "E12 SKILL.md NÃO foi escrito" "$(cmp -s "$CASE/SKILL.antes" "$CASE/repo/SKILL.md" && echo sim || echo nao)" "sim"
-chk "E12 porcelain limpo (nada escrito)" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
-
-echo "=== E13: orçamento — add avisa ORÇAMENTO; consolidate move as mais antigas ==="
-newcase e13
-write_skill
-{
-  learnings_head
-  printf -- '- 2026-08-01 | gotcha | Build lento com cache frio [id: LEARN-20260801-001]\n'
-  printf -- '- 2026-08-02 | gotcha | Uso do cache de build [id: LEARN-20260802-001]\n\n'
-  printf -- '---\nid: LEARN-20260801-001\ndate: "2026-08-01"\ntype: gotcha\nconfidence: high\nsource: user\nstatus: active\nsupersedes: ""\ntags: [ci]\n---\n## Build lento com cache frio\n- **Observação:**\n'
-  for i in $(seq 1 110); do printf -- '- detalhe %s do cache frio\n' "$i"; done
-  printf -- '- **Ação:** aquecer o cache\n\n'
-  entry LEARN-20260802-001 2026-08-02 gotcha medium user "[build]" "Uso do cache de build" "obs pequena" "acao pequena"
-} > "$CASE/repo/LEARNINGS.md"
-commit_all init
-candidate "$CASE/n.txt" "Novo aprendizado de orcamento" gotcha low user "[docs]" "obs nova" "acao nova"
-out=$("$EVOLVE" add "$CASE/n.txt" 2>&1)
-chk "E13 add avisa ORÇAMENTO" "$(echo "$out" | grep -c 'ORÇAMENTO' || true)" "1"
-"$EVOLVE" consolidate --apply >/dev/null 2>&1; rc=$?
-chk "E13 consolidate --apply exit 0" "$rc" "0"
-chk "E13 antiga mais antiga movida ao archive" "$(grep -cE '^id: LEARN-20260801-001$' "$CASE/repo/learnings_archive.md")" "1"
-chk "E13 saiu do LEARNINGS.md" "$(grep -cE '^id: LEARN-20260801-001$' "$CASE/repo/LEARNINGS.md")" "0"
-
-echo "=== E14: apply default inteligente — só LEARNINGS → direto; +SKILL.md → branch evolve/ ==="
-newcase e14a
-write_skill; seed_learnings; commit_all init
-candidate "$CASE/a.txt" "Entrada E14" gotcha high user "[g]" "obs" "acao"
-"$EVOLVE" add "$CASE/a.txt" >/dev/null 2>&1
-head_before=$(git -C "$CASE/repo" rev-parse HEAD)
-"$EVOLVE" apply >/dev/null 2>&1; rc=$?
-chk "E14a apply exit 0" "$rc" "0"
-chk "E14a commit DIRETO no branch atual" "$(git -C "$CASE/repo" rev-parse --abbrev-ref HEAD)" "main"
-chk "E14a HEAD avançou" "$([ "$(git -C "$CASE/repo" rev-parse HEAD)" != "$head_before" ] && echo sim || echo nao)" "sim"
-chk "E14a mensagem evolve(learnings):" "$(git -C "$CASE/repo" log -1 --format=%s | grep -c '^evolve(learnings): 1 aprendizado(s)' || true)" "1"
-newcase e14b
-write_skill; seed_learnings; commit_all init
-candidate "$CASE/a.txt" "Entrada E14b" gotcha high user "[g]" "obs" "acao"
-"$EVOLVE" add "$CASE/a.txt" >/dev/null 2>&1
-printf '\n# nota de teste do apply\n' >> "$CASE/repo/SKILL.md"
-"$EVOLVE" apply >/dev/null 2>&1; rc=$?
-chk "E14b apply exit 0" "$rc" "0"
-chk "E14b cria branch evolve/YYYY-MM-DD" "$(git -C "$CASE/repo" rev-parse --abbrev-ref HEAD)" "evolve/$TODAY_C"
-chk "E14b commit no branch novo" "$(git -C "$CASE/repo" log -1 --format=%s | grep -c '^evolve(learnings):' || true)" "1"
-
-echo "=== E15: allowlist/staged — staged fora da allowlist → exit 4, intacto; só allowlist → commit ==="
-newcase e15
-write_skill; seed_learnings; commit_all init
-candidate "$CASE/a.txt" "Entrada E15" gotcha high user "[g]" "obs" "acao"
-"$EVOLVE" add "$CASE/a.txt" >/dev/null 2>&1
-echo segredo > "$CASE/repo/segredo.txt"
-git -C "$CASE/repo" add segredo.txt
-head_before=$(git -C "$CASE/repo" rev-parse HEAD)
-out=$("$EVOLVE" apply --direct 2>&1); rc=$?
-chk "E15 apply --direct exit 4" "$rc" "4"
-chk "E15 mensagem de staged fora da allowlist" "$(echo "$out" | grep -c 'PATH STAGED FORA DA ALLOWLIST: segredo.txt' || true)" "1"
-chk "E15 staged INTACTO (diff --cached)" "$(git -C "$CASE/repo" diff --cached --name-only)" "segredo.txt"
-chk "E15 NADA commitado (HEAD igual)" "$(git -C "$CASE/repo" rev-parse HEAD)" "$head_before"
-git -C "$CASE/repo" reset -q; rm -f "$CASE/repo/segredo.txt"
-git -C "$CASE/repo" add LEARNINGS.md
-out2=$("$EVOLVE" apply --direct 2>&1); rc2=$?
-chk "E15b staged só na allowlist → commit exit 0" "$rc2" "0"
-chk "E15b commitado (mensagem)" "$(echo "$out2" | grep -c 'commitado — evolve(learnings):' || true)" "1"
-
-echo "=== E16: flock — lock ocupado → apply sai != 0 COM mensagem no stderr ==="
-newcase e16
-write_skill; seed_learnings; commit_all init
-lockfile="$(git -C "$CASE/repo" rev-parse --absolute-git-dir)/evolve-skill.lock"
-touch "$lockfile"
-( flock -x "$lockfile" -c "touch $CASE/holder-ready; sleep 3" ) &
-while [ ! -f "$CASE/holder-ready" ]; do sleep 0.02; done
-out=$("$EVOLVE" apply --direct 2>&1); rc=$?
-chk "E16 apply sai != 0 (exit 2)" "$rc" "2"
-chk "E16 mensagem de lock ocupado no stderr" "$(echo "$out" | grep -c 'lock .* ocupado' || true)" "1"
-wait
-
-echo "=== E17: search — presente → exit 0 (id|data|type|confidence|source|título); ausente → exit 1 ==="
-newcase e17
-write_skill; seed_learnings; commit_all init
-candidate "$CASE/a.txt" "Cache invalidation gotcha" gotcha high user "[cache]" "invalidar o cache" "rodar clean antes"
-"$EVOLVE" add "$CASE/a.txt" >/dev/null 2>&1
-out=$("$EVOLVE" search cache 2>&1); rc=$?
-chk "E17 termo presente → exit 0" "$rc" "0"
-chk "E17 linha id|data|type|confidence|source|título" "$(echo "$out" | grep -cE "^LEARN-[0-9]{8}-[0-9]{3} \| [0-9]{4}-[0-9]{2}-[0-9]{2} \| gotcha \| high \| user \| Cache" || true)" "1"
-"$EVOLVE" search zzzplugh-inexistente >/dev/null 2>&1; chk "E17 termo ausente → exit 1" "$?" "1"
-
-echo "=== E18: add PARALELO — 5 pares concorrentes → 10 entradas, 10 ids únicos ==="
-newcase e18
-write_skill; seed_learnings; commit_all init
-for i in 1 2 3 4 5; do
-  candidate "$CASE/cand$i.txt" "Paralelo $i a" fact high user "[p]" "obs $i a" "acao $i a"
-  candidate_append "$CASE/cand$i.txt" "Paralelo $i b" fact high user "[p]" "obs $i b" "acao $i b"
-  "$EVOLVE" add "$CASE/cand$i.txt" --source user >/dev/null 2>&1 &
-done
-wait
-chk "E18 10 entradas" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "10"
-chk "E18 10 ids ÚNICOS" "$(grep -E "$REALID" "$CASE/repo/LEARNINGS.md" | sort -u | wc -l)" "10"
-
-echo "=== E19: --dry-run — add e consolidate NÃO escrevem nada (git status limpo) ==="
-newcase e19
-write_skill; seed_learnings; commit_all init
-candidate "$CASE/a.txt" "Entrada E19" gotcha high user "[g]" "obs" "acao"
-"$EVOLVE" add --dry-run "$CASE/a.txt" >/dev/null 2>&1; rc=$?
-chk "E19 add --dry-run exit 0" "$rc" "0"
-chk "E19 add --dry-run nada escrito (porcelain)" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
-chk "E19 add --dry-run nenhum id" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "0"
-"$EVOLVE" add "$CASE/a.txt" >/dev/null 2>&1
-commit_all wip
-"$EVOLVE" consolidate --dry-run >/dev/null 2>&1; rc2=$?
-chk "E19 consolidate --dry-run exit 0" "$rc2" "0"
-chk "E19 consolidate --dry-run nada escrito (porcelain)" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
-
-echo "=== E20: apply idempotente — sem mudanças → exit 0, sem commit novo ==="
-newcase e20
-write_skill; seed_learnings; commit_all init
-head_before=$(git -C "$CASE/repo" rev-parse HEAD)
-out=$("$EVOLVE" apply 2>&1); rc=$?
-chk "E20 apply exit 0" "$rc" "0"
-chk "E20 sem commit novo (HEAD igual)" "$(git -C "$CASE/repo" rev-parse HEAD)" "$head_before"
-chk "E20 mensagem 'nada a commitar'" "$(echo "$out" | grep -c 'nada a commitar' || true)" "1"
-
-echo "=== E21: add aceita o formato do TEMPLATE (corpo - **Observação:**/- **Ação:**); frontmatter vence ==="
-newcase e21
-write_skill; seed_learnings; commit_all init
-{
-  printf -- '---\ntype: gotcha\nconfidence: high\nsource: user\ntags: [cache, build]\n---\n## Formato do template aceito\n- **Observação:** obs do template\n- **Ação:** acao do template\n---\ntitle: Ambos presentes\ntype: fact\nconfidence: high\nsource: user\ntags: [ambos]\nobservacao: valor do frontmatter\nacao: acao do frontmatter\n---\n## Ambos presentes\n- **Observação:** valor do corpo\n- **Ação:** acao do corpo\n'
-} > "$CASE/tpl.txt"
-out=$("$EVOLVE" add "$CASE/tpl.txt" 2>&1); rc=$?
-chk "E21 add exit 0" "$rc" "0"
-chk "E21 2 entradas anexadas" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "2"
-chk "E21 primeiro id = LEARN-<hoje>-001" "$(grep -E "$REALID" "$CASE/repo/LEARNINGS.md" | head -1 | sed 's/^id: //')" "LEARN-$TODAY-001"
-chk "E21 corpo do template preservado" "$(grep -c -- '- \*\*Observação:\*\* obs do template' "$CASE/repo/LEARNINGS.md" || true)" "1"
-chk "E21 título veio do corpo (## )" "$(grep -c '^## Formato do template aceito$' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E21 frontmatter VENCE (obs do frontmatter)" "$(grep -c 'valor do frontmatter' "$CASE/repo/LEARNINGS.md" || true)" "1"
-chk "E21 corpo NÃO vazou (obs do corpo)" "$(grep -c 'valor do corpo' "$CASE/repo/LEARNINGS.md" || true)" "0"
-
-echo "=== E22: SKILL.md REAL (.claude/skills/...) mudado → apply cria branch evolve/ (NUNCA direto) ==="
-newcase e22
-mkdir -p "$CASE/repo/.claude/skills/deep-orchestrator-agent-skill"
-cat > "$CASE/repo/.claude/skills/deep-orchestrator-agent-skill/SKILL.md" <<'EOF'
----
-name: deep-orchestrator-agent-skill
-description: fixture de teste do motor de auto-evolucao
-metadata:
-  version: "3.7.0"
----
+survey_env() { # ENV_FILE fabricado apontando para o fixture
+  cat > "$CASE/env" <<EOF
+DO_STATE='$CASE/state'
+BASE_DIR='$CASE/proj'
+RUN_ID='fixture'
+DO_PREFS='$DO_PREFS'
+DO_SURVEY='$SURVEY'
+PROJECT_PREFS_DIR='$CASE/proj/.deep-orchestrator-preferences'
+PROJECT_LEARNINGS='$CASE/proj/.deep-orchestrator-preferences/learnings.md'
+GLOBAL_TIPS='$GLOBAL_TIPS'
+PROJECT_CONFIG='$CASE/proj/.deep-orchestrator-preferences/project-config.md'
+PROJECT_PENDING='$CASE/proj/.deep-orchestrator-preferences/pending/proposals.md'
+GLOBAL_PENDING='$GLOBAL_PENDING'
+export DO_STATE BASE_DIR RUN_ID DO_PREFS DO_SURVEY PROJECT_PREFS_DIR PROJECT_LEARNINGS GLOBAL_TIPS PROJECT_CONFIG PROJECT_PENDING GLOBAL_PENDING
 EOF
-ln -s .claude/skills/deep-orchestrator-agent-skill/SKILL.md "$CASE/repo/SKILL.md"
-seed_learnings; commit_all init
-printf '\n# nota de corpo da skill (path real)\n' >> "$CASE/repo/.claude/skills/deep-orchestrator-agent-skill/SKILL.md"
+  mkdir -p "$CASE/state/evolution/survey"
+  # o apply lê as propostas do caminho default sob $DO_STATE
+  PROPOSALS="$CASE/state/evolution/proposals.md"
+}
+
+# nopath_sem <bin1> [bin2...] — PATH espelhado por symlinks, sem os bins dados
+nopath_sem() {
+  NOPATH=$(mktemp -d "$LAB/nopath.XXXXXX")
+  local d b base skip
+  for d in $(printf '%s' "$PATH" | tr ':' ' '); do
+    [ -d "$d" ] || continue
+    for b in "$d"/*; do
+      [ -x "$b" ] || continue
+      base=$(basename "$b")
+      skip=0
+      for x in "$@"; do case "$base" in "$x"|"$x".*) skip=1 ;; esac; done
+      [ "$skip" = 0 ] && ln -sf "$b" "$NOPATH/$base" 2>/dev/null
+    done
+  done
+}
+
+# plannotator FAKE fiel ao contrato (padrão test-plan-approval.sh): usage sem
+# args; envelope json em UMA linha; exit SEMPRE 0. O feedback varia por caso.
+make_fake_plannotator() { # <feedback-json-ou-decision>
+  mkdir -p "$CASE/bin"
+  cat > "$CASE/bin/plannotator" <<EOF
+#!/usr/bin/env bash
+if [ "\$1" = "annotate" ] && [ \$# -ge 1 ]; then
+  printf '%s\n' '$1'
+  exit 0
+fi
+echo "usage: annotate <file>"
+exit 0
+EOF
+  chmod +x "$CASE/bin/plannotator"
+  export DO_PLANNOTATOR_BIN="$CASE/bin/plannotator"
+  export PATH="$CASE/bin:$PATH"
+}
+
+# =============================================================================
+echo "=== F1..F13: do-prefs.sh ==="
+# =============================================================================
+
+newcase f1; write_skill
+mkdir -p "$CASE/rootvazio"
+out=$("$DO_PREFS" load --project "$CASE/rootvazio" 2>&1); rc=$?
+chk "F1 load com dirs ausentes → exit 0" "$rc" "0"
+chk "F1 seção (ausente) presente" "$(printf '%s' "$out" | grep -c '(ausente)')" "5"
+
+newcase f2; write_skill; proj_fixture p
+candidate "$CASE/c.md" "" "Gate deste projeto usa pnpm" project gotcha high user \
+  "npm test falha; runner real é pnpm test." "Usar pnpm test no gate."
+"$DO_PREFS" add-project "$CASE/c.md" --project "$PROJ" >/dev/null 2>&1; rc=$?
+chk "F2 add-project → exit 0" "$rc" "0"
+[ -f "$PROJ_PREFS/learnings.md" ] && chk "F2 learnings.md criado" y y || chk "F2 learnings.md criado" n y
+grep -q "^id: P-$TODAY-001$" "$PROJ_PREFS/learnings.md" && chk "F2 id P-hoje-001" y y || chk "F2 id P-hoje-001" n y
+grep -q "^scope: project$" "$PROJ_PREFS/learnings.md" && chk "F2 scope project" y y || chk "F2 scope project" n y
+grep -q "^status: active$" "$PROJ_PREFS/learnings.md" && chk "F2 status active" y y || chk "F2 status active" n y
+grep -Fqx -- '.deep-orchestrator-preferences/' "$PROJ/.gitignore" && chk "F2 .gitignore do projeto" y y || chk "F2 .gitignore do projeto" n y
+grep -q '^## Gate deste projeto usa pnpm$' "$PROJ_PREFS/learnings.md" && chk "F13 aspas removidas do título" y y || chk "F13 aspas removidas do título" n y
+
+newcase f3; write_skill; proj_fixture p
+candidate "$CASE/c.md" "" "Gate deste projeto usa pnpm" project gotcha high user \
+  "npm test falha." "Usar pnpm test."
+"$DO_PREFS" add-project "$CASE/c.md" --project "$PROJ" >/dev/null 2>&1
+out=$("$DO_PREFS" add-project "$CASE/c.md" --project "$PROJ" 2>&1)
+chk "F3 dedupe: 2ª chamada 'duplicada'" "$(printf '%s' "$out" | grep -c 'duplicada, ignorada')" "1"
+chk "F3 1 entrada no arquivo" "$(grep -c '^id: P-' "$PROJ_PREFS/learnings.md")" "1"
+
+newcase f4; write_skill
+candidate "$CASE/c.md" "" "Sub-agentes background longos são mortos" global gotcha high user \
+  "Bash background de minutos morre." "Usar Monitor."
+"$DO_PREFS" add-global "$CASE/c.md" >/dev/null 2>&1; rc=$?
+chk "F4 add-global → exit 0" "$rc" "0"
+[ -f "$GLOBAL_TIPS" ] && chk "F4 global-tips.md criado" y y || chk "F4 global-tips.md criado" n y
+grep -q "^scope: global$" "$GLOBAL_TIPS" && chk "F4 scope global" y y || chk "F4 scope global" n y
+grep -Fqx -- '.deep-orchestrator-preferences/' "$SKILL_REPO/.gitignore" && chk "F4 .gitignore do repo da skill" y y || chk "F4 .gitignore do repo da skill" n y
+
+newcase f5; write_skill; proj_fixture p
+candidate "$CASE/c.md" "" "Pendente de teste" project gotcha high user "x" "y"
+"$DO_PREFS" pending-add "$CASE/c.md" --project "$PROJ" >/dev/null 2>&1; rc=$?
+chk "F5 pending-add → exit 0" "$rc" "0"
+grep -q "^status: pending$" "$PROJ_PREFS/pending/proposals.md" && chk "F5 status pending" y y || chk "F5 status pending" n y
+
+newcase f6; write_skill; proj_fixture p
+candidate "$CASE/c1.md" "" "A" project gotcha high user "x" "y"
+{ printf '\n---\n'; printf 'title: "B sem scope"\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'observacao: "x"\n'; printf 'acao: "y"\n'; printf -- '---\n'; } >> "$CASE/c1.md"
+"$DO_PREFS" add-project "$CASE/c1.md" --project "$PROJ" >/dev/null 2>&1; rc=$?
+chk "F6 lote atômico → exit 2" "$rc" "2"
+chk "F6 nada escrito" "$([ -f "$PROJ_PREFS/learnings.md" ] && echo 1 || echo 0)" "0"
+
+newcase f7; write_skill; proj_fixture p
+candidate "$CASE/c.md" "" "Segredo" project gotcha high user "api_key=abc123 vazou" "remover"
+out=$("$DO_PREFS" add-project "$CASE/c.md" --project "$PROJ" 2>&1); rc=$?
+chk "F7 secret scan → exit 2" "$rc" "2"
+chk "F7 valor nunca impresso" "$(printf '%s' "$out" | grep -c 'abc123')" "0"
+chk "F7 nada escrito" "$([ -f "$PROJ_PREFS/learnings.md" ] && echo 1 || echo 0)" "0"
+
+newcase f8; write_skill; proj_fixture p
+candidate "$CASE/c.md" "" "Scope errado" global gotcha high user "x" "y"
+out=$("$DO_PREFS" add-project "$CASE/c.md" --project "$PROJ" 2>&1); rc=$?
+chk "F8 scope divergente → exit 2" "$rc" "2"
+chk "F8 mensagem aponta o destino certo" "$(printf '%s' "$out" | grep -c 'use add-global')" "1"
+
+newcase f9; write_skill; proj_fixture p
+candidate "$CASE/c.md" "" "Zumbi nunca" project gotcha high user "x" "y"
+"$DO_PREFS" pending-add "$CASE/c.md" --project "$PROJ" >/dev/null 2>&1
+"$DO_PREFS" add-project "$CASE/c.md" --project "$PROJ" >/dev/null 2>&1
+chk "F9 pendente removido na aprovação" "$(grep -c '^id: P-' "$PROJ_PREFS/pending/proposals.md" 2>/dev/null || true)" "0"
+chk "F9 ativo presente" "$(grep -c '^id: P-' "$PROJ_PREFS/learnings.md")" "1"
+
+newcase f10; write_skill; proj_fixture p
+printf 'minha-linha\n' > "$PROJ/.gitignore"
+"$DO_PREFS" ensure-gitignore --dir "$PROJ" >/dev/null 2>&1
+"$DO_PREFS" ensure-gitignore --dir "$PROJ" >/dev/null 2>&1
+chk "F10 linha acrescentada 1×" "$(grep -c '^\.deep-orchestrator-preferences/$' "$PROJ/.gitignore")" "1"
+chk "F10 conteúdo do usuário preservado" "$(grep -c '^minha-linha$' "$PROJ/.gitignore")" "1"
+mkdir -p "$CASE/vazio" && "$DO_PREFS" ensure-gitignore --dir "$CASE/vazio" >/dev/null 2>&1
+chk "F10 .gitignore criado se ausente" "$([ -f "$CASE/vazio/.gitignore" ] && echo 1 || echo 0)" "1"
+
+newcase f11; proj_fixture p
+printf 'name: outra-skill\n' > "$SKILL_REPO/SKILL.md"
+candidate "$CASE/c.md" "" "X" global gotcha high user "x" "y"
+"$DO_PREFS" add-global "$CASE/c.md" >/dev/null 2>&1; rc=$?
+chk "F11 identidade errada → exit 3" "$rc" "3"
+
+newcase f12; write_skill; proj_fixture p
+: > "$CASE/vazio.md"
+out=$("$DO_PREFS" add-project "$CASE/vazio.md" --project "$PROJ" 2>&1); rc=$?
+chk "F12 entrada vazia → exit 0" "$rc" "0"
+chk "F12 'nada a adicionar'" "$(printf '%s' "$out" | grep -c 'nada a adicionar')" "1"
+chk "F12 nada escrito" "$([ -f "$PROJ_PREFS/learnings.md" ] && echo 1 || echo 0)" "0"
+
+# =============================================================================
+echo "=== S1..S10: evolution-survey.sh ==="
+# =============================================================================
+
+newcase s1; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"decision":"annotated","feedback":"P001: sim · global\nP002: nao\nconfig: usar pnpm test no gate"}'
+candidate "$PROPOSALS" P001 "Background longos" global gotcha high user "Bash morre." "Monitor."
+{ printf '\n'; printf -- '---\n'; printf 'key: P002\n'; printf 'title: "Gate pnpm"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "npm falha."\n'; printf 'acao: "pnpm test."\n'; printf -- '---\n'; } >> "$PROPOSALS"
+cat > "$CASE/questionario.md" <<'EOF'
+# Questionário de evolução — fixture s1
+
+## P001 — Background longos
+
+`P001: sim · global` / `P001: nao`
+
+## P002 — Gate pnpm
+
+`P002: sim · projeto` / `P002: nao`
+EOF
+out=$("$SURVEY" --env "$CASE/env" round "$CASE/questionario.md" 2>/dev/null); rc=$?
+chk "S1 round annotated → exit 0" "$rc" "0"
+chk "S1 linha de contrato" "$(printf '%s' "$out" | grep -c '^EVOLUTION_SURVEY decision=annotated revision=1')" "1"
+[ -f "$CASE/state/evolution/survey/rev-001.md" ] && chk "S1 snapshot" y y || chk "S1 snapshot" n y
+[ -w "$CASE/state/evolution/survey/rev-001.md" ] && chk "S1 snapshot imutável" n y || chk "S1 snapshot imutável" y y
+
+newcase s2; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"decision":"annotated","feedback":"P001: sim · global\nP002: pendente · projeto\nconfig: linha de config"}'
+candidate "$PROPOSALS" P001 "A" global gotcha high user "x" "y"
+{ printf '\n'; printf -- '---\n'; printf 'key: P002\n'; printf 'title: "B"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "x"\n'; printf 'acao: "y"\n'; printf -- '---\n'; } >> "$PROPOSALS"
+printf '# Questionário — s2\n' > "$CASE/q.md"
+"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
+"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1; rc=$?
+chk "S2 answers → exit 0" "$rc" "0"
+if command -v jq >/dev/null 2>&1; then
+  chk "S2 P001 save/scope (jq)" "$(jq -r '.answers.P001.save + "/" + .answers.P001.scope' "$CASE/state/evolution/survey/answers.json")" "sim/global"
+  chk "S2 configs (jq)" "$(jq -r '.configs[0]' "$CASE/state/evolution/survey/answers.json")" "linha de config"
+fi
+if command -v python3 >/dev/null 2>&1; then
+  nopath_sem jq
+  rm -f "$CASE/state/evolution/survey/answers.json"
+  env PATH="$NOPATH" "$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
+  chk "S2 rota python3 ok" "$(python3 -c 'import json;d=json.load(open("'$CASE'/state/evolution/survey/answers.json"));print(d["answers"]["P002"]["save"]+"/"+d["answers"]["P002"]["scope"])')" "pendente/project"
+fi
+
+newcase s3; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"decision":"annotated","feedback":"P001: xpto sem sentido"}'
+candidate "$PROPOSALS" P001 "Fora da gramática" global gotcha high user "x" "y"
+printf '# Questionário — s3\n' > "$CASE/q.md"
+"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
+"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
+"$SURVEY" --env "$CASE/env" apply >/dev/null 2>&1
+chk "S3 resposta ilegível → pendente" "$(grep -c '^id: P-' "$GLOBAL_PENDING" 2>/dev/null || echo 0)" "1"
+chk "S3 nada salvo" "$([ -f "$GLOBAL_TIPS" ] && echo 1 || echo 0)" "0"
+
+newcase s4; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"decision":"approved"}'
+candidate "$PROPOSALS" P001 "A" project gotcha high user "x" "y"
+printf '# Questionário — s4\n' > "$CASE/q.md"
+out=$("$SURVEY" --env "$CASE/env" round "$CASE/q.md" 2>/dev/null); rc=$?
+chk "S4 approved sem feedback → exit 0" "$rc" "0"
+"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
+"$SURVEY" --env "$CASE/env" apply >/dev/null 2>&1
+chk "S4 tudo pendente" "$(grep -c '^id: P-' "$CASE/proj/.deep-orchestrator-preferences/pending/proposals.md" 2>/dev/null || echo 0)" "1"
+chk "S4 nada salvo" "$([ -f "$CASE/proj/.deep-orchestrator-preferences/learnings.md" ] && echo 1 || echo 0)" "0"
+
+newcase s5; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"decision":"dismissed"}'
+printf '# Questionário — s5\n' > "$CASE/q.md"
+"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1; rc=$?
+chk "S5 dismissed → exit 11" "$rc" "11"
+
+newcase s6; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"not":"json-at-all"}'
+printf '# Questionário — s6\n' > "$CASE/q.md"
+"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1; rc=$?
+chk "S6 saída ilegível → exit 13" "$rc" "13"
+make_fake_plannotator '{"decision":"dismissed"}'
+"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1; rc=$?
+chk "S6 retry vira rev-002" "$rc" "11"
+[ -f "$CASE/state/evolution/survey/rev-002.md" ] && chk "S6 rev-002 em disco" y y || chk "S6 rev-002 em disco" n y
+
+newcase s7; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"decision":"annotated","feedback":"P001: sim · global\nP002: sim · projeto\nP003: nao\nconfig: preferencia livre"}'
+candidate "$PROPOSALS" P001 "A global" global gotcha high user "x" "y"
+{ printf '\n'; printf -- '---\n'; printf 'key: P002\n'; printf 'title: "B projeto"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "x"\n'; printf 'acao: "y"\n'; printf -- '---\n'; printf 'key: P003\n'; printf 'title: "C descartada"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "x"\n'; printf 'acao: "y"\n'; printf -- '---\n'; } >> "$PROPOSALS"
+printf '# Questionário — s7\n' > "$CASE/q.md"
+"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
+"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
+out=$("$SURVEY" --env "$CASE/env" apply 2>/dev/null)
+chk "S7 2 salvas · 1 descartada · 0 pendentes" "$(printf '%s' "$out" | grep -o '[0-9]* salva(s) (projeto/global) · [0-9]* descartada(s) · [0-9]* pendente(s)')" "2 salva(s) (projeto/global) · 1 descartada(s) · 0 pendente(s)"
+chk "S7 global-tips tem P001" "$(grep -c '^## A global$' "$GLOBAL_TIPS" 2>/dev/null || echo 0)" "1"
+chk "S7 learnings do projeto tem P002" "$(grep -c '^## B projeto$' "$CASE/proj/.deep-orchestrator-preferences/learnings.md" 2>/dev/null || echo 0)" "1"
+chk "S7 P003 descartada (ausente dos dois)" "$([ -f "$GLOBAL_TIPS" ] && grep -c '^## C descartada$' "$GLOBAL_TIPS" || true)" "0"
+chk "S7 config gravada" "$(grep -c '^- preferencia livre$' "$CASE/proj/.deep-orchestrator-preferences/project-config.md" 2>/dev/null || echo 0)" "1"
+
+newcase s8; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"decision":"annotated","feedback":"P001: nao"}'
+candidate "$PROPOSALS" P001 "A" project gotcha high user "x" "y"
+printf '# Questionário — s8\n' > "$CASE/q.md"
+"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
+"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
+"$SURVEY" --env "$CASE/env" apply >/dev/null 2>&1
+out=$("$SURVEY" --env "$CASE/env" apply 2>/dev/null)
+chk "S8 apply idempotente" "$(printf '%s' "$out" | grep -c 'já executado')" "1"
+
+newcase s9; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"decision":"dismissed"}'
+printf '# Questionário — s9\n' > "$CASE/q.md"
+"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
+printf '# Título diferente — s9\n' > "$CASE/q2.md"
+"$SURVEY" --env "$CASE/env" round "$CASE/q2.md" >/dev/null 2>&1; rc=$?
+chk "S9 deriva de título → exit 2" "$rc" "2"
+
+newcase s10; write_skill; proj_fixture p; survey_env
+make_fake_plannotator '{"decision":"dismissed"}'
+printf '# Questionário — s10\n' > "$CASE/q.md"
+nopath_sem jq python3
+env PATH="$NOPATH" "$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1; rc=$?
+# sem jq/python3 no PATH o pick_json_tool falha — mas o PATH também perde o
+# plannotator fake: resolve_bin acha o DO_PLANNOTATOR_BIN explícito, e o
+# pick_json_tool roda ANTES — rc 2 com a mensagem certa.
+chk "S10 sem jq/python3 → exit 2" "$rc" "2"
+
+# =============================================================================
+echo "=== E1..E6: evolve-skill.sh ==="
+# =============================================================================
+
+newcase e1; write_skill
+candidate "$CASE/c.md" "" "Dica global única" global gotcha high user "observacao marcante zeta" "acao"
+"$DO_PREFS" add-global "$CASE/c.md" >/dev/null 2>&1
+out=$("$EVOLVE" search "marcante"); rc=$?
+chk "E1 search encontra global-tips" "$rc" "0"
+chk "E1 formato id|data|..." "$(printf '%s' "$out" | grep -c ' | .* | .* | .* | .* | Dica global única')" "1"
+proj_fixture p
+mkdir -p "$PROJ_PREFS"
+printf '## Preferências do usuário\n- preferencia marcante dois\n' > "$PROJ_PREFS/project-config.md"
+out=$("$EVOLVE" search "marcante" --project "$PROJ"); rc=$?
+chk "E1 search encontra prefs do projeto" "$rc" "0"
+chk "E1 linha do project-config" "$(printf '%s' "$out" | grep -c 'preferencia marcante dois')" "1"
+"$EVOLVE" search "termo-inexistente-xyz" >/dev/null 2>&1; rc=$?
+chk "E1 search sem resultados → exit 1" "$rc" "1"
+
+newcase e2; write_skill
+out=$("$EVOLVE" add /dev/null 2>&1); rc=$?
+chk "E2 add → exit 2" "$rc" "2"
+chk "E2 mensagem de migração" "$(printf '%s' "$out" | grep -c 'do-prefs.sh')" "1"
+
+newcase e3; write_skill
+out=$("$EVOLVE" status 2>&1); rc=$?
+chk "E3 status → exit 0" "$rc" "0"
+chk "E3 versão 3.8.0" "$(printf '%s' "$out" | grep -c 'versão      : 3.8.0')" "1"
+chk "E3 menção a prefs" "$(printf '%s' "$out" | grep -c 'memória     : .deep-orchestrator-preferences/')" "1"
+
+newcase e4; write_skill; commit_all init
+printf '\n# corpo evoluído\n' >> "$SKILL_REPO/README.md"
+git -C "$SKILL_REPO" config user.name t; git -C "$SKILL_REPO" config user.email t@t
+"$EVOLVE" apply >/dev/null 2>&1; rc=$?
+chk "E4 apply corpo → exit 0" "$rc" "0"
+branch=$(git -C "$SKILL_REPO" symbolic-ref --short HEAD)
+chk "E4 branch evolve/<hoje> SEMPRE" "$branch" "evolve/$TODAY_C"
+
+newcase e5; write_skill; commit_all init
+printf 'segredo-staged\n' > "$SKILL_REPO/fora-allowlist.txt"
+git -C "$SKILL_REPO" add -A
+printf '\n# corpo\n' >> "$SKILL_REPO/README.md"
 out=$("$EVOLVE" apply 2>&1); rc=$?
-chk "E22 apply exit 0" "$rc" "0"
-chk "E22 cria branch evolve/YYYY-MM-DD" "$(git -C "$CASE/repo" rev-parse --abbrev-ref HEAD)" "evolve/$TODAY_C"
-chk "E22 commit no branch novo" "$(git -C "$CASE/repo" log -1 --format=%s | grep -c '^evolve(learnings):' || true)" "1"
-chk "E22 change do SKILL.md real COMMITADO" "$([ -z "$(git -C "$CASE/repo" diff HEAD -- .claude/skills/deep-orchestrator-agent-skill/SKILL.md)" ] && echo sim || echo nao)" "sim"
-chk "E22 porcelain limpo" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
-chk "E22 main NÃO recebeu o commit (sem nota)" "$(git -C "$CASE/repo" show "main:.claude/skills/deep-orchestrator-agent-skill/SKILL.md" | grep -c 'nota de corpo' || true)" "0"
+chk "E5 staged fora da allowlist → exit 4" "$rc" "4"
+staged=$(git -C "$SKILL_REPO" diff --cached --name-only)
+chk "E5 índice INTACTO" "$staged" "fora-allowlist.txt"
 
-echo "=== E23: superseded NÃO aparece no Índice após consolidate (corpo permanece) ==="
-newcase e23
-write_skill
-{
-  learnings_head
-  printf -- '- 2026-08-01 | gotcha | Sempre use o flag cache ao rodar builds [id: LEARN-20260801-001]\n'
-  printf -- '- 2026-08-22 | gotcha | Sempre use cache ao rodar builds [id: LEARN-20260822-001]\n\n'
-  entry LEARN-20260801-001 2026-08-01 gotcha high user "[build, cache]" "Sempre use o flag cache ao rodar builds" "versao antiga" "usar cache"
-  printf '\n'
-  entry LEARN-20260822-001 2026-08-22 gotcha high user "[build, cache]" "Sempre use cache ao rodar builds" "versao nova" "usar cache"
-} > "$CASE/repo/LEARNINGS.md"
-commit_all init
-"$EVOLVE" consolidate --apply >/dev/null 2>&1; rc=$?
-chk "E23 consolidate --apply exit 0" "$rc" "0"
-idx=$(awk '/^## Índice$/{f=1;next} f&&/^---$/{exit} f&&/^- [0-9]{4}-[0-9]{2}-[0-9]{2} \|/{print}' "$CASE/repo/LEARNINGS.md")
-chk "E23 índice tem só 1 linha" "$(echo "$idx" | grep -c . || true)" "1"
-chk "E23 superseded NÃO no índice" "$(echo "$idx" | grep -c 'LEARN-20260801-001' || true)" "0"
-chk "E23 ativa no índice" "$(echo "$idx" | grep -c 'LEARN-20260822-001' || true)" "1"
-chk "E23 superseded permanece no corpo" "$(grep -c '^status: superseded$' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E23 corpo marcado ~~…~~" "$(grep -c '^## ~~Sempre use o flag cache ao rodar builds~~' "$CASE/repo/LEARNINGS.md")" "1"
+newcase e6; write_skill; commit_all init
+printf '\n# corpo\n' >> "$SKILL_REPO/README.md"
+out=$("$EVOLVE" diff --stat 2>&1); rc=$?
+chk "E6 diff --stat → exit 0" "$rc" "0"
+chk "E6 lista README.md" "$(printf '%s' "$out" | grep -c 'README.md')" "1"
 
-echo "=== E24: add com entrada vazia → exit 0, 'nada a adicionar', nada escrito ==="
-newcase e24
-write_skill; seed_learnings; commit_all init
-head_before=$(git -C "$CASE/repo" rev-parse HEAD)
-out=$(printf '' | "$EVOLVE" add - 2>&1); rc=$?
-chk "E24 add vazio exit 0" "$rc" "0"
-chk "E24 mensagem 'nada a adicionar'" "$(echo "$out" | grep -c 'nada a adicionar' || true)" "1"
-chk "E24 nada escrito (porcelain)" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
-chk "E24 HEAD igual" "$(git -C "$CASE/repo" rev-parse HEAD)" "$head_before"
-chk "E24 nenhum id novo" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "0"
-
-echo "=== E25: contrato — contract: comando-inexistente-xyz → superseded 'contrato quebrado'; contract: bash passa ==="
-newcase e25
-write_skill
-{
-  learnings_head
-  printf -- '- 2026-08-01 | fact | Ferramenta ausente no PATH [id: LEARN-20260801-001]\n'
-  printf -- '- 2026-08-02 | fact | Deploy com bash funciona [id: LEARN-20260802-001]\n\n'
-  printf -- '---\nid: LEARN-20260801-001\ndate: "2026-08-01"\ntype: fact\nconfidence: high\nsource: user\nstatus: active\nsupersedes: ""\ntags: [c]\ncontract: comando-inexistente-xyz\n---\n## Ferramenta ausente no PATH\n- **Observação:** obs\n- **Ação:** acao\n\n'
-  printf -- '---\nid: LEARN-20260802-001\ndate: "2026-08-02"\ntype: fact\nconfidence: high\nsource: user\nstatus: active\nsupersedes: ""\ntags: [d]\ncontract: bash\n---\n## Deploy com bash funciona\n- **Observação:** obs2\n- **Ação:** acao2\n'
-} > "$CASE/repo/LEARNINGS.md"
-commit_all init
-out=$("$EVOLVE" consolidate --apply 2>&1); rc=$?
-chk "E25 consolidate --apply exit 0" "$rc" "0"
-chk "E25 reporta contrato quebrado" "$(echo "$out" | grep -c 'contrato quebrado' || true)" "1"
-chk "E25 motivo no corpo" "$(grep -c 'contrato quebrado: comando-inexistente-xyz ausente' "$CASE/repo/LEARNINGS.md" || true)" "1"
-chk "E25 entrada marcada superseded" "$(grep -c '^status: superseded$' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E25 contract: bash passa (ativa)" "$(awk '/^id: LEARN-20260802-001$/{f=1} f&&/^status: /{print;f=0}' "$CASE/repo/LEARNINGS.md")" "status: active"
-
-echo "=== E26: supersessão por CONFIANÇA — web (nova) NUNCA supersede user (antiga); web não proposta ==="
-newcase e26
-write_skill
-{
-  learnings_head
-  printf -- '- 2026-08-01 | gotcha | Use o cache ao rodar builds [id: LEARN-20260801-001]\n'
-  printf -- '- 2026-08-22 | gotcha | Use cache ao rodar builds [id: LEARN-20260822-001]\n\n'
-  entry LEARN-20260801-001 2026-08-01 gotcha high user "[build, cache]" "Use o cache ao rodar builds" "usar cache" "usar cache sempre"
-  printf '\n'
-  entry LEARN-20260822-001 2026-08-22 gotcha high web "[build, cache]" "Use cache ao rodar builds" "achado na web" "usar cache"
-} > "$CASE/repo/LEARNINGS.md"
-commit_all init
-out=$("$EVOLVE" consolidate --apply 2>&1); rc=$?
-chk "E26 consolidate --apply exit 0" "$rc" "0"
-chk "E26 user vence (status active)" "$(awk '/^id: LEARN-20260801-001$/{f=1} f&&/^status: /{print;f=0}' "$CASE/repo/LEARNINGS.md")" "status: active"
-chk "E26 web marcada superseded" "$(awk '/^id: LEARN-20260822-001$/{f=1} f&&/^status: /{print;f=0}' "$CASE/repo/LEARNINGS.md")" "status: superseded"
-chk "E26 web supersedes a user" "$(grep -c '^supersedes: "LEARN-20260801-001"$' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E26 relatório cita UNTRUSTED não supersede" "$(echo "$out" | grep -c 'UNTRUSTED não supersede' || true)" "1"
-chk "E26 web NÃO proposta (estado pós-supersessão)" "$(echo "$out" | sed -n '/PROPOSTAS DE PROMO/,/^consolidate:/p' | grep -c 'LEARN-20260822-001' || true)" "0"
-
-echo "=== E27: índice > 30 linhas → add avisa ÍNDICE ==="
-newcase e27
-write_skill
-{
-  learnings_head
-  for i in $(seq 1 31); do
-    dd=$(printf '%02d' $((i % 28 + 1)))
-    idn=$(printf '%03d' "$i")
-    printf -- '- 2026-08-%s | fact | Titulo de orcamento %s [id: LEARN-202608%s-%s]\n' "$dd" "$i" "$dd" "$idn"
-  done
-  printf '\n'
-  for i in $(seq 1 31); do
-    dd=$(printf '%02d' $((i % 28 + 1)))
-    idn=$(printf '%03d' "$i")
-    entry "LEARN-202608$dd-$idn" "2026-08-$dd" fact high user "[o]" "Titulo de orcamento $i" "obs $i" "acao $i"
-    printf '\n'
-  done
-} > "$CASE/repo/LEARNINGS.md"
-commit_all init
-candidate "$CASE/n.txt" "Entrada E27" fact high user "[g]" "obs" "acao"
-out=$("$EVOLVE" add "$CASE/n.txt" 2>&1); rc=$?
-chk "E27 add exit 0" "$rc" "0"
-chk "E27 avisa ÍNDICE (rode consolidate)" "$(echo "$out" | grep -c 'ÍNDICE' || true)" "1"
-
-echo "=== E28: dois candidatos body-only separados por '---' → add anexa 2 entradas (nenhuma descartada) ==="
-newcase e28
-write_skill; seed_learnings; commit_all init
-{
-  printf '## Primeiro aprendizado body-only\ntype: gotcha\nconfidence: high\nsource: user\ntags: [a]\n- **Observação:** obs um\n- **Ação:** acao um\n---\n## Segundo aprendizado body-only\ntype: fact\nconfidence: high\nsource: repo-doc\ntags: [b]\n- **Observação:** obs dois\n- **Ação:** acao dois\n'
-} > "$CASE/body.txt"
-out=$("$EVOLVE" add "$CASE/body.txt" 2>&1); rc=$?
-chk "E28 add exit 0" "$rc" "0"
-chk "E28 add reporta 2 adicionada(s)" "$(echo "$out" | grep -c 'add: 2 adicionada(s), 0 duplicada(s) ignorada(s)' || true)" "1"
-chk "E28 2 entradas anexadas" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "2"
-chk "E28 1º título preservado" "$(grep -c '^## Primeiro aprendizado body-only$' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E28 2º título preservado (não descartado)" "$(grep -c '^## Segundo aprendizado body-only$' "$CASE/repo/LEARNINGS.md")" "1"
-chk "E28 corpo do 2º preservado" "$(grep -c 'obs dois' "$CASE/repo/LEARNINGS.md" || true)" "1"
-
-echo "=== E29: promoção ≥2 conta evidência no learnings_archive.md (F-11b) ==="
-newcase e29
-write_skill
-{
-  learnings_head
-  printf -- '- 2026-08-22 | gotcha | Fluxo X confirmado [id: LEARN-20260822-001]\n\n'
-  entry LEARN-20260822-001 2026-08-22 gotcha high repo-doc "[fluxo]" "Fluxo X confirmado" "obs B" "acao B"
-} > "$CASE/repo/LEARNINGS.md"
-{
-  printf '# LEARNINGS ARCHIVE — deep-orchestrator-agent-skill\n\n> fixture de teste.\n\n'
-  printf -- '<!-- evolve-skill consolidate: arquivada em 2026-08-22 — duplicata de LEARN-20260822-001 -->\n'
-  entry LEARN-20260801-001 2026-08-01 gotcha high repo-doc "[fluxo]" "Fluxo X confirmado" "obs A" "acao A"
-} > "$CASE/repo/learnings_archive.md"
-commit_all init
-out=$("$EVOLVE" consolidate --dry-run 2>&1); rc=$?
-chk "E29 consolidate --dry-run exit 0" "$rc" "0"
-chk "E29 imprime PROPOSTAS DE PROMOÇÃO" "$(echo "$out" | grep -c 'PROPOSTAS DE PROMOÇÃO' || true)" "1"
-chk "E29 proposta cita 2 ocorrência(s) em datas distintas" "$(echo "$out" | grep -c '2 ocorrência(s) em datas distintas' || true)" "1"
-chk "E29 proposta cita a entrada ativa" "$(echo "$out" | grep -c 'promover para o corpo da skill (SKILL.md/prompts): LEARN-20260822-001' || true)" "1"
-chk "E29 dry-run nada escrito (porcelain)" "$(git -C "$CASE/repo" status --porcelain | wc -l)" "0"
-# parte 2: idêntica situação com fonte UNTRUSTED (web) → NENHUMA proposta
-{
-  learnings_head
-  printf -- '- 2026-08-22 | gotcha | Fluxo X confirmado [id: LEARN-20260822-001]\n\n'
-  entry LEARN-20260822-001 2026-08-22 gotcha high web "[fluxo]" "Fluxo X confirmado" "obs B" "acao B"
-} > "$CASE/repo/LEARNINGS.md"
-commit_all web
-out2=$("$EVOLVE" consolidate --dry-run 2>&1); rc2=$?
-chk "E29 web: consolidate exit 0" "$rc2" "0"
-chk "E29 web: NENHUMA proposta" "$(echo "$out2" | grep -c 'PROPOSTAS DE PROMOÇÃO' || true)" "0"
-chk "E29 web: relatório 'propostas: nenhuma'" "$(echo "$out2" | grep -c 'propostas de promoção: nenhuma' || true)" "1"
-
-echo "=== E30: múltiplas linhas '- **Observação:**' no mesmo bloco são juntadas (preservadas) ==="
-newcase e30
-write_skill; seed_learnings; commit_all init
-{
-  printf -- '---\ntitle: Duas observacoes\ntype: gotcha\nconfidence: high\nsource: user\ntags: [a]\n---\n## Duas observacoes\n- **Observação:** primeira observacao\n- **Observação:** segunda observacao\n- **Ação:** acao\n'
-} > "$CASE/obs2.txt"
-out=$("$EVOLVE" add "$CASE/obs2.txt" 2>&1); rc=$?
-chk "E30 add exit 0" "$rc" "0"
-chk "E30 1 entrada anexada" "$(grep -cE "$REALID" "$CASE/repo/LEARNINGS.md" || true)" "1"
-chk "E30 ambas observações juntadas na entrada" "$(grep -c -- '- \*\*Observação:\*\* primeira observacao segunda observacao' "$CASE/repo/LEARNINGS.md" || true)" "1"
-chk "E30 nenhuma observação descartada" "$(grep -c 'primeira observacao' "$CASE/repo/LEARNINGS.md" || true)" "1"
-chk "E30 Ação preservada" "$(grep -c -- '- \*\*Ação:\*\* acao' "$CASE/repo/LEARNINGS.md" || true)" "1"
-
-echo; printf 'RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
-[ "$FAIL" = 0 ] || exit 1
+# =============================================================================
+printf '\nRESULTADO: %d PASS, %d FAIL\n' "$PASS" "$FAIL"
+[ "$FAIL" = 0 ]

@@ -1,122 +1,62 @@
 #!/usr/bin/env bash
 # =============================================================================
-# evolve-skill.sh — motor de AUTO-EVOLUÇÃO CONTÍNUA do deep-orchestrator-agent-skill
+# evolve-skill.sh — evolução do CORPO da skill (v3.8.0)
 # -----------------------------------------------------------------------------
-# A skill roda de QUALQUER projeto; ao fim de cada execução o orquestrador
-# coleta aprendizados (erros, correções, anti-padrões) e os persiste na pasta
-# da própria skill para não repetir erros. Este script é o mecanismo dessa
-# memória episódica: anexa aprendizados num LEARNINGS.md, busca, mostra o diff
-# pendente, commita em branch próprio (nunca push), consolida (dedupe,
-# supersessão de contradições, poda de voláteis, orçamento, propostas de
-# promoção) e reporta o status.
+# A MEMÓRIA da skill mudou de casa na v3.8.0: aprendizados e preferências
+# vivem em `.deep-orchestrator-preferences/` (projeto e skill), GITIGNORED,
+# geridos por scripts/do-prefs.sh com o questionário scripts/evolution-survey.sh
+# (FASE 4, passo 6.5). Este script NÃO persiste mais aprendizados — ele
+# evolui o CORPO da skill (SKILL.md, prompts/, docs/), sempre com diff
+# revisável e nunca merge sozinho.
 #
 # Uso:
-#   evolve-skill.sh add <arquivo-de-candidatos|-> [--source <rótulo>] [--dry-run]
-#       Lê blocos de candidatos (separados por linhas '---'), valida cada um
-#       (obrigatórios: title, type, confidence, source, observacao, acao;
-#       enums de type/confidence/source; scan de segredos), deduplica contra o
-#       LEARNINGS.md (título normalizado + type), gera id LEARN-YYYYMMDD-NNN,
-#       anexa a entrada ao LEARNINGS.md e atualiza a seção '## Índice'.
-#       Observação/Ação são aceitas nas DUAS formas: (a) chaves
-#       'observacao:'/'acao:' no frontmatter; (b) linhas de corpo
-#       '- **Observação:** <texto>' / '- **Ação:** <texto>' do TEMPLATE
-#       documentado no LEARNINGS.md (o título também pode vir da linha
-#       '## <título>' do corpo; 'contract:' opcional no frontmatter é
-#       preservado). Se ambas presentes, o frontmatter vence.
-#       Entrada vazia (nenhum bloco de candidato) → exit 0, 'nada a adicionar',
-#       nada escrito (D9).
-#       O parser IGNORA linhas dentro de code fences (``` … ```) e blocos sem
-#       'id: LEARN-<8 dígitos>-<3 dígitos>' válido — o TEMPLATE documentado no
-#       LEARNINGS.md nunca vira entrada nem desloca a numeração.
-#       '--source <rótulo>' aplica como default para blocos sem o campo.
-#       '--dry-run' mostra o que anexaria, sem escrever nada.
 #   evolve-skill.sh search <termo>
-#       grep -i pelo termo em LEARNINGS.md + prompts/*.md + SKILL.md. Entradas
-#       do LEARNINGS saem como 'id | data | type | confidence | source | título'
+#       grep -i pelo termo na memória consultiva (global-tips.md + prefs do
+#       projeto quando resolvíveis) + prompts/*.md + SKILL.md. Entradas de
+#       bloco saem como 'id | data | type | confidence | source | título'
 #       (dedup por id). Exit 0 com resultados, 1 sem.
 #   evolve-skill.sh diff [--stat]
-#       git diff HEAD -- <paths da allowlist> — mudanças pendentes da evolução;
+#       git diff HEAD -- <paths do corpo> — mudanças pendentes da evolução;
 #       '--stat' resume.
 #   evolve-skill.sh apply [--direct] [--branch <nome>] [--message <msg>]
-#       Valida antes de commitar (bash -n em scripts/*.sh novos/modificados;
-#       verificação com shellcheck quando instalado, senão avisa). Sem
-#       --direct/--branch o default é INTELIGENTE: se SÓ LEARNINGS.md /
-#       learnings_archive.md mudaram (working tree vs HEAD) → commita DIRETO no
-#       branch atual; se qualquer outro path da allowlist mudou (SKILL.md — raiz
-#       OU .claude/skills/deep-orchestrator-agent-skill/SKILL.md —, prompts/,
-#       docs/decisions/, README.md, scripts/README.md,
-#       check-install.sh, CHANGELOG.md) → cria o branch evolve/YYYY-MM-DD a
-#       partir do branch atual e commita lá (--direct: commit no branch atual;
-#       --branch <nome>: usa o nome dado). Mensagem:
-#       conventional commit 'evolve(learnings): <resumo>' (ou --message).
-#       Imprime o diff --stat do commit. NUNCA faz push.
-#   evolve-skill.sh consolidate [--apply] [--dry-run]
-#       Default: dry-run (relatório + diff, nada escrito). Dedupe (title+type
-#       iguais → mantém a mais nova; as antigas vão para learnings_archive.md),
-#       supersessão de contradições (mesmo type + tags sobrepostas + título
-#       similar em datas diferentes → a mais nova vence; a antiga vira
-#       status: superseded + supersedes + '~~título~~ (obsoleto ...)' — NUNCA
-#       apaga), poda de voláteis (type: fact com tags preço|versão|estado|
-#       price|version|state e mais de 90 dias → learnings_archive.md), orçamento
-#       (entradas ativas > 100 linhas → move as mais antigas para o arquivo),
-#       orçamento do ÍNDICE (índice > 30 linhas → reporta PROPOSTA de mover as
-#       entradas ativas mais antigas para o arquivo — só relatório) e
-#       REVALIDAÇÃO DE CONTRATOS (D7): entrada ativa com 'contract: cmd1, cmd2'
-#       tem cada comando checado com 'command -v'; comando ausente → a entrada
-#       é marcada superseded com motivo 'contrato quebrado: <cmd> ausente'
-#       (NUNCA apaga; comando ausente NÃO é erro — é resultado),
-#       e PROPOSTAS de promoção (entrada em probação com ≥2 ocorrências
-#       independentes — mesmo título/type em datas diferentes — OU source: user;
-#       fontes web|sub-agent|diff|model-output NUNCA promovem, nem aparecem na
-#       proposta). '--apply' escreve os arquivos e commita em
-#       evolve/consolidacao-YYYY-MM-DD (mesma validação do apply).
+#       Commita as mudanças do corpo. Default: branch evolve/YYYY-MM-DD a
+#       partir do branch atual (NUNCA commit direto — D8/Habituation: o diff
+#       fica para revisão humana); --direct: commit no branch atual;
+#       --branch <nome>: usa o nome dado. Mensagem: conventional commit
+#       'evolve(body): <resumo>' (ou --message). Imprime o diff --stat do
+#       commit. NUNCA faz push.
 #   evolve-skill.sh status
-#       SKILL_REPO, branch atual, versão da skill (lida do frontmatter do
-#       SKILL.md), nº de entradas (ativas/superseded), orçamento (linhas do
-#       LEARNINGS.md vs tetos, incl. índice ≤ 30), branches evolve/* abertas,
-#       última data.
+#       SKILL_REPO, branch atual, versão da skill (frontmatter do SKILL.md),
+#       estado das prefs (via do-prefs.sh status, quando resolvível),
+#       branches evolve/* abertas.
 #   evolve-skill.sh --help
 #
 # Exit codes:
 #   0 = sucesso
 #   1 = search sem resultados
-#   2 = erro de uso/ambiente: opção desconhecida, candidato inválido (campo
-#       obrigatório ausente, enum inválido, segredo detectado — o LOTE é
-#       rejeitado sem escrever nada), skill instalada por CÓPIA sem git, lock
-#       ocupado, validação bash -n/shellcheck falhou
+#   2 = erro de uso/ambiente: opção desconhecida, skill instalada por CÓPIA
+#       sem git, lock ocupado
 #   3 = identidade: o SKILL.md da casa não tem 'name: deep-orchestrator-agent-skill'
 #   4 = escrita detectada fora da allowlist (working tree, staged ou commit)
 #
 # GARANTIAS DE SEGURANÇA (implementadas como código, não como comentário):
 #   • a casa da skill é resolvida pela localização DESTE script, com pwd -P
-#     colapsando a cadeia de symlinks (o repo é alcançado por symlink de vários
-#     agentes) — o cwd de invocação é irrelevante;
+#     colapsando a cadeia de symlinks — o cwd de invocação é irrelevante;
 #   • sem repositório git válido → exit 2 (skill instalada por CÓPIA: rode
 #     scripts/sync-global-skill.sh para converter para symlink);
 #   • guarda de identidade: só opera se o SKILL.md contém exatamente
-#     'name: deep-orchestrator-agent-skill' (o SKILL.md da raiz é symlink; o
-#     grep lê através dele, i.e., o arquivo real);
-#   • ALLOWLIST de paths que este script pode tocar (relativos a SKILL_REPO):
-#     LEARNINGS.md, learnings_archive.md, SKILL.md (raiz E
-#     .claude/skills/deep-orchestrator-agent-skill/SKILL.md — o arquivo REAL do
-#     corpo da skill, alcançado pelo symlink da raiz), prompts/, docs/decisions/,
-#     README.md, scripts/README.md, check-install.sh, CHANGELOG.md — o
-#     git status --porcelain é fotografado no início e conferido após cada
-#     mutação; qualquer path novo fora da allowlist → exit 4;
+#     'name: deep-orchestrator-agent-skill';
+#   • ALLOWLIST do CORPO (relativos a SKILL_REPO): SKILL.md (raiz E
+#     .claude/skills/deep-orchestrator-agent-skill/SKILL.md), prompts/,
+#     docs/decisions/, README.md, scripts/README.md, check-install.sh,
+#     CHANGELOG.md — o git status --porcelain é fotografado no início e
+#     conferido após cada mutação; qualquer path novo fora da allowlist →
+#     exit 4 (scripts/*.sh e a memória em prefs ficam FORA do apply);
 #   • NENHUM commit engole staged alheio: antes de commitar o índice é
 #     conferido (git diff --cached --name-only) e QUALQUER path staged fora da
-#     allowlist → exit 4 SEM tocar no índice (o staged do usuário/outra
-#     sub-tarefa fica intacto);
-#   • NUNCA apaga conteúdo: supersessão é marcação (~~…~~ + status), poda é
-#     MUDANÇA para learnings_archive.md — nunca deleção;
-#   • entrada sem source é rejeitada; fontes não-confiáveis
-#     (web|sub-agent|diff|model-output) nunca promovem (nem aparecem na
-#     proposta) e NUNCA supersedem entrada com fonte confiável (user|repo-doc):
-#     em contradição a entrada UNTRUSTED é que é marcada superseded (pela
-#     confiável); sem confiável na disputa, a mais nova vence normalmente;
-#   • flock exclusivo (em <gitdir>/evolve-skill.lock) durante apply,
-#     consolidate e o append do add — execuções paralelas não colidem (adds
-#     concorrentes serializam e nunca geram id duplicado);
+#     allowlist → exit 4 SEM tocar no índice;
+#   • flock exclusivo (em <gitdir>/evolve-skill.lock) durante o apply —
+#     execuções paralelas não colidem;
 #   • nunca usa $PWD do chamador para resolver nada da skill; nunca push;
 #     nunca mexe na versão da skill (metadata.version é de outra sub-tarefa).
 # =============================================================================
@@ -151,7 +91,7 @@ if [ -z "$SKILL_HOME" ] || [ ! -d "$SKILL_HOME/scripts" ]; then
 fi
 
 # Repositório git que contém a casa da skill. Sem git → a skill está instalada
-# por CÓPIA num lugar sem repositório: não há onde commitar a evolução.
+# por CÓPIA num lugar sem repositório: não há onde commitar a evolução do corpo.
 SKILL_REPO="$(git -C "$SKILL_HOME" rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -z "$SKILL_REPO" ]; then
   err "skill instalada por CÓPIA sem git — rode scripts/sync-global-skill.sh para converter para symlink"
@@ -164,46 +104,22 @@ if ! grep -qx "name: $SKILL_NAME" "$SKILL_HOME/SKILL.md" 2>/dev/null; then
   exit 3
 fi
 
-LEARNINGS="$SKILL_REPO/LEARNINGS.md"
-ARCHIVE="$SKILL_REPO/learnings_archive.md"
+# ---------------------------------------------------------------------------
+# Parsers/validadores compartilhados do formato de bloco (fonte única)
+# ---------------------------------------------------------------------------
+# shellcheck source=/dev/null
+. "$_self/lib/evolve-common.sh"
 
-# ALLOWLIST de paths que este script pode tocar (relativos a SKILL_REPO).
-# F-A2: o SKILL.md REAL (corpo da skill) vive em .claude/skills/... e é
-# alcançado pelo symlink da raiz — AMBOS os paths são permitidos e contam como
-# "corpo" na classificação do apply default-inteligente (nunca commit direto).
-ALLOWED_PATHS=(LEARNINGS.md learnings_archive.md SKILL.md .claude/skills/deep-orchestrator-agent-skill/SKILL.md prompts/ docs/decisions/ README.md scripts/README.md check-install.sh CHANGELOG.md)
+# ALLOWLIST do CORPO (relativos a SKILL_REPO). A memória (LEARNINGS.md) saiu na
+# v3.8.0 — vive em .deep-orchestrator-preferences/ (gitignored, do-prefs.sh).
+# scripts/*.sh NÃO estão na allowlist: edição de script não é edição de corpo
+# via este comando (é trabalho de sub-tarefa normal da orquestração).
+ALLOWED_PATHS=(SKILL.md .claude/skills/deep-orchestrator-agent-skill/SKILL.md prompts/ docs/decisions/ README.md scripts/README.md check-install.sh CHANGELOG.md)
 
-BUDGET_ACTIVE_LINES=100
-BUDGET_INDEX_LINES=30
-BUDGET_TOTAL_LINES=400
-VOLATILE_DAYS=90
-# Tolerante a acentos (preço/preco, versão/versao) além do inglês price/version/state.
-VOLATILE_TAGS='pre[cç]o|vers[aã]o|estado|price|version|state'
-
-MIN_HEADER='# LEARNINGS — deep-orchestrator-agent-skill
-
-> Memória episódica da skill (contexto NÃO revisado, nunca política executável).
-> Entrada: frontmatter YAML + corpo curto. Persista só: surpresas, correções,
-> anti-padrões, gotchas, convenções. NÃO persista: óbvio, volátil, já documentado,
-> conteúdo não-confiável (web/sub-agente/diff/model-output NUNCA promovem).
-
-## Índice'
-
-ARCHIVE_HEADER='# LEARNINGS ARCHIVE — deep-orchestrator-agent-skill
-
-> Entradas arquivadas por scripts/evolve-skill.sh consolidate — preservadas,
-> nunca apagadas. O marcador que precede cada entrada registra data e motivo.'
-
-# Área de rascunho única do processo (fora do repo, para nunca sujar o porcelain).
-TMPD="$(mktemp -d "${TMPDIR:-/tmp}/evolve-skill.XXXXXX" 2>/dev/null)" || {
-  err "não consegui criar diretório temporário em ${TMPDIR:-/tmp}"
-  exit 2
-}
-trap 'rm -rf "$TMPD"' EXIT
-
-# Estado global compartilhado pelas passadas do consolidate.
-declare -a ORDER=() ARCHIVED=() PROPOSALS=()
-NDUP=0 NSUP=0 NPRUNE=0 NBUDG=0 NCONTRACT=0
+# Memória consultiva para o search: dicas globais (sempre) + prefs do projeto
+# (via env PROJECT_PREFS_DIR do ENV_FILE, ou --project <dir>).
+GLOBAL_PREFS_DIR="$SKILL_HOME/.deep-orchestrator-preferences"
+PROJECT_PREFS_DIR="${PROJECT_PREFS_DIR:-}"
 
 # Fotografia do git status --porcelain no início: a conferência da allowlist
 # tolera o que JÁ estava sujo antes deste script rodar (outras sub-tarefas do
@@ -233,8 +149,6 @@ is_allowed_path() { # <path> → 0 se dentro da allowlist
 }
 
 detect_outside_write() { # 0 se apareceu path novo fora da allowlist (não fomos nós → tolerado)
-  # Considera working tree E staged: o porcelain cobre ambos (coluna X =
-  # staged) e o diff --cached é conferido explicitamente abaixo.
   local line st p out staged sp
   out="$(git -C "$SKILL_REPO" status --porcelain 2>/dev/null || true)"
   if [ -n "$out" ]; then
@@ -252,15 +166,12 @@ detect_outside_write() { # 0 se apareceu path novo fora da allowlist (não fomos
       fi
     done <<< "$out"
   fi
-  # staged explícito (diff --cached) — por completude do diagnóstico; a
-  # garantia ABSOLUTA de commit (mesmo para staged pré-existente) é o
-  # guard_staged_allowlist, que roda antes de qualquer mutação/commit.
   staged="$(git -C "$SKILL_REPO" diff --cached --name-only 2>/dev/null || true)"
   while IFS= read -r sp; do
     [ -n "$sp" ] || continue
     if ! is_allowed_path "$sp"; then
       if printf '%s\n' "$PORCELAIN_BEFORE" | grep -Fq -- "$sp"; then
-        continue   # já estava staged antes — tolerado aqui; guard_staged_allowlist decide
+        continue
       fi
       err "ESCRITA FORA DA ALLOWLIST detectada (staged): $sp"
       err "allowlist: ${ALLOWED_PATHS[*]}"
@@ -275,7 +186,7 @@ guard_allowlist() {
   return 0
 }
 
-# Guarda pré-commit (F1): NENHUM path fora da allowlist pode estar no índice.
+# Guarda pré-commit: NENHUM path fora da allowlist pode estar no índice.
 # O staged do usuário/outra sub-tarefa é preservado — nunca fazemos reset —
 # mas o nosso commit NUNCA o engole: abortamos (exit 4) antes de qualquer
 # mutação, listando o path.
@@ -296,520 +207,31 @@ guard_staged_allowlist() {
   return 0
 }
 
-normalize() { # "$@" → minúsculas, só alfanuméricos, espaços simples
-  printf '%s' "$*" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' ' ' \
-    | sed 's/^ *//; s/ *$//; s/  */ /g'
-}
-
-entry_field() { # <arquivo-entrada> <campo> → valor da primeira linha 'campo: valor'
-  local f="$1" k="$2"
-  sed -n "s/^$k: *//p" "$f" | head -1
-}
-
-# split_entries <arquivo> <dir> — parte o LEARNINGS.md em entradas.
-#   • <dir>/HEADER  → tudo antes da primeira entrada (título, blockquotes, '## Índice' e linhas antigas do índice)
-#   • <dir>/NNN.entry (001, 002, ...) → uma entrada completa (frontmatter + título + corpo)
-#   • <dir>/COUNT   → número de entradas
-# Uma entrada tem exatamente duas linhas '---' (antes do frontmatter e entre o
-# frontmatter e o corpo); a terceira '---' já abre a entrada seguinte. Por isso
-# alternamos: '---' ímpar = início de entrada, '---' par = fronteira frontmatter/corpo.
-# Linhas em branco finais de cada entrada (separadores entre entradas) são
-# removidas na escrita — o rebuild volta a interpor exatamente uma.
-split_entries() {
-  local src="$1" dst="$2" line
-  local n=0 idx=0 cur="" header="" infence=0
-  : > "$dst/HEADER"
-  : > "$dst/COUNT"
-  while IFS= read -r line || [ -n "$line" ]; do
-    # F6: linhas dentro de code fences (``` … ```) NUNCA são fronteira de
-    # entrada — o TEMPLATE documentado no LEARNINGS.md fica no header.
-    if [ "$infence" = 1 ]; then
-      case "$line" in '```'*) infence=0 ;; esac
-    else
-      case "$line" in '```'*) infence=1 ;; esac
-    fi
-    if [ "$infence" = 1 ] || [ "$line" != "---" ]; then
-      if [ "$idx" -eq 0 ]; then
-        header=$header$line$'\n'
-      else
-        cur=$cur$'\n'$line
-      fi
-      continue
-    fi
-    # fora de fence e linha '---': fronteira de entrada
-    n=$((n + 1))
-    if [ $((n % 2)) -eq 1 ]; then
-      if [ "$idx" -gt 0 ]; then
-        printf '%s\n' "$cur" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' \
-          > "$dst/$(printf '%03d' "$idx").entry"
-      fi
-      idx=$((idx + 1))
-      cur="---"
-    else
-      cur=$cur$'\n---'
-    fi
-  done < "$src"
-  if [ "$idx" -gt 0 ]; then
-    printf '%s\n' "$cur" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' \
-      > "$dst/$(printf '%03d' "$idx").entry"
-  fi
-  printf '%s' "$header" > "$dst/HEADER"
-  printf '%d\n' "$idx" > "$dst/COUNT"
-}
-
-entry_meta() { # <arquivo> → 'id|date|type|confidence|source|status|tags|title'
-  local f="$1" id date type conf src status tags title
-  id=$(entry_field "$f" id)
-  date=$(entry_field "$f" date)
-  date=${date//\"/}
-  type=$(entry_field "$f" type)
-  conf=$(entry_field "$f" confidence)
-  src=$(entry_field "$f" source)
-  status=$(entry_field "$f" status)
-  [ -z "$status" ] && status=active
-  tags=$(entry_field "$f" tags)
-  title=$(sed -n 's/^## //p' "$f" | head -1)
-  printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$id" "$date" "$type" "$conf" "$src" "$status" "$tags" "$title"
-}
-
-# F6: um bloco só é ENTRADA se o frontmatter tem 'id: LEARN-<8 dígitos>-<3 dígitos>'.
-# Blocos sem id válido (ex.: TEMPLATE em code fence com placeholders) são ignorados.
-entry_valid_id() { # <arquivo> → 0 se id válido (grep -E)
-  grep -Eq '^id: LEARN-[0-9]{8}-[0-9]{3}$' "$1"
-}
-
-tags_list() { # "[a, b]" → uma tag por linha
-  printf '%s' "$1" | tr -d '[]' | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -v '^$' || true
-}
-
-tags_overlap() { # <tagsA> <tagsB> → 0 se a interseção não é vazia
-  local a b
-  while IFS= read -r a; do
-    [ -z "$a" ] && continue
-    while IFS= read -r b; do
-      [ -z "$b" ] && continue
-      [ "$a" = "$b" ] && return 0
-    done <<< "$(tags_list "$2")"
-  done <<< "$(tags_list "$1")"
-  return 1
-}
-
-tags_volatile() { # <tags> → 0 se alguma tag é volátil (preço|versão|estado|price|version|state)
-  local t
-  while IFS= read -r t; do
-    [ -z "$t" ] && continue
-    printf '%s\n' "$t" | grep -Eiq "$VOLATILE_TAGS" && return 0
-  done <<< "$(tags_list "$1")"
-  return 1
-}
-
-titles_similar() { # <título1> <título2> → 0 se similares (idênticos OU ≥ metade das
-  # palavras do menor compartilhadas). Distinto do dedupe: aqui é SEMELHANÇA,
-  # para detectar contradição entre entradas que não são a mesma.
-  local a b
-  a="$(normalize "$1")"
-  b="$(normalize "$2")"
-  [ -n "$a" ] && [ "$a" = "$b" ] && return 0
-  local -a wa wb
-  read -r -a wa <<< "$a"
-  read -r -a wb <<< "$b"
-  [ "${#wa[@]}" -gt 0 ] && [ "${#wb[@]}" -gt 0 ] || return 1
-  local min common=0 w
-  if [ "${#wa[@]}" -le "${#wb[@]}" ]; then min="${#wa[@]}"; else min="${#wb[@]}"; fi
-  for w in "${wa[@]}"; do
-    case " $b " in
-      *" $w "*) common=$((common + 1)) ;;
-    esac
-  done
-  [ "$common" -ge 1 ] && [ "$common" -ge $(((min + 1) / 2)) ] && return 0
-  return 1
-}
-
-next_id() { # → LEARN-YYYYMMDD-NNN — SÓ linhas 'id: LEARN-<hoje>-...' fora de code fences
-  local today n line num infence=0
-  today=$(date +%Y%m%d)
-  n=0
-  if [ -f "$LEARNINGS" ]; then
-    while IFS= read -r line || [ -n "$line" ]; do
-      # F6: ignora code fences (o TEMPLATE tem 'id: LEARN-YYYYMMDD-NNN').
-      case "$line" in
-        '```'*) if [ "$infence" = 1 ]; then infence=0; else infence=1; fi ;;
-      esac
-      [ "$infence" = 1 ] && continue
-      # F7: só linhas que COMEÇAM com 'id: LEARN-<hoje>-'; exemplos em
-      # comentários/placeholders (LEARN-AAAA-MM-DD-NNN etc.) nunca deslocam.
-      case "$line" in
-        "id: LEARN-$today-"*)
-          num="${line#id: LEARN-$today-}"
-          num="${num%%[!0-9]*}"
-          if [ -n "$num" ] && [ "$num" -gt "$n" ] 2>/dev/null; then
-            n="$num"
-          fi
-          ;;
-      esac
-    done < "$LEARNINGS"
-  fi
-  # 10# força base decimal: um id existente '008' seria lido como octal e
-  # estouraria a aritmética do bash (valor muito grande para a base).
-  n=$((10#${n:-0} + 1))
-  printf 'LEARN-%s-%03d\n' "$today" "$n"
-}
-
-insert_before() { # <arquivo> <posição> <texto> — insere <texto> antes da linha <posição>
-  local file="$1" pos="$2" text="$3"
-  local total tmp
-  total=$(wc -l < "$file")
-  if [ "$pos" -gt "$total" ]; then
-    printf '%s\n' "$text" >> "$file"
-    return 0
-  fi
-  tmp="$TMPD/insert.$$"
-  awk -v p="$pos" -v t="$text" 'NR==p{print t} {print}' "$file" > "$tmp" \
-    && mv "$tmp" "$file"
-}
-
-insert_index_line() { # <data> <type> <título> <id> — atualiza a seção '## Índice'
-  local date="$1" type="$2" title="$3" id="$4"
-  local line="- $date | $type | $title [id: $id]"
-  local hdr pos lastidx
-  hdr=$(grep -n '^## Índice$' "$LEARNINGS" | head -1 | cut -d: -f1)
-  if [ -z "$hdr" ]; then
-    # sem seção '## Índice': cria antes da primeira entrada (ou anexa no fim)
-    pos=$(grep -n '^---$' "$LEARNINGS" | head -1 | cut -d: -f1)
-    if [ -z "$pos" ]; then
-      printf '\n## Índice\n\n%s\n' "$line" >> "$LEARNINGS"
-    else
-      insert_before "$LEARNINGS" "$pos" "$(printf '## Índice\n\n%s' "$line")"
-    fi
-    return 0
-  fi
-  # Fim da seção = a ÚLTIMA linha de índice ('- ...') antes da primeira entrada;
-  # a nova linha entra logo DEPOIS dela, mantendo o bloco de índice contíguo
-  # (a linha em branco antes da primeira entrada fica onde deve).
-  lastidx=$(awk -v s="$hdr" 'NR>s && /^---$/{exit} NR>s && /^- /{last=NR} END{print last+0}' "$LEARNINGS")
-  if [ "$lastidx" -gt 0 ]; then
-    insert_before "$LEARNINGS" "$((lastidx + 1))" "$line"
-  else
-    insert_before "$LEARNINGS" "$((hdr + 1))" "$line"
-  fi
-}
-
-learnings_stats() { # → 'total_entradas ativas superseded linhas_totais linhas_ativas ultima_data'
-  local tmp="$TMPD/stats" n i f lines
-  local M_ID M_DATE M_TYPE M_CONF M_SRC M_STATUS M_TAGS M_TITLE
-  mkdir -p "$tmp"
-  split_entries "$LEARNINGS" "$tmp"
-  n=$(cat "$tmp/COUNT")
-  local total_e=0 act_e=0 sup_e=0 total_l=0 act_l=0 last=""
-  for ((i = 1; i <= n; i++)); do
-    f=$(printf '%s/%03d.entry' "$tmp" "$i")
-    entry_valid_id "$f" || continue   # F6: blocos sem id válido (template) não contam
-    IFS='|' read -r M_ID M_DATE M_TYPE M_CONF M_SRC M_STATUS M_TAGS M_TITLE <<< "$(entry_meta "$f")"
-    total_e=$((total_e + 1))
-    lines=$(wc -l < "$f")
-    total_l=$((total_l + lines))
-    case "$M_STATUS" in
-      active)     act_e=$((act_e + 1)); act_l=$((act_l + lines)) ;;
-      superseded) sup_e=$((sup_e + 1)) ;;
-    esac
-    [ -n "$M_DATE" ] && last="$M_DATE"
-  done
-  printf '%d %d %d %d %d %s\n' "$total_e" "$act_e" "$sup_e" "$total_l" "$act_l" "$last"
-}
-
-# F-6: nº de linhas do Índice (formato '- YYYY-MM-DD | <type> | <título> [id: LEARN-…]').
-# Comentários e o TEMPLATE em code fence não casam com o formato → não contam.
-index_line_count() {
-  [ -f "$LEARNINGS" ] || { printf '0\n'; return; }
-  grep -cE '^- [0-9]{4}-[0-9]{2}-[0-9]{2} \| .*\[id: LEARN-' "$LEARNINGS" || true
-}
-
 # ---------------------------------------------------------------------------
-# add
+# search — memória consultiva (prefs) + corpo
 # ---------------------------------------------------------------------------
-
-parse_fields() { # <bloco> → popula B_TITLE B_TYPE B_CONFIDENCE B_SOURCE B_TAGS B_OBS B_ACAO B_CONTRACT
-  # F-A1: aceita as DUAS formas de Observação/Ação — (a) chaves no frontmatter;
-  # (b) linhas de corpo '- **Observação:** <texto>' / '- **Ação:** <texto>' do
-  # TEMPLATE documentado no LEARNINGS.md (o título também pode vir da linha
-  # '## <título>' do corpo). Se ambas presentes, o frontmatter vence (as linhas
-  # do frontmatter vêm primeiro no bloco; as de corpo só preenchem campos vazios).
-  # F-11b: múltiplas linhas '- **Observação:**' / '- **Ação:**' no MESMO bloco
-  # são JUNTADAS (preservadas, unidas por espaço) — nenhuma é descartada; linhas
-  # de corpo continuam sem efeito quando o campo já veio do frontmatter.
-  local block="$1" line key val
-  local obs_src="" acao_src=""   # "" | frontmatter | body
-  B_TITLE=""; B_TYPE=""; B_CONFIDENCE=""; B_SOURCE=""; B_TAGS=""; B_OBS=""; B_ACAO=""; B_CONTRACT=""
-  while IFS= read -r line; do
-    case "$line" in
-      ''|'---') continue ;;
-    esac
-    if printf '%s\n' "$line" | grep -q '^- \*\*Observação:\*\*'; then
-      if [ -z "$obs_src" ] || [ "$obs_src" = "body" ]; then
-        B_OBS="${B_OBS:+$B_OBS }$(printf '%s\n' "$line" | sed 's/^- \*\*Observação:\*\* *//')"
-        obs_src="body"
-      fi
-      continue
-    fi
-    if printf '%s\n' "$line" | grep -q '^- \*\*Ação:\*\*'; then
-      if [ -z "$acao_src" ] || [ "$acao_src" = "body" ]; then
-        B_ACAO="${B_ACAO:+$B_ACAO }$(printf '%s\n' "$line" | sed 's/^- \*\*Ação:\*\* *//')"
-        acao_src="body"
-      fi
-      continue
-    fi
-    case "$line" in
-      '## '*) [ -z "$B_TITLE" ] && B_TITLE="${line#'## '}" ;;
-      *:*)
-        key="${line%%:*}"
-        val="${line#*:}"
-        val="${val# }"
-        case "$key" in
-          title)       B_TITLE="$val" ;;
-          type)        B_TYPE="$val" ;;
-          confidence)  B_CONFIDENCE="$val" ;;
-          source)      B_SOURCE="$val" ;;
-          tags)        B_TAGS="$val" ;;
-          observacao)  B_OBS="$val"; obs_src="frontmatter" ;;
-          acao)        B_ACAO="$val"; acao_src="frontmatter" ;;
-          contract)    B_CONTRACT="$val" ;;
-        esac ;;
-    esac
-  done <<< "$block"
-}
-
-secret_scan() { # <texto> → 0 se parece conter CREDENCIAL (regex case-insensitive)
-  # Só padrões de CREDENCIAL disparam: keyword + separador '=' ou ':' + valor,
-  # ou cabeçalho de chave privada. Palavras soltas ("token de", "o token",
-  # "password do") NÃO disparam. O valor capturado nunca é impresso.
-  printf '%s\n' "$1" | grep -Eiq \
-    '(access[_-]?token|auth[_-]?token|api[_-]?key|secret|password|passwd)[=:][[:space:]]*[^[:space:]]|BEGIN[[:space:]_-]+(RSA|OPENSSH|EC|DSA)[[:space:]_-]+PRIVATE[[:space:]_-]+KEY'
-}
-
-validate_candidate() { # <índice> <bloco> — erros em stderr; 0 válido / 1 inválido (NUNCA imprime valores de segredo)
-  local i="$1" blk="$2" ok=1 label
-  label="${B_TITLE:-<sem título>}"
-  local -a missing=()
-  [ -z "$B_TITLE" ]      && missing+=("title")
-  [ -z "$B_TYPE" ]       && missing+=("type")
-  [ -z "$B_CONFIDENCE" ] && missing+=("confidence")
-  [ -z "$B_SOURCE" ]     && missing+=("source")
-  [ -z "$B_OBS" ]        && missing+=("observacao")
-  [ -z "$B_ACAO" ]       && missing+=("acao")
-  if [ "${#missing[@]}" -gt 0 ]; then
-    err "candidato #$i '$label' REJEITADO: campos obrigatórios ausentes: ${missing[*]}"
-    ok=0
-  fi
-  if [ -n "$B_TYPE" ]; then
-    case "$B_TYPE" in
-      correction|fact|antipattern|gotcha|convention) ;;
-      *) err "candidato #$i '$label' REJEITADO: type inválido '$B_TYPE' (correction|fact|antipattern|gotcha|convention)"; ok=0 ;;
-    esac
-  fi
-  if [ -n "$B_CONFIDENCE" ]; then
-    case "$B_CONFIDENCE" in
-      high|medium|low) ;;
-      *) err "candidato #$i '$label' REJEITADO: confidence inválida '$B_CONFIDENCE' (high|medium|low)"; ok=0 ;;
-    esac
-  fi
-  if [ -n "$B_SOURCE" ]; then
-    case "$B_SOURCE" in
-      user|repo-doc|sub-agent|web|diff|model-output) ;;
-      *) err "candidato #$i '$label' REJEITADO: source inválida '$B_SOURCE' (user|repo-doc|sub-agent|web|diff|model-output)"; ok=0 ;;
-    esac
-  fi
-  if secret_scan "$blk"; then
-    err "candidato #$i REJEITADO: possível segredo detectado (api key/secret/password/token/chave privada) — valor NÃO exibido"
-    ok=0
-  fi
-  [ "$ok" = 1 ] && return 0
-  return 1
-}
-
-entry_duplicate() { # <norm-título|type> → 0 se já existe no LEARNINGS.md
-  [ -f "$LEARNINGS" ] || return 1
-  local tmp="$TMPD/dup-check" n i f title type
-  mkdir -p "$tmp"
-  split_entries "$LEARNINGS" "$tmp"
-  n=$(cat "$tmp/COUNT")
-  for ((i = 1; i <= n; i++)); do
-    f=$(printf '%s/%03d.entry' "$tmp" "$i")
-    entry_valid_id "$f" || continue   # F6: blocos sem id válido (template) não contam
-    title=$(sed -n 's/^## //p' "$f" | head -1)
-    type=$(entry_field "$f" type)
-    if [ "$(normalize "$title")|$type" = "$1" ]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-append_entry() { # <título> <type> <confidence> <source> <tags> <observacao> <acao> [contract] → imprime o id
-  local title="$1" type="$2" conf="$3" src="$4" tags="$5" obs="$6" acao="$7" contract="${8:-}"
-  local today today_c id entry
-  today=$(date +%Y%m%d)
-  today_c=$(date +%Y-%m-%d)
-  id="$(next_id)"
-  local -a lines=('---' "id: $id" "date: \"$today_c\"" "type: $type" \
-    "confidence: $conf" "source: $src" 'status: active' 'supersedes: ""' \
-    "tags: ${tags:-[]}")
-  # F-5: campo OPCIONAL contract (lista de comandos separados por vírgula)
-  # preservado do candidato; revalidado no consolidate com 'command -v'.
-  [ -n "$contract" ] && lines+=("contract: $contract")
-  lines+=('---' "## $title" "- **Observação:** $obs" "- **Ação:** $acao")
-  entry=$(printf '%s\n' "${lines[@]}")
-  if [ ! -f "$LEARNINGS" ]; then
-    printf '%s\n' "$MIN_HEADER" > "$LEARNINGS"
-  fi
-  insert_index_line "$today_c" "$type" "$title" "$id"
-  printf '\n%s\n' "$entry" >> "$LEARNINGS"
-  printf '%s\n' "$id"
-}
-
-cmd_add() {
-  local file="" dsrc="" dry=0 a
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --source)   [ $# -ge 2 ] || die "add: --source exige um rótulo"; dsrc="$2"; shift 2 ;;
-      --source=*) dsrc="${1#--source=}"; shift ;;
-      --dry-run)  dry=1; shift ;;
-      *) if [ -z "$file" ]; then file="$1"; shift
-         else die "add: argumento inesperado: $1"; fi ;;
-    esac
-  done
-  [ -n "$file" ] || die "add: falta o arquivo de candidatos (ou '-')"
-
-  local input="$file"
-  [ "$file" = "-" ] && input="/dev/stdin"
-  [ "$input" = "/dev/stdin" ] || [ -f "$input" ] || die "add: arquivo não encontrado: $file"
-
-  # Passada 1: quebra em blocos e valida TODOS os candidatos (lote atômico:
-  # qualquer inválido → nada é escrito e o lote sai com exit 2).
-  local -a candidates=()
-  local cur="" line idx=0 bad=0 nblk=0
-  flush_block() { # F-A1/F-4/F-11a: bloco vazio (só espaços) não vira candidato;
-    # bloco de CORPO do formato TEMPLATE (começa com '## ' ou '- **') é
-    # continuação do candidato anterior APENAS se este ainda NÃO tem corpo
-    # (linhas '- **Observação:**' / '- **Ação:**' — o corpo vem DEPOIS do '---'
-    # que fecha o frontmatter). Se o anterior JÁ tem corpo, o bloco é candidato
-    # NOVO: o anterior é flushado e nada é descartado (F-11a).
-    cur="${cur#$'\n'}"
-    if printf '%s\n' "$cur" | grep -q '[^[:space:]]'; then
-      case "$cur" in
-        '## '*|'- **'*)
-          if [ "$nblk" -gt 0 ]; then
-            if ! printf '%s\n' "${candidates[$((nblk - 1))]:-}" | grep -qE '^- \*\*(Observação|Ação):\*\*'; then
-              candidates[$((nblk - 1))]+=$'\n'"$cur"
-              cur=""
-              return
-            fi
-          fi ;;
-      esac
-      candidates+=("$cur")
-      nblk=$((nblk + 1))
-    fi
-    cur=""
-  }
-  while IFS= read -r line || [ -n "$line" ]; do
-    if [ "$line" = "---" ]; then
-      flush_block
-    else
-      cur+=$'\n'"$line"
-    fi
-  done < "$input"
-  flush_block
-
-  if [ "${#candidates[@]}" -eq 0 ]; then
-    # F-4 (D9): entrada vazia (nenhum bloco de candidato) → exit 0, nada escrito.
-    say "add: nada a adicionar (entrada vazia)"
-    return 0
-  fi
-
-  local b
-  for b in "${candidates[@]}"; do
-    idx=$((idx + 1))
-    parse_fields "$b"
-    [ -z "$B_SOURCE" ] && B_SOURCE="$dsrc"
-    if ! validate_candidate "$idx" "$b"; then
-      bad=1
-    fi
-  done
-  [ "$bad" = 0 ] || {
-    err "lote REJEITADO: nenhuma entrada foi escrita (exit 2)"
-    exit 2
-  }
-
-  # Passada 2: dedupe + anexa (ou só mostra, em dry-run).
-  # F4: lock exclusivo durante leitura-next_id + append — adds paralelos
-  # serializam e nunca geram id duplicado. dry-run não escreve → sem lock.
-  if [ "$dry" = 0 ]; then
-    wait_lock || exit 2
-  fi
-  local added=0 dup=0 newid norm
-  idx=0
-  for b in "${candidates[@]}"; do
-    idx=$((idx + 1))
-    parse_fields "$b"
-    [ -z "$B_SOURCE" ] && B_SOURCE="$dsrc"
-    norm="$(normalize "$B_TITLE")|$B_TYPE"
-    if entry_duplicate "$norm"; then
-      say "  duplicada, ignorada: '$B_TITLE' (type=$B_TYPE)"
-      dup=$((dup + 1))
-      continue
-    fi
-    if [ "$dry" = 1 ]; then
-      say "  [dry-run] adicionaria: $B_TITLE (type=$B_TYPE, source=$B_SOURCE, confidence=$B_CONFIDENCE)"
-      added=$((added + 1))
-    else
-      newid="$(append_entry "$B_TITLE" "$B_TYPE" "$B_CONFIDENCE" "$B_SOURCE" "${B_TAGS:-}" "$B_OBS" "$B_ACAO" "${B_CONTRACT:-}")"
-      say "  adicionada: $newid — $B_TITLE (type=$B_TYPE)"
-      added=$((added + 1))
-    fi
-  done
-
-  if [ "$dry" = 0 ]; then
-    release_lock
-  fi
-
-  if [ "$dry" = 0 ] && [ "$added" -gt 0 ] && [ -f "$LEARNINGS" ]; then
-    local TE TA TS TL AL LAST IL
-    read -r TE TA TS TL AL LAST <<< "$(learnings_stats)"
-    if [ "$AL" -gt "$BUDGET_ACTIVE_LINES" ] || [ "$TL" -gt "$BUDGET_TOTAL_LINES" ]; then
-      warn "ORÇAMENTO: rode evolve-skill.sh consolidate"
-    fi
-    # F-6: orçamento do ÍNDICE — avisa quando o índice passa de 30 linhas.
-    IL=$(index_line_count)
-    if [ "$IL" -gt "$BUDGET_INDEX_LINES" ]; then
-      warn "ÍNDICE: rode evolve-skill.sh consolidate — $IL linhas no índice (teto $BUDGET_INDEX_LINES)"
-    fi
-  fi
-
-  # contrato antes/depois: a escrita do add só toca LEARNINGS.md (allowlist)
-  if [ "$dry" = 0 ]; then
-    guard_allowlist
-  fi
-
-  say "add: $added adicionada(s), $dup duplicada(s) ignorada(s)"
-  return 0
-}
-
-# ---------------------------------------------------------------------------
-# search
-# ---------------------------------------------------------------------------
-
+# Blocos (global-tips.md, learnings.md do projeto) saem no formato
+# 'id | data | type | confidence | source | título'; prompts/ e SKILL.md saem
+# como 'arquivo: linha'. Dedup por id nos blocos.
 cmd_search() {
   local term="$1" found=0
   local tmp n i f
   local M_ID M_DATE M_TYPE M_CONF M_SRC M_STATUS M_TAGS M_TITLE
-  local seen="" id
-  if [ -f "$LEARNINGS" ]; then
-    tmp="$TMPD/search"
-    mkdir -p "$tmp"
-    split_entries "$LEARNINGS" "$tmp"
+  local seen="" id bfile
+  local -a blockfiles=("$GLOBAL_PREFS_DIR/global-tips.md")
+  if [ -n "$PROJECT_PREFS_DIR" ]; then
+    blockfiles+=("$PROJECT_PREFS_DIR/learnings.md")
+    blockfiles+=("$PROJECT_PREFS_DIR/pending/proposals.md")
+  fi
+  [ -n "$PROJECT_PREFS_DIR" ] || blockfiles+=("$GLOBAL_PREFS_DIR/pending/proposals.md")
+  for bfile in "${blockfiles[@]}"; do
+    [ -f "$bfile" ] || continue
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/evolve-search.XXXXXX")" || continue
+    split_entries "$bfile" "$tmp"
     n=$(cat "$tmp/COUNT")
     for ((i = 1; i <= n; i++)); do
       f=$(printf '%s/%03d.entry' "$tmp" "$i")
-      entry_valid_id "$f" || continue   # F6: blocos sem id válido (template) não entram no search
+      entry_valid_id "$f" || continue
       if grep -qi "$term" "$f"; then
         IFS='|' read -r M_ID M_DATE M_TYPE M_CONF M_SRC M_STATUS M_TAGS M_TITLE <<< "$(entry_meta "$f")"
         id="$M_ID"
@@ -820,9 +242,17 @@ cmd_search() {
         fi
       fi
     done
-  fi
-  # prompts/ e SKILL.md: contexto bruto com arquivo:linha.
+    rm -rf "$tmp"
+  done
+  # configs do projeto (linhas '- ...') e corpo: contexto bruto com arquivo:linha.
   local sf
+  if [ -n "$PROJECT_PREFS_DIR" ] && [ -f "$PROJECT_PREFS_DIR/project-config.md" ]; then
+    sf="$PROJECT_PREFS_DIR/project-config.md"
+    while IFS= read -r line; do
+      printf '%s: %s\n' "project-config.md" "$line"
+      found=1
+    done < <(grep -in "$term" "$sf")
+  fi
   for sf in "$SKILL_HOME"/prompts/*.md "$SKILL_HOME/SKILL.md"; do
     [ -f "$sf" ] || continue
     while IFS= read -r line; do
@@ -858,8 +288,6 @@ cmd_diff() {
   else
     git -C "$SKILL_REPO" diff HEAD -- "${paths[@]}"
   fi
-  # `git diff HEAD` não mostra arquivos NÃO RASTREADOS; os da allowlist entram no
-  # próximo apply — listá-los evita um diff vazio enganoso após um `add`.
   local untracked
   untracked=$(git -C "$SKILL_REPO" ls-files --others --exclude-standard -- "${paths[@]}" 2>/dev/null || true)
   if [ -n "$untracked" ]; then
@@ -874,54 +302,14 @@ cmd_diff() {
 }
 
 # ---------------------------------------------------------------------------
-# apply / consolidate — validação e lock compartilhados
+# apply — corpo, sempre com diff revisável (nunca merge sozinho)
 # ---------------------------------------------------------------------------
 
-validate_scripts() { # 0 ok / 1 problemas (bash -n; shellcheck -S error se instalado)
-  local changed untracked c
-  changed=$(git -C "$SKILL_REPO" diff --name-only HEAD -- scripts/ 2>/dev/null || true)
-  untracked=$(git -C "$SKILL_REPO" ls-files --others --exclude-standard -- scripts/ 2>/dev/null || true)
-  local -a targets=() t
-  while IFS= read -r c; do
-    [ -n "$c" ] && [ "${c%.sh}" != "$c" ] && targets+=("$c")
-  done <<< "$changed
-$untracked"
-  local -a uniq=() s
-  for t in "${targets[@]}"; do
-    case " ${uniq[*]} " in *" $t "*) ;; *) uniq+=("$t") ;; esac
-  done
-  if [ "${#uniq[@]}" -eq 0 ]; then
-    say "  validação: nenhum scripts/*.sh novo/modificado"
-    return 0
-  fi
-  local bad=0
-  for s in "${uniq[@]}"; do
-    say "  bash -n $s"
-    if ! bash -n "$SKILL_REPO/$s" 2>&1; then
-      err "erro de sintaxe em $s"
-      bad=1
-    fi
-  done
-  if command -v shellcheck >/dev/null 2>&1; then
-    for s in "${uniq[@]}"; do
-      say "  shellcheck -S error $s"
-      if ! shellcheck -S error "$SKILL_REPO/$s" 2>&1; then
-        err "shellcheck acusou problema em $s"
-        bad=1
-      fi
-    done
-  else
-    warn "shellcheck não instalado — validação limitada a bash -n"
-  fi
-  [ "$bad" = 1 ] && return 1
-  return 0
-}
-
 GIT_DIR_ABS=""
-open_lock_fd() { # abre fd 9 no lock SEM redirecionar o stderr do processo (F3)
+acquire_lock() { # flock EXCLUSIVO não-bloqueante em <gitdir>/evolve-skill.lock
   if ! command -v flock >/dev/null 2>&1; then
-    err "flock não disponível (util-linux) — não posso garantir exclusão mútua"
-    return 1
+    warn "flock não disponível (util-linux) — prosseguindo sem exclusão mútua"
+    return 0
   fi
   if [ -z "$GIT_DIR_ABS" ]; then
     GIT_DIR_ABS="$(git -C "$SKILL_REPO" rev-parse --absolute-git-dir 2>/dev/null || printf '%s/.git' "$SKILL_REPO")"
@@ -931,25 +319,14 @@ open_lock_fd() { # abre fd 9 no lock SEM redirecionar o stderr do processo (F3)
     err "não consegui abrir o lock $LOCK_FILE"
     return 1
   fi
-  return 0
-}
-
-acquire_lock() { # flock EXCLUSIVO não-bloqueante em <gitdir>/evolve-skill.lock (apply/consolidate)
-  open_lock_fd || return 1
   if ! flock -n 9; then
-    err "outra execução (apply/consolidate/add) está em andamento — lock $LOCK_FILE ocupado"
+    err "outra execução (apply) está em andamento — lock $LOCK_FILE ocupado"
     return 1
   fi
   return 0
 }
 
-wait_lock() { # flock EXCLUSIVO BLOQUEANTE (add — adds paralelos serializam, sem id duplicado)
-  open_lock_fd || return 1
-  flock 9 || { err "falha no flock de $LOCK_FILE"; return 1; }
-  return 0
-}
-
-release_lock() { # libera o lock (fim do add); nunca redireciona stderr do processo
+release_lock() {
   flock -u 9 2>/dev/null || true
   exec 9>&- || true
 }
@@ -968,20 +345,7 @@ changed_allowlist_paths() { # paths da allowlist com mudança real (working tree
   } | sort -u
 }
 
-only_learnings_changed() { # F8: 0 se TODA mudança da allowlist é LEARNINGS.md/learnings_archive.md
-  local changed c
-  changed="$(changed_allowlist_paths)"
-  while IFS= read -r c; do
-    [ -n "$c" ] || continue
-    case "$c" in
-      LEARNINGS.md|learnings_archive.md) ;;
-      *) return 1 ;;
-    esac
-  done <<< "$changed"
-  return 0
-}
-
-stage_allowlist_changed() { # F1: estágia APENAS paths da allowlist com mudança real no working tree
+stage_allowlist_changed() { # estágia APENAS paths da allowlist com mudança real no working tree
   local changed c
   local -a stage=()
   changed="$(changed_allowlist_paths)"
@@ -1034,486 +398,34 @@ cmd_apply() {
   [ "$direct" = 1 ] && [ -n "$branch" ] && die "apply: --direct e --branch são mutuamente exclusivos"
 
   say "apply: validando antes de commitar..."
-  validate_scripts || die "apply: validação falhou — nada commitado"
   acquire_lock || exit 2
-  guard_staged_allowlist || exit 4   # F1: staged fora da allowlist → aborta SEM tocar no índice
+  guard_staged_allowlist || exit 4
   guard_allowlist
 
   if [ "$direct" = 1 ]; then
     say "apply: commit direto no branch atual"
   elif [ -n "$branch" ]; then
     switch_to_branch "$branch"
-  elif only_learnings_changed; then
-    # F8: default inteligente — só LEARNINGS.md/learnings_archive.md mudaram → direto
-    say "apply: apenas LEARNINGS.md/learnings_archive.md mudaram — commit direto no branch atual (default)"
   else
+    # v3.8.0: o "default inteligente" (memória → commit direto) MORREU junto com
+    # o LEARNINGS.md — TODO o apply de corpo vai para branch próprio, com diff
+    # para revisão humana (D8/Habituation). NUNCA merge sozinho.
     switch_to_branch "evolve/$(date +%F)"
   fi
 
   stage_allowlist_changed
 
-  local msg resumo nnew
+  local msg resumo
   if [ -n "$message" ]; then
     msg="$message"
   else
-    resumo=$(git -C "$SKILL_REPO" diff --cached HEAD -- LEARNINGS.md \
-      | grep '^+## ' | grep -v '^+## Índice' | head -1 | sed 's/^+## *//')
-    nnew=$(git -C "$SKILL_REPO" diff --cached HEAD -- LEARNINGS.md | grep -c '^+id: LEARN-' || true)
-    if [ -n "$resumo" ]; then
-      msg="evolve(learnings): ${nnew:-0} aprendizado(s) — $resumo"
-    else
-      msg="evolve(learnings): atualização de aprendizados"
-    fi
+    resumo=$(git -C "$SKILL_REPO" diff --cached HEAD --stat | tail -1 | sed 's/^ *//')
+    msg="evolve(body): atualização do corpo da skill"
+    [ -n "$resumo" ] && msg="evolve(body): $resumo"
   fi
 
-  guard_staged_allowlist || exit 4   # F1: conferência final imediatamente antes do commit
+  guard_staged_allowlist || exit 4
   commit_and_report "$msg"
-  guard_allowlist
-  return 0
-}
-
-# ---------------------------------------------------------------------------
-# consolidate
-# ---------------------------------------------------------------------------
-
-# Estado de trabalho: ORDER (índices de entradas que ficam), ARCHIVED (idx|motivo),
-# ENT_DIR (pasta das entradas), NDUP/NSUP/NPRUNE/NBUDG (contadores do relatório).
-ENT_DIR=""
-
-load_meta() { # <índice> → popula M_ID M_DATE M_TYPE M_CONF M_SRC M_STATUS M_TAGS M_TITLE (+M_CONTRACT)
-  local idx="$1"
-  IFS='|' read -r M_ID M_DATE M_TYPE M_CONF M_SRC M_STATUS M_TAGS M_TITLE \
-    <<< "$(entry_meta "$ENT_DIR/$idx.entry")"
-  M_CONTRACT=$(entry_field "$ENT_DIR/$idx.entry" contract)   # F-5: opcional, vazio quando ausente
-}
-
-mark_superseded() { # <índice> <id-da-nova> <data-da-nova> — marca a antiga; NUNCA apaga
-  local idx="$1" newid="$2" newdate="$3"
-  local f="$ENT_DIR/$idx.entry"
-  local title tmp
-  title=$(sed -n 's/^## //p' "$f" | head -1)
-  tmp="$TMPD/mark.$$"
-  awk -v nid="$newid" -v nd="$newdate" -v t="$title" '
-    /^status: /      { print "status: superseded"; next }
-    /^supersedes: /  { print "supersedes: \"" nid "\""; next }
-    /^## /           { print "## ~~" t "~~ (obsoleto " nd ": substituída por " nid ")"; next }
-    { print }
-  ' "$f" > "$tmp" && mv "$tmp" "$f"
-}
-
-mark_superseded_reason() { # <índice> <motivo> — marca sem id de substituição (F-5: contrato quebrado)
-  local idx="$1" reason="$2"
-  local f="$ENT_DIR/$idx.entry"
-  local title tmp today
-  today=$(date +%F)
-  title=$(sed -n 's/^## //p' "$f" | head -1)
-  tmp="$TMPD/mark.$$"
-  awk -v rs="$reason" -v td="$today" -v t="$title" '
-    /^status: /     { print "status: superseded"; next }
-    /^supersedes: / { print "supersedes: \"\""; next }
-    /^## /          { print "## ~~" t "~~ (obsoleto " td ": " rs ")"; next }
-    { print }
-  ' "$f" > "$tmp" && mv "$tmp" "$f"
-}
-
-is_untrusted_source() { # <source> → 0 se UNTRUSTED (web|sub-agent|diff|model-output)
-  case "$1" in web|sub-agent|diff|model-output) return 0 ;; esac
-  return 1
-}
-
-is_trusted_source() { # <source> → 0 se confiável (user|repo-doc)
-  case "$1" in user|repo-doc) return 0 ;; esac
-  return 1
-}
-
-archive_evidence() { # → 'título-normalizado|type|source|data' por linha (uma por
-  # entrada do learnings_archive.md com id válido). Fonte da evidência de
-  # ocorrências INDEPENDENTES para o critério de promoção ≥2 (F-11b): entradas
-  # arquivadas (dedupe/poda/orçamento) NÃO são duplicatas descartadas — são
-  # ocorrências anteriores do MESMO padrão em datas distintas.
-  [ -f "$ARCHIVE" ] || return 0
-  local adir="$TMPD/archive-evidence" n i f title type src date
-  rm -rf "$adir"; mkdir -p "$adir"
-  split_entries "$ARCHIVE" "$adir"
-  n=$(cat "$adir/COUNT")
-  for ((i = 1; i <= n; i++)); do
-    f=$(printf '%03d' "$i")
-    entry_valid_id "$adir/$f.entry" || continue   # F6: blocos sem id válido não contam
-    title=$(sed -n 's/^## //p' "$adir/$f.entry" | head -1)
-    type=$(entry_field "$adir/$f.entry" type)
-    src=$(entry_field "$adir/$f.entry" source)
-    date=$(entry_field "$adir/$f.entry" date)
-    date=${date//\"/}
-    [ -n "$title" ] || continue
-    printf '%s|%s|%s|%s\n' "$(normalize "$title")" "$type" "$src" "$date"
-  done
-}
-
-promotion_proposals() { # sobre o estado PÓS dedupe+supersessão+contratos (F-10a:
-  # entrada marcada superseded na MESMA execução nunca é proposta); preenche PROPOSALS.
-  # F-11b: o critério ≥2 conta ocorrências em datas distintas TAMBÉM no
-  # learnings_archive.md — para cada entrada ATIVA elegível (user|repo-doc,
-  # não-superseded), ocorrências = 1 (ela) + entradas arquivadas com MESMO título
-  # normalizado + MESMO type + fonte confiável (user|repo-doc) + data diferente.
-  local -A groupdates=() archdates=()
-  local idx key src cur k2 t2 s2 d2
-  for idx in "${ORDER[@]}"; do
-    load_meta "$idx"
-    [ "$M_STATUS" = "active" ] || continue
-    key="$(normalize "$M_TITLE")|$M_TYPE"
-    cur="${groupdates[$key]:-}"
-    case "|$cur|" in
-      *"|$M_DATE|"*) ;;
-      *) groupdates[$key]="${cur:+$cur$'\n'}$M_DATE" ;;
-    esac
-  done
-  # datas das entradas ARQUIVADAS (evidência de ocorrências anteriores)
-  while IFS='|' read -r k2 t2 s2 d2; do
-    [ -n "$k2" ] || continue
-    case "$s2" in
-      user|repo-doc) ;;                # só fonte confiável conta como evidência
-      *) continue ;;
-    esac
-    [ -n "$d2" ] || continue
-    key="$k2|$t2"
-    cur="${archdates[$key]:-}"
-    case "|$cur|" in
-      *"|$d2|"*) ;;
-      *) archdates[$key]="${cur:+$cur$'\n'}$d2" ;;
-    esac
-  done <<< "$(archive_evidence)"
-  for idx in "${ORDER[@]}"; do
-    load_meta "$idx"
-    [ "$M_STATUS" = "active" ] || continue
-    src="${M_SRC:-}"
-    case "$src" in
-      web|sub-agent|diff|model-output) continue ;;   # anti-poisoning: NUNCA candidatas
-    esac
-    key="$(normalize "$M_TITLE")|$M_TYPE"
-    local all ndates
-    all="${groupdates[$key]:-}"
-    if [ -n "${archdates[$key]:-}" ]; then
-      all="${all:+$all$'\n'}${archdates[$key]}"
-    fi
-    ndates=$(printf '%s\n' "$all" | sort -u | grep -c . || true)
-    if [ "$src" = "user" ] || [ "$ndates" -ge 2 ]; then
-      PROPOSALS+=("$M_ID|$M_TITLE|$M_TYPE|$src|$ndates")
-    fi
-  done
-}
-
-dedupe_pass() { # title+type iguais → mantém a mais nova; antigas vão para ARCHIVED
-  local -A best=() bdate=()
-  local idx key
-  local -a neworder=()
-  for idx in "${ORDER[@]}"; do
-    load_meta "$idx"
-    key="$(normalize "$M_TITLE")|$M_TYPE"
-    if [ -z "${best[$key]:-}" ]; then
-      best[$key]="$idx"
-      bdate[$key]="$M_DATE"
-      neworder+=("$idx")
-    elif [ "$M_DATE" \> "${bdate[$key]:-}" ]; then
-      # F2: a mais nova substitui a anterior — a ANTIGA SAI do ORDER (vai para o
-      # learnings_archive.md) e não reaparece no LEARNINGS.md.
-      ARCHIVED+=("${best[$key]}|duplicata de $idx ($M_TITLE)")
-      NDUP=$((NDUP + 1))
-      local -a no2=() x
-      for x in "${neworder[@]}"; do
-        [ "$x" != "${best[$key]}" ] && no2+=("$x")
-      done
-      neworder=("${no2[@]}")
-      best[$key]="$idx"
-      bdate[$key]="$M_DATE"
-      neworder+=("$idx")
-    else
-      ARCHIVED+=("$idx|duplicata de ${best[$key]} ($M_TITLE)")
-      NDUP=$((NDUP + 1))
-    fi
-  done
-  ORDER=("${neworder[@]}")
-}
-
-supersede_pass() { # contradição: mesmo type + tags sobrepostas + título similar + datas diferentes
-  # F-10b ORDEM DE CONFIANÇA: fonte UNTRUSTED (web|sub-agent|diff|model-output)
-  # NUNCA supersede fonte confiável (user|repo-doc) — em contradição a UNTRUSTED
-  # é que é marcada superseded (pela confiável); sem confiável na disputa, a
-  # mais nova vence normalmente.
-  local i j ia da ta taga tita sra
-  for i in "${ORDER[@]}"; do
-    load_meta "$i"
-    ia="$M_ID"; da="$M_DATE"; ta="$M_TYPE"; taga="$M_TAGS"; tita="$M_TITLE"; sra="$M_SRC"
-    [ "$M_STATUS" = "active" ] || continue
-    for j in "${ORDER[@]}"; do
-      [ "$j" = "$i" ] && continue
-      load_meta "$j"
-      [ "$M_STATUS" = "active" ] || continue
-      [ "$M_DATE" \< "$da" ] && continue   # j mais antigo que i → não supersede
-      [ "$M_DATE" = "$da" ] && continue    # mesma data → empate indeterminado
-      [ "$M_TYPE" != "$ta" ] && continue
-      titles_similar "$M_TITLE" "$tita" || continue
-      tags_overlap "$M_TAGS" "$taga" || continue
-      if is_untrusted_source "$M_SRC" && is_trusted_source "$sra"; then
-        # j (nova, UNTRUSTED) contradiz i (antiga, confiável) → quem é marcada
-        # é a UNTRUSTED; a confiável vence mesmo sendo mais antiga.
-        mark_superseded "$j" "$ia" "$da"
-        say "  superseded: $M_ID ($M_DATE) ← $ia ($da) [fonte $M_SRC UNTRUSTED não supersede $sra]"
-        NSUP=$((NSUP + 1))
-        break
-      fi
-      mark_superseded "$i" "$M_ID" "$M_DATE"
-      say "  superseded: $ia ($da) ← $M_ID ($M_DATE) [type=$ta, tags sobrepostas, título similar]"
-      NSUP=$((NSUP + 1))
-      break
-    done
-  done
-}
-
-contract_pass() { # F-5 (D7): revalida CONTRATOS — para cada entrada ATIVA com
-  # 'contract: cmd1, cmd2', roda 'command -v <cmd>' (checagem determinística, sem
-  # LLM); comando ausente → entrada marcada superseded com motivo 'contrato
-  # quebrado: <cmd> ausente'. Comando ausente NÃO é erro — é resultado.
-  local idx cmd missing
-  for idx in "${ORDER[@]}"; do
-    load_meta "$idx"
-    [ "$M_STATUS" = "active" ] || continue
-    [ -n "${M_CONTRACT:-}" ] || continue
-    missing=""
-    while IFS= read -r cmd; do
-      [ -n "$cmd" ] || continue
-      if ! command -v "$cmd" >/dev/null 2>&1; then
-        [ -n "$missing" ] || missing="$cmd"
-      fi
-    done <<< "$(printf '%s\n' "$M_CONTRACT" | tr ',' '\n' | sed 's/^ *//; s/ *$//')"
-    if [ -n "$missing" ]; then
-      mark_superseded_reason "$idx" "contrato quebrado: $missing ausente"
-      say "  superseded (contrato quebrado): $M_ID — $M_TITLE (comando ausente: $missing)"
-      NCONTRACT=$((NCONTRACT + 1))
-    fi
-  done
-}
-
-prune_pass() { # type: fact + tags voláteis + mais de 90 dias → ARCHIVED (move, nunca apaga)
-  local today cutoff idx lines
-  today=$(date +%F)
-  local -a neworder=()
-  for idx in "${ORDER[@]}"; do
-    load_meta "$idx"
-    if [ "$M_STATUS" = "active" ] && [ "$M_TYPE" = "fact" ] && tags_volatile "$M_TAGS"; then
-      if cutoff=$(date -d "$M_DATE + $VOLATILE_DAYS days" +%F 2>/dev/null); then
-        if [ "$cutoff" \< "$today" ]; then
-          ARCHIVED+=("$idx|fato volátil com mais de $VOLATILE_DAYS dias (tags: $M_TAGS)")
-          NPRUNE=$((NPRUNE + 1))
-          say "  arquivada (volátil): $M_ID — $M_TITLE ($M_DATE)"
-          continue
-        fi
-      fi
-    fi
-    neworder+=("$idx")
-  done
-  ORDER=("${neworder[@]}")
-}
-
-budget_pass() { # entradas ativas > BUDGET_ACTIVE_LINES linhas → move as mais antigas para ARCHIVED
-  local idx lines active=0 total=0
-  for idx in "${ORDER[@]}"; do
-    load_meta "$idx"
-    lines=$(wc -l < "$ENT_DIR/$idx.entry")
-    total=$((total + lines))
-    [ "$M_STATUS" = "active" ] && active=$((active + lines))
-  done
-  if [ "$total" -gt "$BUDGET_TOTAL_LINES" ]; then
-    warn "ORÇAMENTO: $total linhas totais (teto $BUDGET_TOTAL_LINES) — considere revisar o que é essencial"
-  fi
-  [ "$active" -le "$BUDGET_ACTIVE_LINES" ] && return 0
-  local -a dates=() idx2
-  for idx in "${ORDER[@]}"; do
-    load_meta "$idx"
-    [ "$M_STATUS" = "active" ] && dates+=("$M_DATE|$idx")
-  done
-  local sorted line didx
-  sorted=$(printf '%s\n' "${dates[@]}" | sort -k1,1 -t'|' -s)
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    [ "$active" -le "$BUDGET_ACTIVE_LINES" ] && break
-    didx="${line#*|}"
-    load_meta "$didx"
-    lines=$(wc -l < "$ENT_DIR/$didx.entry")
-    ARCHIVED+=("$didx|orçamento (entradas ativas acima de $BUDGET_ACTIVE_LINES linhas)")
-    NBUDG=$((NBUDG + 1))
-    say "  arquivada (orçamento): $M_ID — $M_TITLE ($M_DATE)"
-    local -a no2=()
-    for idx2 in "${ORDER[@]}"; do
-      [ "$idx2" != "$didx" ] && no2+=("$idx2")
-    done
-    ORDER=("${no2[@]}")
-    active=$((active - lines))
-  done <<< "$sorted"
-}
-
-rebuild_learnings() { # <novo-arquivo> — header preservado (comentários + TEMPLATE em
-  # code fence, descartando só as linhas antigas de índice) + índice novo + entradas
-  local out="$1" header idx pre post o ititle
-  header=$(cat "$ENT_DIR/HEADER")
-  idx=$(printf '%s\n' "$header" | grep -n '^## Índice$' | head -1 | cut -d: -f1)
-  if [ -n "$idx" ]; then
-    pre=$(printf '%s\n' "$header" | sed -n "1,${idx}p")
-    # F6: preserva o que vier DEPOIS do '## Índice' no header — comentários HTML
-    # e o TEMPLATE em code fence (documentação de formato) — descartando apenas
-    # as linhas antigas de ÍNDICE ('- AAAA-MM-DD | ... [id: LEARN-...]'),
-    # regeneradas abaixo. (Filtro restrito ao formato do índice: linhas '- ...'
-    # do template, como '- **Observação:**', são preservadas.)
-    post=$(printf '%s\n' "$header" | sed -n "$((idx + 1)),\$p" | grep -vE '^- [0-9]{4}-[0-9]{2}-[0-9]{2} \| .*\[id: LEARN-')
-  else
-    pre="$header"
-    post=""
-  fi
-  # remove linhas em branco no início/fim do bloco pós-índice
-  post=$(printf '%s\n' "$post" | awk 'NF{p=1} p' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')
-  {
-    printf '%s\n' "$pre"
-    for o in "${ORDER[@]}"; do
-      load_meta "$o"
-      # F-3: entradas superseded SAEM do Índice (o corpo permanece, marcado).
-      [ "$M_STATUS" = "superseded" ] && continue
-      ititle=$(sed -n 's/^## //p' "$ENT_DIR/$o.entry" | head -1)
-      printf '%s\n' "- $M_DATE | $M_TYPE | $ititle [id: $M_ID]"
-    done
-    printf '\n'
-    if [ -n "$post" ]; then
-      printf '%s\n' "$post"
-      printf '\n'
-    fi
-    local first=1
-    for o in "${ORDER[@]}"; do
-      if [ "$first" = 1 ]; then first=0; else printf '\n'; fi
-      cat "$ENT_DIR/$o.entry"
-    done
-  } > "$out"
-}
-
-cmd_consolidate() {
-  local apply=0 dry=1 a
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --apply)   apply=1; dry=0; shift ;;
-      --dry-run) dry=1; shift ;;
-      *) die "consolidate: opção desconhecida: $1" ;;
-    esac
-  done
-
-  [ -f "$LEARNINGS" ] || { say "consolidate: LEARNINGS.md ainda não existe — nada a consolidar"; return 0; }
-
-  if [ "$apply" = 1 ]; then
-    acquire_lock || exit 2
-    guard_staged_allowlist || exit 4   # F1: staged fora da allowlist → aborta SEM tocar no índice
-    validate_scripts || die "consolidate: validação falhou — nada commitado"
-    guard_allowlist
-  fi
-
-  local work="$TMPD/consolidate" n
-  ENT_DIR="$work/entries"
-  rm -rf "$work"
-  mkdir -p "$ENT_DIR"
-  split_entries "$LEARNINGS" "$ENT_DIR"
-  n=$(cat "$ENT_DIR/COUNT")
-  [ "$n" -eq 0 ] && { say "consolidate: nenhuma entrada encontrada"; return 0; }
-
-  ORDER=()
-  local i nvalid=0 f
-  for ((i = 1; i <= n; i++)); do
-    f=$(printf '%03d' "$i")
-    entry_valid_id "$ENT_DIR/$f.entry" || continue   # F6: blocos sem id válido (template) não entram
-    ORDER+=("$f")
-    nvalid=$((nvalid + 1))
-  done
-
-  say "consolidate: $nvalid entrada(s) lidas de $LEARNINGS"
-  [ "$nvalid" -eq 0 ] && { say "consolidate: nenhuma entrada válida encontrada"; return 0; }
-
-  # FASE 1: dedupe (title+type iguais → mantém a mais nova)
-  dedupe_pass
-  # FASE 2: supersessão de contradições (F-10b: ordem de confiança aplicada)
-  supersede_pass
-  # FASE 3: revalidação de contratos (F-5/D7)
-  contract_pass
-  # FASE 4: propostas de promoção — sobre o estado PÓS dedupe+supersessão+contratos
-  # (F-10a: entrada marcada superseded na MESMA execução nunca é proposta).
-  promotion_proposals
-  if [ "${#PROPOSALS[@]}" -gt 0 ]; then
-    say "PROPOSTAS DE PROMOÇÃO (nunca aplicadas — exigem revisão humana + diff):"
-    local pr PID PTITLE PTYPE PSRC PND
-    for pr in "${PROPOSALS[@]}"; do
-      IFS='|' read -r PID PTITLE PTYPE PSRC PND <<< "$pr"
-      say "  promover para o corpo da skill (SKILL.md/prompts): $PID — $PTITLE (type=$PTYPE, source=$PSRC, $PND ocorrência(s) em datas distintas)"
-    done
-  else
-    say "propostas de promoção: nenhuma"
-  fi
-  # FASE 5: poda de voláteis
-  prune_pass
-  # FASE 6: orçamento (ativas > 100 linhas → move as mais antigas)
-  budget_pass
-
-  say "consolidate: $NDUP duplicata(s) arquivada(s) · $NSUP superseded · $NPRUNE volátil(is) podada(s) · $NBUDG movida(s) por orçamento · $NCONTRACT contrato(s) quebrado(s)"
-
-  # F-6: orçamento do ÍNDICE — só relatório (proposta de arquivar as ativas
-  # mais antigas quando o índice passa de 30 linhas; nunca move sozinho).
-  local ilines
-  ilines=$(index_line_count)
-  if [ "$ilines" -gt "$BUDGET_INDEX_LINES" ]; then
-    warn "ÍNDICE: $ilines linhas (teto $BUDGET_INDEX_LINES) — considere consolidar/arquivar"
-    say "  proposta (não aplicada): arquivar as entradas ativas mais antigas —"
-    local -a idates=() idx2
-    local sorted line shown=0
-    for idx2 in "${ORDER[@]}"; do
-      load_meta "$idx2"
-      [ "$M_STATUS" = "active" ] || continue
-      idates+=("$M_DATE|$M_ID|$M_TITLE")
-    done
-    sorted=$(printf '%s\n' "${idates[@]}" | sort -k1,1 -t'|' -s)
-    while IFS= read -r line; do
-      [ -n "$line" ] || continue
-      [ "$shown" -ge $((ilines - BUDGET_INDEX_LINES)) ] && break
-      say "    $line"
-      shown=$((shown + 1))
-    done <<< "$sorted"
-  fi
-
-  # Monta o novo LEARNINGS.md
-  local newfile="$work/LEARNINGS.new"
-  rebuild_learnings "$newfile"
-
-  if [ "$dry" = 1 ]; then
-    say "consolidate: dry-run — nada foi alterado. Diff:"
-    diff -u "$LEARNINGS" "$newfile" || true
-    return 0
-  fi
-
-  # ---- apply: escreve arquivos e commita ----
-  guard_allowlist
-  cp "$newfile" "$LEARNINGS" || die "consolidate: falha ao gravar LEARNINGS.md"
-  local marker adx aidx areason
-  if [ "${#ARCHIVED[@]}" -gt 0 ]; then
-    [ -f "$ARCHIVE" ] || printf '%s\n' "$ARCHIVE_HEADER" > "$ARCHIVE"
-    for adx in "${ARCHIVED[@]}"; do
-      aidx="${adx%%|*}"
-      areason="${adx#*|}"
-      marker="<!-- evolve-skill consolidate: arquivada em $(date +%F) — $areason -->"
-      {
-        printf '\n%s\n' "$marker"
-        cat "$ENT_DIR/$aidx.entry"
-        printf '\n'
-      } >> "$ARCHIVE"
-    done
-    say "consolidate: $((${#ARCHIVED[@]})) entrada(s) movida(s) para $(basename "$ARCHIVE")"
-  fi
-  guard_allowlist
-  guard_staged_allowlist || exit 4   # F1: conferência final imediatamente antes do commit
-
-  switch_to_branch "evolve/consolidacao-$(date +%F)"
-  stage_allowlist_changed
-  commit_and_report "evolve(learnings): consolidação de aprendizados"
   guard_allowlist
   return 0
 }
@@ -1531,21 +443,9 @@ cmd_status() {
   say "SKILL_HOME  : $SKILL_HOME"
   say "branch      : $branch"
   say "versão      : $version"
-  if [ -f "$LEARNINGS" ]; then
-    local TE TA TS TL AL LAST IL
-    read -r TE TA TS TL AL LAST <<< "$(learnings_stats)"
-    say "entradas    : $TE (ativas $TA · superseded $TS)"
-    say "linhas      : $TL totais (teto $BUDGET_TOTAL_LINES) · $AL em entradas ativas (teto $BUDGET_ACTIVE_LINES)"
-    IL=$(index_line_count)
-    say "índice      : $IL linhas (teto $BUDGET_INDEX_LINES)"
-    say "última data : ${LAST:-—}"
-    if [ "$AL" -gt "$BUDGET_ACTIVE_LINES" ] || [ "$TL" -gt "$BUDGET_TOTAL_LINES" ]; then
-      warn "ORÇAMENTO: rode evolve-skill.sh consolidate"
-    fi
-  else
-    say "entradas    : 0 (LEARNINGS.md ainda não existe)"
-    say "linhas      : —"
-    say "última data : —"
+  say "memória     : .deep-orchestrator-preferences/ (gitignored — do-prefs.sh)"
+  if [ -x "$SKILL_HOME/scripts/do-prefs.sh" ]; then
+    "$SKILL_HOME/scripts/do-prefs.sh" status 2>/dev/null || say "prefs       : (do-prefs.sh status indisponível)"
   fi
   local eb
   eb=$(git -C "$SKILL_REPO" for-each-ref --format='%(refname:short)' 'refs/heads/evolve/*' | sort)
@@ -1565,11 +465,25 @@ cmd_status() {
 case "${1:-}" in
   '')          usage >&2; exit 2 ;;
   -h|--help|help) usage; exit 0 ;;
-  add)         shift; cmd_add "$@" ;;
-  search)      shift; [ $# -eq 1 ] || die "search: aceita exatamente um termo"; cmd_search "$1" ;;
+  add|consolidate)
+    err "subcomando '$1' REMOVIDO na v3.8.0 — a memória mudou de casa:"
+    err "  aprendizados e preferências vivem em .deep-orchestrator-preferences/ (gitignored),"
+    err "  geridos por scripts/do-prefs.sh (add-project/add-global/pending-add) com o"
+    err "  questionário scripts/evolution-survey.sh (FASE 4, passo 6.5). O LEARNINGS.md"
+    err "  foi removido do repo — nada de memória é commitado."
+    exit 2 ;;
+  search)      shift; [ $# -ge 1 ] || die "search: aceita um termo (e --project <dir> opcional)"
+               _term=""; while [ $# -gt 0 ]; do
+                 case "$1" in
+                   --project) [ $# -ge 2 ] || die "search: --project exige um diretório"; PROJECT_PREFS_DIR="$(cd "$2" && pwd -P 2>/dev/null)/.deep-orchestrator-preferences"; shift 2 ;;
+                   --project=*) PROJECT_PREFS_DIR="$(cd "${1#--project=}" && pwd -P 2>/dev/null)/.deep-orchestrator-preferences"; shift ;;
+                   *) [ -z "$_term" ] && { _term="$1"; shift; } || die "search: aceita exatamente um termo" ;;
+                 esac
+               done
+               [ -n "$_term" ] || die "search: aceita exatamente um termo"
+               cmd_search "$_term" ;;
   diff)        shift; cmd_diff "$@" ;;
   apply)       shift; cmd_apply "$@" ;;
-  consolidate) shift; cmd_consolidate "$@" ;;
   status)      shift; cmd_status "$@" ;;
   *)           die "subcomando desconhecido: ${1:-}" ;;
 esac

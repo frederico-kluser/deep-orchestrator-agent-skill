@@ -34,3 +34,13 @@ RRF + Tavily/Exa), e nada no repositório referenciava o material. A migração
   migração.
 - **Artefatos de execução** (EXPLAINER.html) não pertencem a este diretório —
   ver `.gitignore` da raiz (decisão F4-05).
+
+## Decisões da v3.8.0 (2026-08-27)
+
+`2026-08-27-questionario-evolucao.md` registra D12–D17: agente de evolução
+fresco (D12), questionário sempre com página própria e sem limite de tempo
+(D13), gate humano obrigatório — nada aplicado sem resposta (D14), prefs
+gitignored com LEARNINGS.md removido do repo (D15), escrita só por script +
+.gitignore automático (D16), nunca bloqueia (D17). A memória da skill migrou
+para `.deep-orchestrator-preferences/` (projeto e skill) e o
+`evolve-skill.sh` não commita mais aprendizados.

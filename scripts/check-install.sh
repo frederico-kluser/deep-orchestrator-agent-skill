@@ -99,6 +99,10 @@ check "scripts/ check-plannotator.sh" "$ROOT/scripts/check-plannotator.sh" x
 check "scripts/ plan-approval.sh"     "$ROOT/scripts/plan-approval.sh" x
 check "scripts/ sync-global-skill.sh" "$ROOT/scripts/sync-global-skill.sh" x
 check "scripts/ evolve-skill.sh"      "$ROOT/scripts/evolve-skill.sh" x
+check "scripts/ do-prefs.sh"          "$ROOT/scripts/do-prefs.sh" x
+check "scripts/ evolution-survey.sh"  "$ROOT/scripts/evolution-survey.sh" x
+check "scripts/ lib/evolve-common.sh" "$ROOT/scripts/lib/evolve-common.sh"
+check "scripts/ lib/plannotator-common.sh" "$ROOT/scripts/lib/plannotator-common.sh"
 
 # --- 3. Prompts ---------------------------------------------------------------
 check "prompts/ ecc-prompts.md"       "$ROOT/prompts/ecc-prompts.md"

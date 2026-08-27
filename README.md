@@ -1,10 +1,12 @@
-# deep-orchestrator-agent-skill v3.7.0
+# deep-orchestrator-agent-skill v3.8.0
 
-![Versão](https://img.shields.io/badge/version-3.7.0-00d4ff)
+![Versão](https://img.shields.io/badge/version-3.8.0-00d4ff)
 
 Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda (`scripts/search.sh`: surf-agent-skill → Brave Search API → DuckDuckGo keyless, com `check-search-credits.sh` e lotes via `search-parallel.sh`), e commita tudo ao final **sem perguntar nada ao usuário**.
 
 A única exceção — e ela só existe quando você pede — é o **PORTÃO DE APROVAÇÃO DO PLANO** (FASE 2.5): quando a invocação pede um plano, o plano vai para o [Plannotator](https://github.com/backnotprop/plannotator) e você aprova ou anota. Cada anotação **regera o plano e abre um Plannotator NOVO**, até a aprovação — e nenhuma worktree nasce antes dela. Sem pedido de plano, a autonomia total continua exatamente como sempre foi.
+
+Ao FIM da execução há uma segunda interação, também pelo Plannotator: o **QUESTIONÁRIO DE EVOLUÇÃO** (v3.8.0) — você decide o que a skill aprende com aquela execução (salvar/não salvar, por proposta, no projeto ou globalmente). Sem resposta, nada é aplicado: as propostas ficam pendentes.
 
 ## Glossário (leia antes do resto)
 
@@ -15,8 +17,8 @@ A única exceção — e ela só existe quando você pede — é o **PORTÃO DE 
 | **`$BASE_BRANCH`** | O branch em HEAD na raiz-de-mundo. É o **único** alvo de integração. Nunca é resolvido por convenção (main/master). |
 | **`$MAIN_ROOT`** | O checkout principal do repositório. Em MODO CONTIDO é **zona proibida**. |
 | **WORKTREE-FILHA** | Uma worktree por sub-agente, criada sob `$CHILD_ROOT`, com branch `$BRANCH_NS/<nome>`. |
-| **`LEARNINGS.md`** | Memória episódica da skill (contexto **NÃO revisado**, nunca política executável). Anexada por `scripts/evolve-skill.sh add`, consolidada por `consolidate` e consultada pela FASE 1 antes de planejar. |
-| **`prompts/evolution-guide.md`** | Framework de decisão da evolução: quando/por que evoluir a skill e como filtrar aprendizados antes de persistir no `LEARNINGS.md`. |
+| **`.deep-orchestrator-preferences/`** | Memória consultiva da skill e do projeto (contexto **NÃO revisado**, nunca política executável, **gitignored**). Do projeto: `project-config.md` + `learnings.md` + `pending/`; da skill: `global-tips.md` + `pending/`. Escrita por `scripts/do-prefs.sh` (validada, deduplicada) com o voto do usuário no questionário (`scripts/evolution-survey.sh`); consultada pela FASE 1 antes de planejar. |
+| **`prompts/evolution-guide.md`** | Framework de decisão da evolução: o que qualifica, como classificar project vs global, e o caminho das prefs ao corpo da skill. |
 
 ## Instalação (o contrato)
 
@@ -43,13 +45,16 @@ O único vestígio compartilhado aceito é o registro administrativo das filhas 
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
 
+## Novidades na v3.8.0
+
+- **QUESTIONÁRIO DE EVOLUÇÃO PÓS-EXECUÇÃO**: ao fim de cada execução, UM sub-agente fresco analisa o histórico completo (handoffs de todas as ondas + transcripts do harness quando existem) e sobe um questionário próprio no Plannotator (só as perguntas, SEM limite de tempo): o usuário decide por proposta **salvar/não salvar** e o escopo **projeto ou global** (`scripts/evolution-survey.sh` round/answers/apply). Fechou sem responder → tudo fica PENDENTE e nada é aplicado.
+- **PREFS POR PROJETO (`.deep-orchestrator-preferences/`)**: configs e aprendizados do projeto ficam no PRÓPRIO projeto (carregados na FASE 1, salvo quando o usuário decide salvar); dicas globais ficam na MESMA pasta dentro da skill — tudo **gitignored** (memória consultiva, nunca política). `ensure-gitignore` acrescenta a linha no `.gitignore` de cada projeto automaticamente.
+- **LEARNINGS.md REMOVIDO DO REPO**: as 59 entradas antigas foram reclassificadas — as globais migraram para `global-tips.md`; as de projeto específico saíram (git history preserva). `evolve-skill.sh` não commita mais memória (`add`/`consolidate` saem com mensagem de migração); o `apply` de CORPO vai sempre para branch `evolve/YYYY-MM-DD` + diff, nunca merge sozinho.
+- **A FASE 1 consulta prefs + memória** antes de planejar (`do-prefs.sh load` + `evolve-skill.sh search`) — evita repetir erros e respeita as preferências declaradas do projeto. Decisões D12–D17 em `docs/decisions/2026-08-27-questionario-evolucao.md`. Testes: `scripts/test-evolve.sh` (suíte F1–Fxx nova).
+
 ## Novidades na v3.7.0
 
-- **AUTO-EVOLUÇÃO CONTÍNUA**: ao fim de cada execução o orquestrador coleta aprendizados (retrospectiva: surpresas, correções, anti-padrões, falhas de gate, achados de revisão), filtra pelas regras de `prompts/evolution-guide.md` e persiste via `scripts/evolve-skill.sh` (CLI `add/search/diff/apply/consolidate/status`) no `LEARNINGS.md` da própria skill — funciona de **qualquer** projeto (a casa da skill é resolvida por symlink, nunca pelo cwd).
-- **Memória é contexto não-revisado**: o `add` anexa direto (append-only); a promoção ao corpo da skill exige evidência (≥2 ocorrências ou confirmação do usuário) e gera diff git revisável — o `apply` **nunca** faz merge sozinho (default inteligente: só `LEARNINGS.md` mudou → commit direto; tocou `SKILL.md`/`prompts`/docs → branch `evolve/YYYY-MM-DD`).
-- **Anti-poisoning por código**: `source` é obrigatório; `web | sub-agent | diff | model-output` **nunca promovem** (nem aparecem na proposta); o `add` roda scan de segredos (padrões de credencial rejeitam o lote inteiro, sem imprimir o valor).
-- **Contradição marcada, nunca apagada**: a entrada mais nova vence; a antiga vira `status: superseded` + `supersedes:` + corpo `~~…~~ (obsoleto …)`. Orçamento com consolidação (GC): entradas ativas ≤ 100 linhas e arquivo ≤ 400 — no teto, `consolidate` move o excedente para `learnings_archive.md` (preservado).
-- **A FASE 1 consulta a memória da skill** antes de planejar (`evolve-skill.sh search` sobre o `LEARNINGS.md`) — evita repetir erros já registrados em execuções anteriores. Testes: `scripts/test-evolve.sh` (83 asserções, E1–E20, repos fake isolados, sem rede).
+- **AUTO-EVOLUÇÃO CONTÍNUA (substituída pela v3.8.0)**: retrospectiva do orquestrador + `evolve-skill.sh add` no `LEARNINGS.md` commitado. Esse mecanismo foi substituído pelo questionário + prefs gitignored — o `LEARNINGS.md` não existe mais no repo.
 
 ## Novidades na v3.6.0
 
@@ -190,12 +195,16 @@ Fontes primárias: [subagents](https://code.claude.com/docs/en/subagents) · [ag
 ```
 deep-orchestrator-agent-skill/
 ├── README.md                    # Este arquivo
-├── SKILL.md                     # Definição do skill v3.7.0 (frontmatter YAML + XML do orquestrador)
+├── SKILL.md                     # Definição do skill v3.8.0 (frontmatter YAML + XML do orquestrador)
 ├── scripts/
 │   ├── README.md                # Índice de todos os scripts e o fluxo de busca 3-tier
 │   ├── do-context.sh            # FASE 0 — delimita a raiz-de-mundo e grava o estado
 │   ├── do-wt.sh                 # ciclo de vida das worktrees-filhas (guardas de contenção)
-│   ├── evolve-skill.sh          # motor de auto-evolução: add/search/diff/apply/consolidate/status do LEARNINGS.md da própria skill
+│   ├── evolve-skill.sh          # evolução do CORPO da skill: search (prefs+prompts)/diff/apply (branch evolve/*, nunca merge sozinho)/status
+│   ├── do-prefs.sh              # motor de prefs: .deep-orchestrator-preferences/ do projeto e da skill (load/add-project/add-global/pending/ensure-gitignore/status)
+│   ├── evolution-survey.sh      # questionário de evolução pós-execução (round/answers/apply — Plannotator, sem limite de tempo)
+│   ├── lib/evolve-common.sh     # parsers/validadores compartilhados do formato de bloco
+│   ├── lib/plannotator-common.sh # contrato do Plannotator compartilhado (plan-approval.sh + evolution-survey.sh)
 │   ├── search.sh                # interface única de busca 3-tier (surf-agent-skill → Brave → DDG keyless)
 │   ├── search-parallel.sh       # busca em lote paralelo (uma chamada por lote, nunca loop)
 │   ├── check-search-credits.sh  # verificador multi-tier pré-onda (exit 0/1/2)
@@ -206,7 +215,7 @@ deep-orchestrator-agent-skill/
 │   ├── check-brave-credits.sh   # (DEPRECATED) — use check-search-credits.sh
 │   ├── test-contencao.sh        # testes de regressão do MODO CONTIDO (85 asserções)
 │   ├── test-search.sh           # testes da cadeia de busca 3-tier (64 asserções)
-│   ├── test-evolve.sh           # testes do motor de auto-evolução (83 asserções, E1–E20)
+│   ├── test-evolve.sh           # testes do motor de prefs/questionário/evolução (suíte F1–Fxx)
 │   └── test-plan-approval.sh    # testes do portão de aprovação (111 asserções, mockado)
 ├── prompts/
 │   ├── ecc-prompts.md           # 7 templates de prompt portados do ECC
