@@ -63,6 +63,8 @@
 - 2026-08-26 | gotcha | "Snapshot de integração criado após merge FALHO fica stale — recriar no estado pós-merge" [id: LEARN-20260826-022]
 - 2026-08-26 | gotcha | "Fix que reproduz mudanças de worktree irmã à mão conflita no squash — resolver dentro da filha (merge da raiz + delta)" [id: LEARN-20260826-023]
 - 2026-08-26 | convention | "Carve-out de segurança (!!pinned ||) pode ficar obsoleto por features novas — revisão adversarial do diff integrado é a rede" [id: LEARN-20260826-024]
+- 2026-08-27 | gotcha | Gates longos (build de Next.js) em background são mortos pelo harness — rodar em foreground [id: LEARN-20260827-001]
+- 2026-08-27 | gotcha | EXPLAINER.html gitignored no repo alvo — stage-delta não o versiona e clean-ignored-delta o apaga no teardown [id: LEARN-20260827-002]
  — o trânsito JSON/heredoc quebra a string [id: LEARN-20260826-020]
 0" → [ "0
 0" -gt 0 ] → stderr "esperava número inteiro" entra no corpo injetado da skill /daf:status [id: LEARN-20260826-011]
@@ -848,3 +850,31 @@ tags: [seguranca, revisao]
 ## "Carve-out de segurança (!!pinned ||) pode ficar obsoleto por features novas — revisão adversarial do diff integrado é a rede"
 - **Observação:** O guard `!!pinned || gitlabMcpFitsTurn(...)` era seguro enquanto init era GitLab-only por construção; quando a feature deu azure ao init (propósito azure-init-rw), o PAT azure passaria ao MCP GitLab. A revisão adversarial do diff integrado + o handoff do sub-agente flagraram; o fix foi um worktree próprio com teste de reversão. Lição: a premissa documentada de um carve-out de segurança pode morrer em ondas futuras — o comentário do código deve dizer QUAL premissa o sustenta, e a revisão adversarial deve checar premissas de segurança.
 - **Ação:** Ao revisar diffs de features, conferir cada comentário que diz "seguro porque <premissa>" contra o estado integrado; premissas de provedor/credencial são as mais traiçoeiras.
+
+---
+id: LEARN-20260827-001
+date: "2026-08-27"
+type: gotcha
+confidence: high
+source: model-output
+status: active
+supersedes: ""
+tags: [gate, background, harness, build]
+---
+## Gates longos (build de Next.js) em background são mortos pelo harness — rodar em foreground
+- **Observação:** Nas ondas 3+ desta execução, o comando de gate em background (run_in_background=true) foi morto 3x (exit 143/SIGTERM) durante a fase de build do Next.js — inclusive com --no-lint e com cache .next presente. O MESMO gate rodado em foreground (síncrono) completou sempre. Gates anteriores (1.1/1.2/2.1/2.2) completaram em background — a morte não é determinística, mas o foreground provou-se confiável.
+- **Ação:** No COMMIT-FINAL e nos gates de snapshot, preferir rodar o trio do gate em foreground (síncrono) quando o harness permitir; em background, dividir o gate em etapas curtas (install, build, test, typecheck, lint separados) para que nenhuma etapa individual estoure o teto.
+
+---
+id: LEARN-20260827-002
+date: "2026-08-27"
+type: gotcha
+confidence: high
+source: repo-doc
+status: active
+supersedes: ""
+tags: [explainer, gitignore, stage-delta, clean-ignored-delta]
+---
+## EXPLAINER.html gitignored no repo alvo — stage-delta não o versiona e clean-ignored-delta o apaga no teardown
+- **Observação:** No repo daf-chat, /EXPLAINER.html (e RELATORIO-*.html) estão no .gitignore (linhas 51/56). O stage-delta do COMMIT-FINAL não estagia o EXPLAINER.html (ignorado) e o clean-ignored-delta do teardown (passo 7) o REMOVE como delta pós-FASE 0 — o artefato didático morre com a execução, contradizendo o relatório que o anuncia. Nesta execução, o arquivo foi copiado para fora de BASE_DIR antes do teardown para preservação.
+- **Ação:** No COMMIT-FINAL, antes do clean-ignored-delta, verificar se o EXPLAINER.html está gitignored no repo alvo (git check-ignore); se sim e a entrega depender dele, preservá-lo explicitamente (ex.: copiar para um destino fora de BASE_DIR) e registrar o destino no relatório final.
