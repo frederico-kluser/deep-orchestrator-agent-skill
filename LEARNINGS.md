@@ -52,6 +52,9 @@
 - 2026-08-26 | gotcha | status-context.sh do DAF v1.33.0: grep -c || echo "0" produz "0
 - 2026-08-26 | fact | Skills com context:fork (oracle/arquiteto) gravam corpo+resposta no transcript do SUBAGENTE — o run pai fica com input_tokens 0/num_turns 0 [id: LEARN-20260826-012]
 - 2026-08-26 | fact | deepclaude (Claude Code + DeepSeek) não exporta CLAUDE_PLUGIN_ROOT para o subprocesso do context script — costs-context.sh reporta "Pricing FALTANDO" falso em todas as sessões [id: LEARN-20260826-013]
+- 2026-08-26 | gotcha | Capturar rc de pipe em gate com zsh (PIPESTATUS minúsculo) [id: LEARN-20260826-014]
+- 2026-08-26 | fact | Antes de planejar o delta, verificar se a feature já está na base [id: LEARN-20260826-015]
+- 2026-08-26 | gotcha | lib/admin-overview.ts tem byte NUL deliberado — grep trata como binário [id: LEARN-20260826-016]
 0" → [ "0
 0" -gt 0 ] → stderr "esperava número inteiro" entra no corpo injetado da skill /daf:status [id: LEARN-20260826-011]
 
@@ -682,3 +685,45 @@ tags: [deepclaude, env, skills]
 ## deepclaude (Claude Code + DeepSeek) não exporta CLAUDE_PLUGIN_ROOT para o subprocesso do context script — costs-context.sh reporta "Pricing FALTANDO" falso em todas as sessões
 - **Observação:** O placeholder ${CLAUDE_PLUGIN_ROOT} no CORPO é substituído pelo loader, mas a env não chega ao script bash; o pre-check do costs mente (pricing.json existe). Qualquer conclusão comportamental baseada nessa pré-condição é viciada.
 - **Ação:** Ao testar behavior de skills do DAF fora do ambiente de prod, verificar se o context script recebeu as envs esperadas antes de atribuir desvio ao modelo.
+
+---
+id: LEARN-20260826-014
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: model-output
+status: active
+supersedes: ""
+tags: gate, bash, zsh, harness
+---
+## Capturar rc de pipe em gate com zsh (PIPESTATUS minúsculo)
+- **Observação:** O script de gate do orquestrador usou ${PIPESTATUS[0]} (bash) num shell zsh — a variável é $pipestatus (minúscula), o índice saiu vazio e o gate reportou VERMELHO falso (exit 1) com build/test/lint verdes. Detectado e re-rodado com rc=$? sobre redirecionamento para arquivo.
+- **Ação:** Em scripts de gate/captura de rc, evitar dependência de PIPESTATUS: usar `cmd > arquivo 2>&1; rc=$?` e depois `tail` do arquivo — funciona em bash E zsh.
+
+---
+id: LEARN-20260826-015
+date: "2026-08-26"
+type: fact
+confidence: high
+source: diff
+status: active
+supersedes: ""
+tags: planejamento, análise, delta
+---
+## Antes de planejar o delta, verificar se a feature já está na base
+- **Observação:** A tarefa "PMs com acesso ao painel admin" estava ~95% implementada em main (0.19.6): lib/pm.ts, guard requireAdminOrPm, PM_ROUTES com 8 rotas, navegação PM no AdminShell. A análise pré-plano (git branch --contains + leitura dos arquivos-chave) revelou o delta real (só a aba Auditoria) — planejar sem ela teria gerado ondas inteiras de trabalho redundante.
+- **Ação:** Em tarefa brownfield, verificar primeiro (git log/branch --contains, grep do conceito) se a feature já existe na branch-base; o plano então vira o delta, não a feature inteira.
+
+---
+id: LEARN-20260826-016
+date: "2026-08-26"
+type: gotcha
+confidence: high
+source: repo-doc
+status: active
+supersedes: ""
+tags: daf-chat, grep, binário
+---
+## lib/admin-overview.ts tem byte NUL deliberado — grep trata como binário
+- **Observação:** lib/admin-overview.ts:311 usa `${run.userId}\x00${run.repoUrl}` como chave de dedup — o byte NUL faz o grep tratar o arquivo como binário e calar (sem `-a`, sem resultados). Dois sub-agentes independentes esbarraram nisso na mesma execução.
+- **Ação:** Ao varrer lib/admin-overview.ts (daf-chat), usar `grep -a` ou `LC_ALL=C grep`; não interpretar silêncio do grep como ausência.
