@@ -22,18 +22,19 @@
 #   F11: identidade errada do SKILL.md → exit 3 (add-global)
 #   F12: add com entrada vazia → exit 0, 'nada a adicionar', nada escrito (D9)
 #   F13: aspas ao redor de title/observacao/acao são removidas no armazenamento
-#   S1:  round com annotated + gramática → exit 0; snapshot imutável; título
-#        travado
-#   S2:  answers → answers.json correto (jq E python3 — forçando a rota)
-#   S3:  gramática fora do padrão → resposta ausente → apply pendes a proposta
-#   S4:  approved sem feedback → exit 0, answers vazio → apply pendes TUDO
-#   S5:  dismissed → exit 11
-#   S6:  toolfail (stdout ilegível) → exit 13; retry vira rev-002
-#   S7:  apply roteia sim·global → global-tips; sim·projeto → learnings;
-#        nao → descartada; config: → project-config.md; contagens corretas
+#   S1:  ask com propostas → exit 0; pendente.md gravado; bloco numerado com
+#        opções a/b/c e a linha "1 = fix local · 2 = fix global"
+#   S2:  ask sem propostas → marca SEM-PROPOSTAS e exit 0
+#   S3:  answer "1:b2 2:c1" → answers.json: P001 sim/global/opcao b (jq)
+#   S4:  answer rota python3 (sem jq no PATH) → answers.json correto
+#   S5:  answer "nada" → answers vazio → apply pendes TUDO, nada salvo
+#   S6:  answer fora da gramática → exit 2 com mensagem acionável
+#   S7:  apply roteia 1:b2 → global-tips com a AÇÃO da opção b; 2:a1 →
+#        learnings com a AÇÃO da opção a; 3:c → descartada; config inline →
+#        project-config.md; contagens corretas
 #   S8:  apply idempotente — 2ª chamada com o mesmo answers.json → skip
-#   S9:  deriva de título → exit 2
-#   S10: sem jq E sem python3 no PATH → round sai 2 com mensagem acionável
+#   S9:  dismiss → answers vazio → tudo pendente
+#   S10: sem jq E sem python3 no PATH → answer sai 2 com mensagem acionável
 #   E1:  evolve-skill.sh search encontra em global-tips.md e em prefs do
 #        projeto (--project)
 #   E2:  evolve-skill.sh add → exit 2 com a mensagem de migração
@@ -138,9 +139,30 @@ PROJECT_PENDING='$CASE/proj/.deep-orchestrator-preferences/pending/proposals.md'
 GLOBAL_PENDING='$GLOBAL_PENDING'
 export DO_STATE BASE_DIR RUN_ID DO_PREFS DO_SURVEY PROJECT_PREFS_DIR PROJECT_LEARNINGS GLOBAL_TIPS PROJECT_CONFIG PROJECT_PENDING GLOBAL_PENDING
 EOF
-  mkdir -p "$CASE/state/evolution/survey"
-  # o apply lê as propostas do caminho default sob $DO_STATE
+  mkdir -p "$CASE/state/evolution"
+  # o ask/answer/apply lê as propostas do caminho default sob $DO_STATE
   PROPOSALS="$CASE/state/evolution/proposals.md"
+}
+
+# candidato_v39: formato v3.9.0 — com as opções a/b/c da PERGUNTA
+candidato_v39() { # <arquivo> <key> <título> <scope> <obs> <opcao_a> <opcao_b>
+  local f="$1"; shift
+  {
+    printf -- '---\n'
+    printf 'key: %s\n' "$1"
+    printf 'title: "%s"\n' "$2"
+    printf 'scope: %s\n' "$3"
+    printf 'type: gotcha\n'
+    printf 'confidence: high\n'
+    printf 'source: user\n'
+    printf 'tags: [test]\n'
+    printf 'observacao: "%s"\n' "$4"
+    printf 'acao: "acao original"\n'
+    printf 'opcao_a: "%s"\n' "$5"
+    printf 'opcao_b: "%s"\n' "$6"
+    printf 'opcao_c: "Não fazer nada (descartar)"\n'
+    printf -- '---\n'
+  } > "$f"
 }
 
 # nopath_sem <bin1> [bin2...] — PATH espelhado por symlinks, sem os bins dados
@@ -157,24 +179,6 @@ nopath_sem() {
       [ "$skip" = 0 ] && ln -sf "$b" "$NOPATH/$base" 2>/dev/null
     done
   done
-}
-
-# plannotator FAKE fiel ao contrato (padrão test-plan-approval.sh): usage sem
-# args; envelope json em UMA linha; exit SEMPRE 0. O feedback varia por caso.
-make_fake_plannotator() { # <feedback-json-ou-decision>
-  mkdir -p "$CASE/bin"
-  cat > "$CASE/bin/plannotator" <<EOF
-#!/usr/bin/env bash
-if [ "\$1" = "annotate" ] && [ \$# -ge 1 ]; then
-  printf '%s\n' '$1'
-  exit 0
-fi
-echo "usage: annotate <file>"
-exit 0
-EOF
-  chmod +x "$CASE/bin/plannotator"
-  export DO_PLANNOTATOR_BIN="$CASE/bin/plannotator"
-  export PATH="$CASE/bin:$PATH"
 }
 
 # =============================================================================
@@ -272,126 +276,92 @@ chk "F12 'nada a adicionar'" "$(printf '%s' "$out" | grep -c 'nada a adicionar')
 chk "F12 nada escrito" "$([ -f "$PROJ_PREFS/learnings.md" ] && echo 1 || echo 0)" "0"
 
 # =============================================================================
-echo "=== S1..S10: evolution-survey.sh ==="
+echo "=== S1..S10: evolution-survey.sh (pergunta em texto — v3.9.0) ==="
 # =============================================================================
 
 newcase s1; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"decision":"annotated","feedback":"P001: sim · global\nP002: nao\nconfig: usar pnpm test no gate"}'
-candidate "$PROPOSALS" P001 "Background longos" global gotcha high user "Bash morre." "Monitor."
-{ printf '\n'; printf -- '---\n'; printf 'key: P002\n'; printf 'title: "Gate pnpm"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "npm falha."\n'; printf 'acao: "pnpm test."\n'; printf -- '---\n'; } >> "$PROPOSALS"
-cat > "$CASE/questionario.md" <<'EOF'
-# Questionário de evolução — fixture s1
-
-## P001 — Background longos
-
-`P001: sim · global` / `P001: nao`
-
-## P002 — Gate pnpm
-
-`P002: sim · projeto` / `P002: nao`
-EOF
-out=$("$SURVEY" --env "$CASE/env" round "$CASE/questionario.md" 2>/dev/null); rc=$?
-chk "S1 round annotated → exit 0" "$rc" "0"
-chk "S1 linha de contrato" "$(printf '%s' "$out" | grep -c '^EVOLUTION_SURVEY decision=annotated revision=1')" "1"
-[ -f "$CASE/state/evolution/survey/rev-001.md" ] && chk "S1 snapshot" y y || chk "S1 snapshot" n y
-[ -w "$CASE/state/evolution/survey/rev-001.md" ] && chk "S1 snapshot imutável" n y || chk "S1 snapshot imutável" y y
+candidato_v39 "$PROPOSALS" P001 "Dependencias em worktree" global \
+  "Toda vez que criamos uma worktree precisamos instalar as dependencias" \
+  "usar symlinks" "merge para principal e testar"
+{ printf '\n'; printf -- '---\n'; printf 'key: P002\n'; printf 'title: "Gate pnpm"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "npm falha."\n'; printf 'acao: "acao original"\n'; printf 'opcao_a: "pnpm test"\n'; printf 'opcao_b: "documentar"\n'; printf 'opcao_c: "Não fazer nada (descartar)"\n'; printf -- '---\n'; } >> "$PROPOSALS"
+out=$("$SURVEY" --env "$CASE/env" ask 2>/dev/null); rc=$?
+chk "S1 ask → exit 0" "$rc" "0"
+chk "S1 pergunta numerada (1 -)" "$(printf '%s' "$out" | grep -c '^1 - Toda vez')" "1"
+chk "S1 opções a/b/c (2 propostas × 3)" "$(printf '%s' "$out" | grep -c '^   [abc]:')" "6"
+chk "S1 linha de escopo (1 = fix local · 2 = fix global)" "$(printf '%s' "$out" | grep -c '1 = fix local · 2 = fix global')" "2"
+chk "S1 pendente.md gravado" "$([ -f "$CASE/state/evolution/pendente.md" ] && echo 1 || echo 0)" "1"
 
 newcase s2; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"decision":"annotated","feedback":"P001: sim · global\nP002: pendente · projeto\nconfig: linha de config"}'
-candidate "$PROPOSALS" P001 "A" global gotcha high user "x" "y"
-{ printf '\n'; printf -- '---\n'; printf 'key: P002\n'; printf 'title: "B"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "x"\n'; printf 'acao: "y"\n'; printf -- '---\n'; } >> "$PROPOSALS"
-printf '# Questionário — s2\n' > "$CASE/q.md"
-"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
-"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1; rc=$?
-chk "S2 answers → exit 0" "$rc" "0"
-if command -v jq >/dev/null 2>&1; then
-  chk "S2 P001 save/scope (jq)" "$(jq -r '.answers.P001.save + "/" + .answers.P001.scope' "$CASE/state/evolution/survey/answers.json")" "sim/global"
-  chk "S2 configs (jq)" "$(jq -r '.configs[0]' "$CASE/state/evolution/survey/answers.json")" "linha de config"
-fi
-if command -v python3 >/dev/null 2>&1; then
-  nopath_sem jq
-  rm -f "$CASE/state/evolution/survey/answers.json"
-  env PATH="$NOPATH" "$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
-  chk "S2 rota python3 ok" "$(python3 -c 'import json;d=json.load(open("'$CASE'/state/evolution/survey/answers.json"));print(d["answers"]["P002"]["save"]+"/"+d["answers"]["P002"]["scope"])')" "pendente/project"
-fi
+: > "$PROPOSALS"
+out=$("$SURVEY" --env "$CASE/env" ask 2>/dev/null); rc=$?
+chk "S2 sem propostas → SEM-PROPOSTAS" "$(printf '%s' "$out" | grep -c '^SEM-PROPOSTAS$')" "1"
+chk "S2 exit 0" "$rc" "0"
 
 newcase s3; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"decision":"annotated","feedback":"P001: xpto sem sentido"}'
-candidate "$PROPOSALS" P001 "Fora da gramática" global gotcha high user "x" "y"
-printf '# Questionário — s3\n' > "$CASE/q.md"
-"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
-"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
-"$SURVEY" --env "$CASE/env" apply >/dev/null 2>&1
-chk "S3 resposta ilegível → pendente" "$(grep -c '^id: P-' "$GLOBAL_PENDING" 2>/dev/null || echo 0)" "1"
-chk "S3 nada salvo" "$([ -f "$GLOBAL_TIPS" ] && echo 1 || echo 0)" "0"
+candidato_v39 "$PROPOSALS" P001 "A" global "obs a" "acao a1" "acao a2"
+{ printf '\n'; printf -- '---\n'; printf 'key: P002\n'; printf 'title: "B"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "obs b"\n'; printf 'acao: "acao original"\n'; printf 'opcao_a: "b1"\n'; printf 'opcao_b: "b2"\n'; printf 'opcao_c: "Não fazer nada (descartar)"\n'; printf -- '---\n'; } >> "$PROPOSALS"
+"$SURVEY" --env "$CASE/env" answer "1:b2 2:c1" >/dev/null 2>&1; rc=$?
+chk "S3 answer → exit 0" "$rc" "0"
+if command -v jq >/dev/null 2>&1; then
+  chk "S3 P001 save/scope/opcao (jq)" "$(jq -r '.answers.P001.save + "/" + .answers.P001.scope + "/" + .answers.P001.opcao' "$CASE/state/evolution/answers.json")" "sim/global/b"
+  chk "S3 P002 c → nao" "$(jq -r '.answers.P002.save' "$CASE/state/evolution/answers.json")" "nao"
+fi
 
 newcase s4; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"decision":"approved"}'
-candidate "$PROPOSALS" P001 "A" project gotcha high user "x" "y"
-printf '# Questionário — s4\n' > "$CASE/q.md"
-out=$("$SURVEY" --env "$CASE/env" round "$CASE/q.md" 2>/dev/null); rc=$?
-chk "S4 approved sem feedback → exit 0" "$rc" "0"
-"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
-"$SURVEY" --env "$CASE/env" apply >/dev/null 2>&1
-chk "S4 tudo pendente" "$(grep -c '^id: P-' "$CASE/proj/.deep-orchestrator-preferences/pending/proposals.md" 2>/dev/null || echo 0)" "1"
-chk "S4 nada salvo" "$([ -f "$CASE/proj/.deep-orchestrator-preferences/learnings.md" ] && echo 1 || echo 0)" "0"
+candidato_v39 "$PROPOSALS" P001 "A" project "obs" "x1" "x2"
+nopath_sem jq
+"$SURVEY" --env "$CASE/env" answer "1:a1" >/dev/null 2>&1
+env PATH="$NOPATH" "$SURVEY" --env "$CASE/env" answer "1:a1" >/dev/null 2>&1; rc=$?
+chk "S4 answer rota python3 → exit 0" "$rc" "0"
+if command -v python3 >/dev/null 2>&1; then
+  chk "S4 answers correto (python3)" "$(python3 -c 'import json;d=json.load(open("'$CASE'/state/evolution/answers.json"));print(d["answers"]["P001"]["save"]+"/"+d["answers"]["P001"]["scope"]+"/"+d["answers"]["P001"]["opcao"])')" "sim/project/a"
+fi
 
 newcase s5; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"decision":"dismissed"}'
-printf '# Questionário — s5\n' > "$CASE/q.md"
-"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1; rc=$?
-chk "S5 dismissed → exit 11" "$rc" "11"
+candidato_v39 "$PROPOSALS" P001 "A" project "obs" "x1" "x2"
+"$SURVEY" --env "$CASE/env" answer "nada" >/dev/null 2>&1; rc=$?
+chk "S5 answer nada → exit 0" "$rc" "0"
+"$SURVEY" --env "$CASE/env" apply >/dev/null 2>&1
+chk "S5 tudo pendente" "$(grep -c '^id: P-' "$CASE/proj/.deep-orchestrator-preferences/pending/proposals.md" 2>/dev/null || echo 0)" "1"
+chk "S5 nada salvo" "$([ -f "$CASE/proj/.deep-orchestrator-preferences/learnings.md" ] && echo 1 || echo 0)" "0"
 
 newcase s6; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"not":"json-at-all"}'
-printf '# Questionário — s6\n' > "$CASE/q.md"
-"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1; rc=$?
-chk "S6 saída ilegível → exit 13" "$rc" "13"
-make_fake_plannotator '{"decision":"dismissed"}'
-"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1; rc=$?
-chk "S6 retry vira rev-002" "$rc" "11"
-[ -f "$CASE/state/evolution/survey/rev-002.md" ] && chk "S6 rev-002 em disco" y y || chk "S6 rev-002 em disco" n y
+candidato_v39 "$PROPOSALS" P001 "A" global "obs" "x1" "x2"
+out=$("$SURVEY" --env "$CASE/env" answer "xpto sem sentido" 2>&1); rc=$?
+chk "S6 gramática inválida → exit 2" "$rc" "2"
+m6=$(printf '%s' "$out" | grep -c 'Esperado: N:XY'); [ "$m6" -ge 1 ] && chk "S6 mensagem acionável" ">=1" ">=1" || chk "S6 mensagem acionável" "0" ">=1"
 
 newcase s7; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"decision":"annotated","feedback":"P001: sim · global\nP002: sim · projeto\nP003: nao\nconfig: preferencia livre"}'
-candidate "$PROPOSALS" P001 "A global" global gotcha high user "x" "y"
-{ printf '\n'; printf -- '---\n'; printf 'key: P002\n'; printf 'title: "B projeto"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "x"\n'; printf 'acao: "y"\n'; printf -- '---\n'; printf 'key: P003\n'; printf 'title: "C descartada"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "x"\n'; printf 'acao: "y"\n'; printf -- '---\n'; } >> "$PROPOSALS"
-printf '# Questionário — s7\n' > "$CASE/q.md"
-"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
-"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
+candidato_v39 "$PROPOSALS" P001 "A global" global "obs a" "acao a1" "acao a2"
+{ printf '\n'; printf -- '---\n'; printf 'key: P002\n'; printf 'title: "B projeto"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "obs b"\n'; printf 'acao: "acao original"\n'; printf 'opcao_a: "b1"\n'; printf 'opcao_b: "b2"\n'; printf 'opcao_c: "Não fazer nada (descartar)"\n'; printf -- '---\n'; printf 'key: P003\n'; printf 'title: "C descartada"\n'; printf 'scope: project\n'; printf 'type: gotcha\n'; printf 'confidence: high\n'; printf 'source: user\n'; printf 'tags: [test]\n'; printf 'observacao: "obs c"\n'; printf 'acao: "acao original"\n'; printf 'opcao_a: "c1"\n'; printf 'opcao_b: "c2"\n'; printf 'opcao_c: "Não fazer nada (descartar)"\n'; printf -- '---\n'; } >> "$PROPOSALS"
+"$SURVEY" --env "$CASE/env" answer "1:b2 2:a1 3:c2 config: preferencia livre" >/dev/null 2>&1
 out=$("$SURVEY" --env "$CASE/env" apply 2>/dev/null)
 chk "S7 2 salvas · 1 descartada · 0 pendentes" "$(printf '%s' "$out" | grep -o '[0-9]* salva(s) (projeto/global) · [0-9]* descartada(s) · [0-9]* pendente(s)')" "2 salva(s) (projeto/global) · 1 descartada(s) · 0 pendente(s)"
 chk "S7 global-tips tem P001" "$(grep -c '^## A global$' "$GLOBAL_TIPS" 2>/dev/null || echo 0)" "1"
+chk "S7 AÇÃO de P001 = opção b (global)" "$(grep -c -- '- \*\*Ação:\*\* acao a2' "$GLOBAL_TIPS" 2>/dev/null || echo 0)" "1"
 chk "S7 learnings do projeto tem P002" "$(grep -c '^## B projeto$' "$CASE/proj/.deep-orchestrator-preferences/learnings.md" 2>/dev/null || echo 0)" "1"
+chk "S7 AÇÃO de P002 = opção a (projeto)" "$(grep -c -- '- \*\*Ação:\*\* b1' "$CASE/proj/.deep-orchestrator-preferences/learnings.md" 2>/dev/null || echo 0)" "1"
 chk "S7 P003 descartada (ausente dos dois)" "$([ -f "$GLOBAL_TIPS" ] && grep -c '^## C descartada$' "$GLOBAL_TIPS" || true)" "0"
 chk "S7 config gravada" "$(grep -c '^- preferencia livre$' "$CASE/proj/.deep-orchestrator-preferences/project-config.md" 2>/dev/null || echo 0)" "1"
 
 newcase s8; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"decision":"annotated","feedback":"P001: nao"}'
-candidate "$PROPOSALS" P001 "A" project gotcha high user "x" "y"
-printf '# Questionário — s8\n' > "$CASE/q.md"
-"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
-"$SURVEY" --env "$CASE/env" answers >/dev/null 2>&1
+candidato_v39 "$PROPOSALS" P001 "A" project "obs" "x1" "x2"
+"$SURVEY" --env "$CASE/env" answer "1:c1" >/dev/null 2>&1
 "$SURVEY" --env "$CASE/env" apply >/dev/null 2>&1
 out=$("$SURVEY" --env "$CASE/env" apply 2>/dev/null)
 chk "S8 apply idempotente" "$(printf '%s' "$out" | grep -c 'já executado')" "1"
 
 newcase s9; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"decision":"dismissed"}'
-printf '# Questionário — s9\n' > "$CASE/q.md"
-"$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1
-printf '# Título diferente — s9\n' > "$CASE/q2.md"
-"$SURVEY" --env "$CASE/env" round "$CASE/q2.md" >/dev/null 2>&1; rc=$?
-chk "S9 deriva de título → exit 2" "$rc" "2"
+candidato_v39 "$PROPOSALS" P001 "A" project "obs" "x1" "x2"
+"$SURVEY" --env "$CASE/env" dismiss >/dev/null 2>&1; rc=$?
+chk "S9 dismiss → exit 0" "$rc" "0"
+chk "S9 tudo pendente" "$(grep -c '^id: P-' "$CASE/proj/.deep-orchestrator-preferences/pending/proposals.md" 2>/dev/null || echo 0)" "1"
+chk "S9 nada salvo" "$([ -f "$CASE/proj/.deep-orchestrator-preferences/learnings.md" ] && echo 1 || echo 0)" "0"
 
 newcase s10; write_skill; proj_fixture p; survey_env
-make_fake_plannotator '{"decision":"dismissed"}'
-printf '# Questionário — s10\n' > "$CASE/q.md"
+candidato_v39 "$PROPOSALS" P001 "A" global "obs" "x1" "x2"
 nopath_sem jq python3
-env PATH="$NOPATH" "$SURVEY" --env "$CASE/env" round "$CASE/q.md" >/dev/null 2>&1; rc=$?
-# sem jq/python3 no PATH o pick_json_tool falha — mas o PATH também perde o
-# plannotator fake: resolve_bin acha o DO_PLANNOTATOR_BIN explícito, e o
-# pick_json_tool roda ANTES — rc 2 com a mensagem certa.
+env PATH="$NOPATH" "$SURVEY" --env "$CASE/env" answer "1:b2" >/dev/null 2>&1; rc=$?
 chk "S10 sem jq/python3 → exit 2" "$rc" "2"
 
 # =============================================================================

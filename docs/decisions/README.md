@@ -44,3 +44,13 @@ gitignored com LEARNINGS.md removido do repo (D15), escrita só por script +
 .gitignore automático (D16), nunca bloqueia (D17). A memória da skill migrou
 para `.deep-orchestrator-preferences/` (projeto e skill) e o
 `evolve-skill.sh` não commita mais aprendizados.
+
+## Decisões da v3.9.0 (2026-08-28)
+
+`2026-08-28-pergunta-evolucao-terminal.md` registra D18–D22: evolução como
+PERGUNTA EM TEXTO no terminal, nunca mais um site (D18), gramática `N:XY`
+com a opção escolhida virando a ação salva (D19), flag `no-evolve` pulando a
+pergunta e o pós-processamento (D20), posição depois de TUDO (commit + push +
+relatório) com continuação na FASE 0 passo 0.4 (D21), e prefixo `mp=N` →
+`max-parallel=N` (D22). O portão de aprovação do plano (FASE 2.5) continua no
+Plannotator.

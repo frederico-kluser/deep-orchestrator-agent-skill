@@ -4,7 +4,7 @@
 # -----------------------------------------------------------------------------
 # A MEMÓRIA da skill mudou de casa na v3.8.0: aprendizados e preferências
 # vivem em `.deep-orchestrator-preferences/` (projeto e skill), GITIGNORED,
-# geridos por scripts/do-prefs.sh com o questionário scripts/evolution-survey.sh
+# geridos por scripts/do-prefs.sh com a pergunta de evolução scripts/evolution-survey.sh
 # (FASE 4, passo 6.5). Este script NÃO persiste mais aprendizados — ele
 # evolui o CORPO da skill (SKILL.md, prompts/, docs/), sempre com diff
 # revisável e nunca merge sozinho.
@@ -469,7 +469,7 @@ case "${1:-}" in
     err "subcomando '$1' REMOVIDO na v3.8.0 — a memória mudou de casa:"
     err "  aprendizados e preferências vivem em .deep-orchestrator-preferences/ (gitignored),"
     err "  geridos por scripts/do-prefs.sh (add-project/add-global/pending-add) com o"
-    err "  questionário scripts/evolution-survey.sh (FASE 4, passo 6.5). O LEARNINGS.md"
+    err "  pergunta de evolução scripts/evolution-survey.sh (FASE 4, passo 7.5). O LEARNINGS.md"
     err "  foi removido do repo — nada de memória é commitado."
     exit 2 ;;
   search)      shift; [ $# -ge 1 ] || die "search: aceita um termo (e --project <dir> opcional)"

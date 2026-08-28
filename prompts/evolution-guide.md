@@ -1,6 +1,6 @@
-# Evolution Guide — Questionário de evolução e prefs (v3.8.0)
+# Evolution Guide — Pergunta de evolução e prefs (v3.9.0)
 
-> **Quem usa:** o AGENTE DE EVOLUÇÃO (fim de cada execução, FASE 4 passo 6.5) e
+> **Quem usa:** o AGENTE DE EVOLUÇÃO (fim de cada execução, FASE 4 passo 7.5) e
 > o orquestrador. **O que decide:** o que merece virar memória, em que escopo
 > (projeto vs global), e quando ascende ao corpo da skill. A skill roda de
 > qualquer projeto e aprende com cada execução — com o VOTO do usuário.
@@ -8,12 +8,14 @@
 > (gitignored, evidência consultiva); só o corpo de `SKILL.md`/`prompts/` é
 > política executável, e só muda com evidência, diff e decisão humana.
 >
-> **Motor:** agente de evolução → `proposals.md` → questionário
-> (`scripts/evolution-survey.sh`) → `scripts/do-prefs.sh` (projeto/global/
-> pending) · **Store:** `.deep-orchestrator-preferences/` do projeto
-> (`project-config.md`, `learnings.md`, `pending/proposals.md`) e da skill
-> (`global-tips.md`, `pending/proposals.md`) — tudo GITIGNORED, nunca commitado.
-> **Desenho:** `docs/decisions/2026-08-27-questionario-evolucao.md` (D12–D17) e
+> **Motor:** agente de evolução → `proposals.md` → PERGUNTA EM TEXTO no
+> terminal (`scripts/evolution-survey.sh` ask/answer/apply) →
+> `scripts/do-prefs.sh` (projeto/global/pending) · **Store:**
+> `.deep-orchestrator-preferences/` do projeto (`project-config.md`,
+> `learnings.md`, `pending/proposals.md`) e da skill (`global-tips.md`,
+> `pending/proposals.md`) — tudo GITIGNORED, nunca commitado.
+> **Desenho:** `docs/decisions/2026-08-28-pergunta-evolucao-terminal.md`
+> (D18–D22), `docs/decisions/2026-08-27-questionario-evolucao.md` (D12–D17) e
 > `docs/decisions/2026-08-23-auto-evolucao.md` (D1–D11, com D8 revisado).
 
 ## O que qualifica como aprendizado
@@ -56,21 +58,28 @@ migra, o contexto project é descartado da proposta global.
    (ondas, sub-agentes), não com rótulos (GENesis-AGI).
 2. **PROPOSTAS** — `$DO_STATE/evolution/proposals.md`: blocos com `key: PNNN`,
    title, type, confidence, source, tags, **scope**, observacao, acao — no
-   formato do TEMPLATE abaixo. Sem propostas qualificadas → arquivo vazio
-   (resultado válido; D9: nada acontece, exit 0).
-3. **QUESTIONÁRIO** — se há propostas, o agente gera `questionario.md`
-   (H1 único; uma seção por proposta com a linha de resposta pré-formatada
-   `P001: sim · global` / `P001: sim · projeto` / `P001: nao` /
-   `P001: pendente`; seção final `## Configurações do projeto` com
-   `config: <texto>`). O orquestrador roda `evolution-survey.sh round` —
-   Plannotator, SEM limite de tempo, 127.0.0.1 e share desligados.
-4. **DECISÃO DO USUÁRIO** — `answers` (gramática estrita) → `apply`
-   (idempotente): sim → `do-prefs.sh add-project/add-global` (com `.gitignore`
-   do projeto garantido); nao → descartada; sem resposta/dismissed/headless →
-   `pending-add` (NADA é aplicado — gate humano obrigatório; anti-misevolution,
-   ICLR 2026 "Your Agent May Misevolve"). Configs livres → `project-config.md`.
-5. **NUNCA BLOQUEIA** — falha do agente, do Plannotator ou de escrita em prefs
-   é registrada no relatório e a execução termina normal (D9/D17).
+   formato do TEMPLATE abaixo — MAIS as opções da pergunta (v3.9.0):
+   `opcao_a` e `opcao_b` (soluções CONCRETAS para o problema da observacao) e
+   `opcao_c` (SEMPRE "Não fazer nada (descartar)"). Sem propostas qualificadas
+   → arquivo vazio (resultado válido; D9: nada acontece, exit 0).
+3. **PERGUNTA EM TEXTO (nunca mais um site — v3.9.0)** — se há propostas, o
+   orquestrador roda `evolution-survey.sh ask`: o script monta a pergunta
+   numerada (cada proposta com observacao + opções a/b/c + escopo
+   "1 = fix local · 2 = fix global", ex.: "1:b2") em `pendente.md`, o
+   orquestrador a imprime na mensagem final e ENCERRA o turno. SEM limite de
+   tempo: o usuário responde quando quiser, na próxima mensagem.
+4. **DECISÃO DO USUÁRIO** — `answer "<códigos>"` (gramática: `N:XY`; a|b =
+   salvar com a AÇÃO escolhida — a opção SUBSTITUI o acao do bloco; c =
+   descartar; 1 = projeto, 2 = global; "nada" = tudo pendente) → `apply`
+   (idempotente): aprovada → `do-prefs.sh add-project/add-global` (com
+   `.gitignore` do projeto garantido); c → descartada; sem resposta →
+   `pending-add` (NADA é aplicado — gate humano obrigatório;
+   anti-misevolution, ICLR 2026 "Your Agent May Misevolve"). Configs livres →
+   `project-config.md`.
+5. **NUNCA BLOQUEIA** — falha do agente, da pergunta ou de escrita em prefs é
+   registrada no relatório e a execução termina normal (D9/D17); a pergunta
+   não respondida é resolvida na próxima mensagem (FASE 0, passo 0.4) ou vira
+   dismiss (tudo pendente).
 
 **Formato de candidato** (o `do-prefs.sh` valida enums + campos obrigatórios +
 scan de segredos; lote atômico; dedupe por título+type):
@@ -86,6 +95,9 @@ tags: [test, runner]
 scope: project
 observacao: "Em projetos pnpm/bun, 'npm test' falha silenciosamente; o runner real está no package.json."
 acao: "Detectar package manager e runner reais antes de rodar a suíte."
+opcao_a: "Detectar o package manager no handoff da onda e usar o runner real"
+opcao_b: "Rodar o gate com o runner descoberto pelo lockfile (pnpm-lock → pnpm test)"
+opcao_c: "Não fazer nada (descartar)"
 ---
 ```
 

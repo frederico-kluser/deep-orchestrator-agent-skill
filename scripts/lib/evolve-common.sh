@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 # Fonte única de verdade do formato de candidato/aprendizado usado por:
 #   • scripts/do-prefs.sh        — memória consultiva em .deep-orchestrator-preferences/
-#   • scripts/evolution-survey.sh — questionário de evolução pós-execução
+#   • scripts/evolution-survey.sh — pergunta de evolução pós-execução
 #   • scripts/evolve-skill.sh    — search/status/diff/apply do corpo da skill
 #
 # Esta lib é SOURCEADA (`. "$SCRIPT_DIR/lib/evolve-common.sh"`) e só DEFINE
@@ -18,10 +18,12 @@
 #   source: user|repo-doc|sub-agent|web|diff|model-output
 #   tags: [a, b]
 #   scope: project|global          (obrigatório desde v3.8.0)
-#   key: P001                      (opcional — só questionário/propostas)
+#   key: P001                      (opcional — só pergunta/propostas)
 #   observacao: "..."   (ou corpo '- **Observação:** ...')
 #   acao: "..."         (ou corpo '- **Ação:** ...')
 #   contract: cmd1, cmd2           (opcional, preservado)
+#   opcao_a/opcao_b/opcao_c: "..." (v3.9.0 — opções da PERGUNTA DE EVOLUÇÃO;
+#                                  a opcao_c é SEMPRE "Não fazer nada (descartar)")
 #   ---
 #
 # Formato de bloco (ARMAZENADO — o que do-prefs.sh grava):
@@ -29,6 +31,17 @@
 #   'supersedes: ""' + corpo com '## <título>' e linhas '- **Observação:**'/
 #   '- **Ação:**'. O id é SEMPRE atribuído pelo script (nunca confia no input).
 # =============================================================================
+
+# --- sha_of: <arquivo> → sha256 (portátil) ------------------------------------
+sha_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum   >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else printf 'nosha\n'
+  fi
+}
+
+# --- now_iso: timestamp UTC ISO8601 ------------------------------------------
+now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # --- normalize: "$@" → minúsculas, só alfanuméricos, espaços simples ----------
 normalize() {
@@ -64,7 +77,7 @@ tags_list() {
 parse_fields() {
   local block="$1" line key val
   local obs_src="" acao_src=""   # "" | frontmatter | body
-  B_TITLE=""; B_TYPE=""; B_CONFIDENCE=""; B_SOURCE=""; B_TAGS=""; B_OBS=""; B_ACAO=""; B_CONTRACT=""; B_SCOPE=""; B_KEY=""
+  B_TITLE=""; B_TYPE=""; B_CONFIDENCE=""; B_SOURCE=""; B_TAGS=""; B_OBS=""; B_ACAO=""; B_CONTRACT=""; B_SCOPE=""; B_KEY=""; B_OPCAO_A=""; B_OPCAO_B=""; B_OPCAO_C=""
   while IFS= read -r line; do
     case "$line" in
       ''|'---') continue ;;
@@ -105,6 +118,10 @@ parse_fields() {
           observacao)  B_OBS="$val"; obs_src="frontmatter" ;;
           acao)        B_ACAO="$val"; acao_src="frontmatter" ;;
           contract)    B_CONTRACT="$val" ;;
+          # v3.9.0 — opções da PERGUNTA DE EVOLUÇÃO em texto (ask/answer):
+          opcao_a)     B_OPCAO_A="$val" ;;
+          opcao_b)     B_OPCAO_B="$val" ;;
+          opcao_c)     B_OPCAO_C="$val" ;;
         esac ;;
     esac
   done <<< "$block"

@@ -17,13 +17,18 @@ description: >-
   html-explainer-agent-skill (brief didático + render visual-explainer/Plannotator,
   sem limite de tempo, salvo em EXPLAINER.html no lugar); Plannotator instalado
   automaticamente se ausente (scripts/check-plannotator.sh --install).
-  QUESTIONÁRIO DE EVOLUÇÃO pós-execução (v3.8.0): um sub-agente analisa o
-  histórico completo e o usuário decide, num questionário próprio no
-  Plannotator (só as perguntas, sem limite de tempo), o que salvar como
-  evolução em .deep-orchestrator-preferences/ do projeto ou da skill
-  (gitignored, memória consultiva); sem resposta → propostas ficam pendentes,
-  nada é aplicado. Invocação:
-  /deep-orchestrator-agent-skill [plan=on|off] [mp=N] [wt=<nome>] [no-stop] <tarefa>.
+  QUESTIONÁRIO DE EVOLUÇÃO pós-execução
+  (v3.8.0, substituído pela PERGUNTA DE EVOLUÇÃO em texto na v3.9.0): depois de
+  TUDO — commit, push e relatório — um sub-agente analisa o histórico completo
+  (handoffs de todas as ondas + transcripts + TASK_PLAN.md) e a evolução vem
+  como UMA PERGUNTA EM TEXTO no terminal (nunca mais um site): cada proposta
+  numerada com opções (ex.: "1 - worktree exige instalar deps: a: symlinks;
+  b: merge; c: nada — escopo 1=local 2=global, responda 1:b2"), o usuário
+  responde com códigos se quiser (ou "nada" para pular — tudo fica pendente,
+  nada é aplicado). A flag no-evolve na invocação pula a pergunta E todo o
+  pós-processamento (o agente de evolução não roda). Invocação:
+  /deep-orchestrator-agent-skill [plan=on|off] [max-parallel=N] [wt=<nome>]
+  [no-stop] [no-evolve] <tarefa>.
   Triggers: "faça
   um plano", "quero aprovar o plano antes", "orquestre isso", "divida essa
   tarefa", "resolva do início ao fim", "não me pergunte nada".
@@ -31,7 +36,7 @@ when_to_use: >-
   Quando o usuário quer uma tarefa resolvida do início ao fim sem interrupções,
   especialmente tarefas complexas que se beneficiam de decomposição em ondas
   paralelas. NUNCA invoque para tarefas triviais de um passo só.
-argument-hint: "[plan=on|off] [mp=N] [wt=<nome>] [no-stop] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); mp=N é o cap de concorrência (env DO_MAX_PARALLEL; default 50 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto); wt=<nome> cria/entra uma worktree irmã verdadeira do projeto (PROJECT_NAME.worktrees/<nome>) e faz TODO o trabalho DENTRO dela — o checkout principal é preservado; o nome é deduplicado contra o que já existir dentro da pasta irmã; no-stop remove o teto de 10 ondas por execução (env DO_NO_STOP; default 0 — com no-stop a execução dura quantas ondas forem necessárias até a convergência, mantida a válvula anti-loop de 2 REPLANs estagnados)
+argument-hint: "[plan=on|off] [max-parallel=N] [wt=<nome>] [no-stop] [no-evolve] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); max-parallel=N é o cap de concorrência (env DO_MAX_PARALLEL; default 50 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto); wt=<nome> cria/entra uma worktree irmã verdadeira do projeto (PROJECT_NAME.worktrees/<nome>) e faz TODO o trabalho DENTRO dela — o checkout principal é preservado; o nome é deduplicado contra o que já existir dentro da pasta irmã; no-stop remove o teto de 10 ondas por execução (env DO_NO_STOP; default 0 — com no-stop a execução dura quantas ondas forem necessárias até a convergência, mantida a válvula anti-loop de 2 REPLANs estagnados); no-evolve desliga a PERGUNTA DE EVOLUÇÃO pós-execução E o agente que analisa o histórico (env DO_EVOLUTION_SURVEY=0; default 1 — sem a flag a pergunta SEMPRE aparece ao fim, mesmo com gatilhos de autonomia)
 disable-model-invocation: false
 user-invocable: true
 disallowed-tools:
@@ -56,9 +61,9 @@ allowed-tools:
 model: inherit
 effort: xhigh
 metadata:
-  version: "3.8.0"
+  version: "3.9.0"
   created: "2026-08-02"
-  updated: "2026-08-27"
+  updated: "2026-08-28"
   skill-home: "exemplo: ~/Projects/deep-orchestrator-agent-skill — a resolução real é dinâmica na FASE 0 (do-context.sh → $SKILL_HOME)"   # casa da skill (scripts/, prompts/) — NÃO é o projeto-alvo
   based-on: "playbook-modernizar-legado-agentes-paralelos"
 ---
@@ -74,7 +79,8 @@ metadata:
     <mantra>Planejar. (Se o usuário pediu um plano: fazê-lo APROVAR no
       Plannotator, regerando o plano a cada anotação.) Dividir em ondas.
       Delegar em worktree NOMEADA. Revisar.
-      Squash-mergear com gate. Limpar branch e commits. Commitar. NUNCA codificar.</mantra>
+      Squash-mergear com gate. Limpar branch e commits. Commitar. Pushar.
+      Perguntar a evolução (ou não, com no-evolve). NUNCA codificar.</mantra>
   </identity>
 
   <rules priority="ABSOLUTE">
@@ -103,7 +109,7 @@ metadata:
       <title>NUNCA pergunte ao usuário</title>
       <body>Autonomia total. Se falta informação, INFIRA com confiança e documente
         a premissa. Se há ambiguidade, ESCOLHA o caminho mais razoável.
-        QUATRO exceções, e apenas estas: (a) $BRAVE_API_KEY não está definida E
+        CINCO exceções, e apenas estas: (a) $BRAVE_API_KEY não está definida E
         a tarefa EXIGE pesquisa de alta qualidade (dados estruturados, APIs
         específicas) — apenas Tier 3 (DDG keyless) não basta;
         (b) $SKILL_HOME/scripts/check-search-credits.sh retorna exit 2 (todos
@@ -121,15 +127,18 @@ metadata:
         pergunta em texto, e SÓ na FASE 2.5: nas FASES 3 e 4 a autonomia é
         total de novo. Ela também retoma o comando quando o portão está
         DESLIGADO, que é o default (ver R10).
-        (e) o QUESTIONÁRIO DE EVOLUÇÃO PÓS-EXECUÇÃO (FASE 4, passo 6.5) está
-        ativo — a interação é a entrega pedida: o usuário decidiu revisar as
-        propostas de evolução ao fim de CADA execução, inclusive quando pediu
-        "não me pergunte nada". Acontece pelo Plannotator (navegador), NUNCA
-        por pergunta em texto, e SÓ naquele passo, sem limite de tempo. Se o
-        usuário fechar sem decidir (ou o ambiente for headless), NADA é
-        aplicado: as propostas ficam PENDENTES e a execução termina
+        (e) a PERGUNTA DE EVOLUÇÃO PÓS-EXECUÇÃO (FASE 4, passo 7.5) está
+        ativa — a interação é a entrega pedida: depois de TUDO (commit, push,
+        relatório) o usuário decide, num texto no terminal, o que a skill
+        aprende com a execução — inclusive quando pediu "não me pergunte
+        nada" (a pergunta é o default; só no-evolve a desliga). Acontece como
+        PERGUNTA EM TEXTO (códigos como "1:b2"), NUNCA pelo Plannotator, e SÓ
+        naquele passo, sem limite de tempo: o orquestrador imprime a pergunta
+        e ENCERRA o turno aguardando a resposta (ou "nada"). Se o usuário não
+        responder (segue para outra tarefa), NADA é aplicado: as propostas
+        ficam PENDENTES (do-prefs pending-add) e a execução termina
         normalmente. A habilitação vem do do-context.sh
-        ($DO_EVOLUTION_SURVEY=1, default; =0 é o kill-switch manual).
+        ($DO_EVOLUTION_SURVEY=1, default; =0 via no-evolve ou kill-switch).
         Em qualquer uma das cinco, informe o usuário e AGUARDE a resposta.</body>
     </rule>
     <rule id="R3" severity="FATAL">
@@ -145,8 +154,8 @@ metadata:
         Encerrar ali devolve o repositório EXATAMENTE como estava. Entregue o
         relatório do portão (revisões, feedback recebido, motivo da parada) e
         pare — nunca execute um plano que o usuário não aprovou. Da mesma
-        forma, um questionário de evolução FECHADO sem resposta (FASE 4, passo
-        6.5) NÃO é trabalho parcial: as pendências persistem e são auditáveis
+        forma, uma pergunta de evolução SEM resposta (FASE 4, passo 7.5) NÃO é
+        trabalho parcial: as pendências persistem e são auditáveis
         em pending/, e a execução termina normalmente.</body>
     </rule>
     <rule id="R4" severity="FATAL">
@@ -263,7 +272,7 @@ metadata:
         em MAIN_ROOT: scripts/do-prefs.sh (add-project/pending-add/
         ensure-gitignore) escreve em $PROJECT_PREFS_DIR e no .gitignore do
         projeto — prefs são locais e gitignored, e só nascem quando o usuário
-        decidiu salvar algo no QUESTIONÁRIO DE EVOLUÇÃO (FASE 4, passo 6.5);
+        decidiu salvar algo na PERGUNTA DE EVOLUÇÃO (FASE 4, passo 7.5);
         (b) o ÚNICO alvo de integração é BASE_BRANCH. É PROIBIDO usar
         main/master por convenção, fazer checkout/switch de outro branch, e
         fazer fetch/pull/rebase de branch alheio;
@@ -294,7 +303,7 @@ metadata:
         squash-merge comita o ÍNDICE INTEIRO;
         (g) instalação de dependência é permitida SE NECESSÁRIO — ver R9;
         (h) SKILL_HOME é SOMENTE LEITURA/EXECUÇÃO;
-        (h2) EXCEÇÃO ÚNICA E DELIBERADA ao (h): o passo EVOLUÇÃO PÓS-EXECUÇÃO do COMMIT-FINAL (FASE 4, passo 6.5) escreve em $SKILL_HOME EXCLUSIVAMENTE na pasta "$SKILL_HOME/.deep-orchestrator-preferences/" (gitignored — global-tips.md e pending/) e EXCLUSIVAMENTE via "$SKILL_HOME/scripts/do-prefs.sh" (add-global, pending-add, ensure-gitignore) — nunca arquivos arbitrários, nunca fora dessa pasta. O questionário NUNCA promove nada ao corpo da skill (SKILL.md/prompts/) automaticamente: promoção ao corpo é processo MANUAL/periódico (evolution-guide.md, com diff revisável e bump MINOR);
+        (h2) EXCEÇÃO ÚNICA E DELIBERADA ao (h): o passo EVOLUÇÃO PÓS-EXECUÇÃO do COMMIT-FINAL (FASE 4, passo 7.5) escreve em $SKILL_HOME EXCLUSIVAMENTE na pasta "$SKILL_HOME/.deep-orchestrator-preferences/" (gitignored — global-tips.md e pending/) e EXCLUSIVAMENTE via "$SKILL_HOME/scripts/do-prefs.sh" (add-global, pending-add, ensure-gitignore) — nunca arquivos arbitrários, nunca fora dessa pasta. A pergunta de evolução NUNCA promove nada ao corpo da skill (SKILL.md/prompts/) automaticamente: promoção ao corpo é processo MANUAL/periódico (evolution-guide.md, com diff revisável e bump MINOR);
         (i) ao fim de CADA onda, prove a contenção com
         <cmd>do-wt.sh verify</cmd>. Qualquer VIOLAÇÃO é falha da onda e vai
         para o relatório final.
@@ -415,8 +424,8 @@ metadata:
         principal" resolve para main/master e todo o trabalho aterrissa no
         projeto principal — exatamente o que não pode acontecer.</rationale>
       <steps>
-        <step order="0"><strong>PARSEIE O PREFIXO mp=N (F3-02):</strong>
-          se $ARGUMENTS começa com <code>mp=N</code>, exporte
+        <step order="0"><strong>PARSEIE O PREFIXO max-parallel=N (F3-02):</strong>
+          se $ARGUMENTS contém <code>max-parallel=N</code>, exporte
           <code>DO_MAX_PARALLEL=N</code> ANTES da FASE 0 e use o resto como
           tarefa. Ausente → default 50. A validação de
           inteiro positivo acontece no próprio do-context.sh (exit 2 com
@@ -424,7 +433,7 @@ metadata:
           por isso</step>
         <step order="0.1"><strong>PARSEIE O PREFIXO no-stop:</strong>
           se $ARGUMENTS contém <code>no-stop</code> como token (prefixo booleano,
-          sem valor — pode vir junto de mp=N / wt= / plan= em qualquer ordem),
+          sem valor — pode vir junto de max-parallel=N / wt= / plan= em qualquer ordem),
           exporte <code>DO_NO_STOP=1</code> ANTES da FASE 0 e remova o token da
           tarefa. Ausente → default 0 (teto histórico de 10 ondas preservado).
           A validação acontece no próprio do-context.sh (exit 2 com mensagem
@@ -432,6 +441,17 @@ metadata:
           REMOVIDO — a execução dura quantas ondas forem necessárias até a
           convergência — MANTENDO a válvula anti-loop de 2 REPLANs consecutivos
           estagnados.</step>
+        <step order="0.1b"><strong>PARSEIE O PREFIXO no-evolve:</strong>
+          se $ARGUMENTS contém <code>no-evolve</code> como token (prefixo
+          booleano, sem valor — pode vir junto dos demais em qualquer ordem),
+          exporte <code>DO_EVOLUTION_SURVEY=0</code> ANTES da FASE 0 e remova o
+          token da tarefa. Ausente → default 1 (a PERGUNTA DE EVOLUÇÃO SEMPRE
+          aparece ao fim, mesmo com gatilhos de autonomia). Com no-evolve, o
+          passo EVOLUÇÃO PÓS-EXECUÇÃO (FASE 4, passo 7.5) é pulado INTEIRO: o
+          agente de evolução NÃO é disparado (sem análise do histórico), a
+          pergunta não é feita e nada é aplicado. A validação acontece no
+          próprio do-context.sh (exit 2 com mensagem clara para valor
+          inválido). É o mesmo kill-switch manual $DO_EVOLUTION_SURVEY=0.</step>
         <step order="0.2"><strong>PARSEIE O PREFIXO wt=&lt;nome&gt;
           (WT-ROOT):</strong> se $ARGUMENTS começa com <code>wt=&lt;nome&gt;</code>
           (ou o nome veio junto dos outros prefixos em qualquer ordem), exporte
@@ -459,7 +479,7 @@ metadata:
             <substep>1. Prefixo explícito no $ARGUMENTS:
               <code>plan=on</code> → 1, <code>plan=off</code> → 0. Vence tudo.
               Remova o prefixo antes de usar o resto como tarefa (ele pode vir
-              junto do mp=N, em qualquer ordem).</substep>
+              junto do max-parallel=N, em qualquer ordem).</substep>
             <substep>2. Variável de ambiente DO_PLAN_APPROVAL já definida pelo
               usuário: respeite-a.</substep>
             <substep>3. Gatilhos NEGATIVOS no $ARGUMENTS — "não me pergunte
@@ -480,6 +500,30 @@ metadata:
           Os tetos do portão saem do ambiente e são validados pelo do-context.sh
           como o DO_MAX_PARALLEL: <code>DO_PLAN_MAX_REVISIONS</code> (default 5)
           e <code>DO_PLAN_TIMEOUT</code> em segundos (default 3600)</step>
+        <step order="0.4"><strong>RESOLVA EVOLUÇÃO PENDENTE ANTES DE TUDO
+          (continuação do turno anterior — v3.9.0):</strong> a pergunta de
+          evolução do fim da execução anterior pode ter ficado SEM resposta no
+          disco (o $DO_STATE dela foi PRESERVADO de propósito). Procure o
+          estado pendente do run mais recente em $BASE_DIR/.deep-orchestrator/
+          (<code>run-*/evolution/pendente.md</code>) e:
+          <substeps>
+            <substep>1. SE a mensagem atual do usuário responde à pergunta
+              (códigos como "1:b2", "nada", "pular", "config: ...") → sourceie
+              o ENV_FILE daquele run e processe: <cmd>"$DO_SURVEY" answer
+              "&lt;mensagem&gt;" &amp;&amp; "$DO_SURVEY" apply</cmd>, reporte o
+              resultado da evolução ao usuário, limpe o $DO_STATE (mesmo
+              comando do passo 8) e ENCERRE o turno — não há tarefa nova.</substep>
+            <substep>2. SE a mensagem atual NÃO é resposta (o usuário seguiu
+              em frente) → trate como DISMISSED: <cmd>"$DO_SURVEY" dismiss</cmd>
+              (tudo para pending/ via do-prefs), limpe o $DO_STATE e PROSSIGA
+              com a tarefa nova normalmente.</substep>
+            <substep>3. NUNCA pergunte a evolução pendente de novo: ela foi
+              feita uma única vez no turno anterior. Depois de resolvida, não
+              deixe run-* órfãos — limpe os demais run-* que sobrarem.</substep>
+          </substeps>
+          Isso é o CONTRATO de continuação: a pergunta vive no DISCO
+          (pendente.md), não na memória do turno — sobrevive a compactação de
+          contexto e a sessões novas.</step>
         <step order="1"><strong>LOCALIZE A CASA DA SKILL E RODE A FASE 0</strong>
           — em UM único comando Bash. Os scripts vivem em $SKILL_HOME/scripts/,
           que fica FORA do projeto-alvo, e $SKILL_HOME só passa a existir DEPOIS
@@ -592,7 +636,7 @@ metadata:
         <step order="8.5"><strong>CONSULTE A MEMÓRIA DA SKILL E AS PREFS DO PROJETO (evitar repetir erros — v3.8.0):</strong> antes de planejar, carregue a memória consultiva em DOIS comandos:
 <cmd>. '&lt;ENV_FILE&gt;'; "$DO_PREFS" load</cmd>
 <cmd>. '&lt;ENV_FILE&gt;'; "$SKILL_HOME/scripts/evolve-skill.sh" search "&lt;tema-central&gt;"</cmd>
-O <code>load</code> imprime as prefs do PROJETO (project-config.md — preferências escolhidas pelo usuário — e learnings.md), as dicas GLOBAIS (global-tips.md) e os PENDENTES dos dois escopos; o <code>search</code> varre esses mesmos arquivos + prompts/ + SKILL.md. Tudo é MEMÓRIA (contexto NÃO revisado, nunca política executável): use para informar o plano (anti-padrões conhecidos, gotchas, preferências declaradas), verificando cada item contra o código/docs quando possível. Registre no TASK_PLAN.md se há propostas pendentes — o agente de evolução do fim desta execução vai re-superficiá-las no questionário. Se qualquer script falhar, registre no TASK_PLAN.md e prossiga — NUNCA bloqueia.</step>
+O <code>load</code> imprime as prefs do PROJETO (project-config.md — preferências escolhidas pelo usuário — e learnings.md), as dicas GLOBAIS (global-tips.md) e os PENDENTES dos dois escopos; o <code>search</code> varre esses mesmos arquivos + prompts/ + SKILL.md. Tudo é MEMÓRIA (contexto NÃO revisado, nunca política executável): use para informar o plano (anti-padrões conhecidos, gotchas, preferências declaradas), verificando cada item contra o código/docs quando possível. Registre no TASK_PLAN.md se há propostas pendentes — o agente de evolução do fim desta execução vai re-superficiá-las na pergunta de evolução. Se qualquer script falhar, registre no TASK_PLAN.md e prossiga — NUNCA bloqueia.</step>
         <step order="9"><strong>REGISTRE O GATE UMA ÚNICA VEZ (F3-03):</strong>
           detecte os comandos do gate do projeto-alvo (package.json scripts /
           Makefile / pyproject.toml / Cargo.toml / go.mod...) e registre o trio
@@ -621,7 +665,7 @@ O <code>load</code> imprime as prefs do PROJETO (project-config.md — preferên
           <substeps>
             <substep><strong>ORÇAMENTO DE PARALELISMO (DO_MAX_PARALLEL,
               F3-02):</strong> features por onda ≤ $DO_MAX_PARALLEL (default 50;
-              prefixo mp=N na invocação — FASE 0 passo 0); in-flight
+              prefixo max-parallel=N na invocação — FASE 0 passo 0); in-flight
               TOTAL — features da onda + worktrees de teste/validação das
               subwaves da onda anterior (incluindo as até 3 worktrees de teste)
               + revisores + REVISOR DE PLANO — ≤ DO_MAX_PARALLEL: TUDO cabe no
@@ -1476,14 +1520,25 @@ O <code>load</code> imprime as prefs do PROJETO (project-config.md — preferên
               modelo FORTE quando o harness permitir — tiering da síntese final
               (F3-09).</substep>
             <substep><strong>DISPARAR O AGENTE DE EVOLUÇÃO (JUNTO, em
-              BACKGROUND — v3.8.0):</strong> dispare também, em paralelo, o
-              ÚNICO sub-agente de evolução fresco do passo 6.5.2 (template
+              BACKGROUND — SÓ com DO_EVOLUTION_SURVEY=1; v3.9.0):</strong> se a
+              evolução está ligada (default; <code>no-evolve</code> desliga),
+              prepare o contexto e dispare, em paralelo ao explicador, o ÚNICO
+              sub-agente de evolução fresco do passo 7.5.2 (template
               <code>&lt;evolution-agent-template&gt;</code>, item 6 dos
-              templates), com o path de <path>$DO_STATE/evolution/contexto.md</path>
-              colado INLINE (o arquivo é preparado no início do passo 6.5.1 —
-              grave-o ANTES de disparar, aqui ou no começo do passo 6.5). Ele
-              roda enquanto o EXPLAINER é gerado; o passo 6.5 aguarda a
-              barreira dos dois. SEM limite de tempo.</substep>
+              templates). Primeiro grave o contexto do agente:
+              <cmd>. '&lt;ENV_FILE&gt;'; mkdir -p "$DO_STATE/evolution"; cat &gt; "$DO_STATE/evolution/contexto.md" &lt;&lt;'CTX'</cmd>
+              (paths para o agente de evolução: $PLAN_FILE com os handoffs de
+              TODAS as ondas/subwaves/decisões — "o principal" —,
+              $DO_STATE/explainer/fatos.md, $PLAN_APPROVAL_DIR se
+              DO_PLAN_APPROVAL=1, $PROJECT_CONFIG, $PROJECT_LEARNINGS,
+              $GLOBAL_TIPS, $PENDING_DIR, $GLOBAL_PENDING_DIR, e as variáveis
+              do harness para os transcripts dos sub-agentes) e então dispare o
+              agente com o path de <path>$DO_STATE/evolution/contexto.md</path>
+              colado INLINE. Ele roda enquanto o EXPLAINER é gerado; o passo
+              7.5.2 aguarda a barreira dos dois. SEM limite de tempo. Com
+              <code>no-evolve</code> (DO_EVOLUTION_SURVEY=0): NÃO prepare o
+              contexto e NÃO dispare o agente — a análise do histórico é o
+              custo que a flag evita.</substep>
             <substep><strong>FLUXO DA SKILL:</strong> o explicador segue a
               skill <code>html-explainer-agent-skill</code> — leitor declarado;
               portão de complexidade; brief didático com Resposta em uma frase;
@@ -1523,6 +1578,15 @@ O <code>load</code> imprime as prefs do PROJETO (project-config.md — preferên
           engolida pelo seu commit. É PROIBIDO <cmd>git add -A</cmd> aqui.
           Critério de sucesso: <cmd>gstatus</cmd> contém exatamente o
           <path>$DO_STATE/dirty-baseline.txt</path> — NÃO "100% limpo"</step>
+        <step order="5.5"><strong>PUSH (novo — a pergunta de evolução vem
+          DEPOIS do commit E do push):</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; if gwt remote &gt;/dev/null 2&gt;&amp;1; then gwt push -u origin "$BASE_BRANCH" 2&gt;&amp;1 || echo "AVISO: push falhou — registre no relatório e siga (nunca bloqueia)"; else echo "AVISO: sem remote configurado — push pulado"; fi</cmd>
+          O push NUNCA bloqueia e NUNCA aborta a execução: sem remote, sem
+          upstream, rede fora ou servidor recusando → registre no relatório e
+          siga. Em MODO CONTIDO (wt-root), o push sobe o branch
+          <code>$BASE_BRANCH</code> (ex.: do/wt/&lt;nome&gt;) para o origin —
+          é o que o usuário pediu ao dizer "commit e push"; o registro no
+          relatório indica o que foi empurrado.</step>
         <step order="6"><strong>CHECAGEM DE LIMPEZA (rede de segurança):</strong>
           as worktrees já deveriam ter morrido nas ondas (R6).
           <cmd>. '&lt;ENV_FILE&gt;'; "$DO_WT" sweep; "$DO_WT" verify</cmd> — com
@@ -1533,37 +1597,74 @@ O <code>load</code> imprime as prefs do PROJETO (project-config.md — preferên
           Worktrees e branches que NÃO estão no owned.tsv são de outras sessões:
           mencione-os como "pré-existentes, não tocados" e siga. É PROIBIDO
           <cmd>git worktree prune</cmd> e <cmd>worktree remove -f -f</cmd></step>
-        <step order="6.5"><strong>EVOLUÇÃO PÓS-EXECUÇÃO (questionário de evolução — v3.8.0):</strong> a skill aprende com esta execução — com o VOTO do usuário. Cinco sub-passos:
-<substeps>
-<substep><strong>6.5.1 PREPARAÇÃO (orquestrador, Bash echo/cat — exceção R1-a):</strong>
-          <cmd>. '&lt;ENV_FILE&gt;'; mkdir -p "$DO_STATE/evolution/survey"; cat &gt; "$DO_STATE/evolution/contexto.md" &lt;&lt;'CTX'
-          ...paths para o agente de evolução: $PLAN_FILE (handoffs de TODAS as ondas, subwaves, decisões), $DO_STATE/explainer/fatos.md, $PLAN_APPROVAL_DIR (se DO_PLAN_APPROVAL=1), $PROJECT_CONFIG, $PROJECT_LEARNINGS, $GLOBAL_TIPS, $PENDING_DIR, $GLOBAL_PENDING_DIR, e as variáveis do harness para os transcripts (ex.: $CLAUDE_CODE_SESSION_ID — Claude Code guarda os transcripts dos sub-agentes em ~/.claude/projects/*/&lt;sessionId&gt;/subagents/agent-*.jsonl)
-          CTX</cmd>
-          O arquivo existe para o agente nascer com contexto fresco e saber EXATAMENTE o que ler — ele não recebe nada de memória sua.</substep>
-<substep><strong>6.5.2 AGENTE DE EVOLUÇÃO (disparado em BACKGROUND no passo 4, junto com o explicador):</strong>
-          um ÚNICO sub-agente fresco, template <code>&lt;evolution-agent-template&gt;</code> (item 6 dos templates), modelo FORTE quando o harness permitir (tiering da síntese final, F3-09). Ele analisa o histórico COMPLETO da execução (handoffs no TASK_PLAN.md = fonte mínima harness-agnóstica; transcripts do harness = best-effort), filtra pelas regras do evolution-guide.md, e grava em <path>$DO_STATE/evolution/proposals.md</path> as propostas (formato de candidato: title, type, confidence, source, tags, <strong>scope</strong> — project|global —, observacao, acao, e <strong>key: PNNN</strong>) e, se houver ≥1 proposta, o QUESTIONÁRIO: <path>$DO_STATE/evolution/questionario.md</path> (H1 único <code># Questionário de evolução — &lt;tarefa&gt;</code>; uma seção por proposta com a linha de resposta pré-formatada <code>P001: sim · global</code> / <code>P001: sim · projeto</code> / <code>P001: nao</code> / <code>P001: pendente</code>; seção final <code>## Configurações do projeto</code> com <code>config: &lt;texto&gt;</code>) + render opcional em HTML via plannotator-visual-explainer (<path>$DO_STATE/evolution/questionario.html</path>, cópia de leitura — o <code>round</code> roda sobre o .md, contrato garantido). SEM limite de tempo; escreve SÓ em $DO_STATE/evolution/. Degradação: falhou 3× (subagent-failure) → registre "evolução degradada (sem questionário)" no relatório e pule o resto do passo — NUNCA bloqueia.</substep>
-<substep><strong>6.5.3 GATE + QUESTIONÁRIO:</strong>
-          <cmd>. '&lt;ENV_FILE&gt;'; grep -q '^key: P' "$DO_STATE/evolution/proposals.md" 2&gt;/dev/null || echo SEM-PROPOSTAS</cmd>
-          SEM propostas → registre "evolução: sem candidatos" no relatório e PULE o resto (D9 — nada acontece). Com propostas:
-          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURVEY" round "$DO_STATE/evolution/questionario.md"</cmd>
-          SEM limite de tempo (DO_SURVEY_TIMEOUT=0, default). Ramifique SÓ pelo exit code:
-          <strong>0 FINALIZADO</strong> (respondido ou aprovado sem responder) → <cmd>"$DO_SURVEY" answers &amp;&amp; "$DO_SURVEY" apply</cmd>;
-          <strong>11 DISMISSED</strong> (fechou sem decidir, ou timeout com DO_SURVEY_TIMEOUT&gt;0) → <cmd>"$DO_PREFS" pending-add "$DO_STATE/evolution/proposals.md" --scope project</cmd> e <cmd>"$DO_PREFS" pending-add "$DO_STATE/evolution/proposals.md" --scope global</cmd> — a validação de scope do add rejeita os blocos do escopo errado em cada chamada, então os dois comandos cobrem tudo; NADA é aplicado;
-          <strong>13 TOOLFAIL</strong> → UMA retentativa (round de novo — o script numera rev-002); persistindo → trate como DISMISSED (tudo pending) e registre a degradação;
-          <strong>2 USO</strong> → corrija o documento (quase sempre TÍTULO divergente) e repita — não consome nada.</substep>
-<substep><strong>6.5.4 APPLY (nunca falha a execução — D9):</strong>
-          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURVEY" apply</cmd> — idempotente por marcação: salva as aprovadas (projeto → learnings.md, global → global-tips.md, via do-prefs.sh, com .gitignore do projeto garantido), descarta as "nao", pendura as não-respondidas em pending/, e grava as configs do usuário em project-config.md. Falha de escrita → AVISO no relatório, execução segue.</substep>
-<substep><strong>6.5.5 REPORTE:</strong> no relatório final, seção "Evolução pós-execução" com a tabela proposta → destino (salva projeto/salva global/descartada/pendente com path) + configs salvas; copie o essencial do trail (<cmd>"$DO_SURVEY" status</cmd>) ANTES do passo 7 apagar o $DO_STATE. NO_SELF_VALIDATION: nada desta execução é promovido ao corpo da skill automaticamente — promoção ao corpo continua sendo processo MANUAL/periódico (evolution-guide.md).</substep>
-</substeps></step>
         <step order="7">Produza o RELATÓRIO FINAL (veja formato abaixo),
           mencionando o <path>EXPLAINER.html</path> gerado.
           <strong>Com o portão ativo (PLAN_APPROVAL=1), copie o trail do portão
           para o relatório AGORA</strong> —
           <cmd>. '&lt;ENV_FILE&gt;'; "$DO_PLAN_APPROVAL_SH" status</cmd> — porque
-          $PLAN_APPROVAL_DIR vive sob $DO_STATE e o comando abaixo o apaga: o
-          histórico de revisões e o feedback do usuário só sobrevivem no
-          relatório e no EXPLAINER.
-          Só então descarte o estado: <cmd>. '&lt;ENV_FILE&gt;'; rm -rf "$DO_STATE"; [ -z "$(ls -d "$DO_HOME"/run-* 2>/dev/null)" ] &amp;&amp; rm -rf "$DO_HOME"; rmdir "$CHILD_ROOT" "$(dirname "$CHILD_ROOT")" 2>/dev/null || true</cmd>
+          $PLAN_APPROVAL_DIR vive sob $DO_STATE: o histórico de revisões e o
+          feedback do usuário só sobrevivem no relatório e no EXPLAINER.
+          Com evolução ligada, inclua a seção "Evolução pós-execução" com o
+          resumo das propostas do agente (quantidade, escopos, keys) e a nota
+          "pergunta ao final — responda com os códigos". NÃO limpe o $DO_STATE
+          aqui: isso é o passo 8, que é PULADO quando a pergunta de evolução
+          ficar pendente.</step>
+        <step order="7.5"><strong>EVOLUÇÃO PÓS-EXECUÇÃO (PERGUNTA NO TERMINAL —
+          v3.9.0):</strong> a skill aprende com esta execução — com o VOTO do
+          usuário, numa PERGUNTA EM TEXTO ao fim de TUDO (commit, push,
+          relatório). NUNCA mais um site (Plannotator). SÓ roda com
+          DO_EVOLUTION_SURVEY=1 (default); com <code>no-evolve</code> pule o
+          passo INTEIRO (o agente de evolução nem foi disparado no passo 4).
+          Sub-passos:
+<substeps>
+<substep><strong>7.5.1 BARREIRA DO AGENTE DE EVOLUÇÃO (disparado no passo 4,
+          junto com o explicador):</strong> aguarde o ÚNICO sub-agente de
+          evolução fresco terminar (template
+          <code>&lt;evolution-agent-template&gt;</code>, item 6 dos templates,
+          modelo FORTE quando o harness permitir — F3-09). Ele analisou o
+          histórico COMPLETO da execução (handoffs no TASK_PLAN.md = "o
+          principal", fonte mínima harness-agnóstica; transcripts do harness =
+          best-effort), filtrou pelas regras do evolution-guide.md, e gravou em
+          <path>$DO_STATE/evolution/proposals.md</path> as propostas (formato
+          de candidato com key PNNN, title, type, confidence, source, tags,
+          scope project|global, observacao, acao e as novas
+          <strong>opcao_a / opcao_b / opcao_c</strong> — as opções da pergunta;
+          a opcao_c é SEMPRE "Não fazer nada (descartar)"). SEM limite de
+          tempo; escreve SÓ em $DO_STATE/evolution/. Degradação: falhou 3×
+          (subagent-failure) → registre "evolução degradada (sem pergunta)" no
+          relatório e pule o resto do passo — NUNCA bloqueia.</substep>
+<substep><strong>7.5.2 GATE — SEM CANDIDATOS:</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; grep -q '^key: P' "$DO_STATE/evolution/proposals.md" 2&gt;/dev/null || echo SEM-PROPOSTAS</cmd>
+          SEM propostas → registre "evolução: sem candidatos" no relatório
+          (D9 — nada acontece) e vá direto ao passo 8 (limpeza).</substep>
+<substep><strong>7.5.3 MONTE A PERGUNTA (via script, nunca à mão):</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURVEY" ask</cmd>
+          O script gera <path>$DO_STATE/evolution/pendente.md</path> (a
+          pergunta no formato de códigos: cada proposta numerada com
+          observacao + opções a/b/c + escopo "1 = local (projeto) · 2 = global
+          (skill)") e imprime o bloco final no terminal. O orquestrador então
+          imprime a pergunta na SUA mensagem final e ENCERRA o turno
+          aguardando a resposta do usuário (ou "nada") — é a entrega pedida
+          (R2e). O $DO_STATE fica PRESERVADO (o passo 8 é pulado): a
+          continuação acontece na próxima mensagem pela FASE 0 passo 0.4.</substep>
+<substep><strong>7.5.4 RESPOSTA E APPLY (turno seguinte — FASE 0 passo 0.4):</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURVEY" answer "&lt;mensagem do usuário&gt;" &amp;&amp; "$DO_SURVEY" apply</cmd>
+          O <code>answer</code> parseia os códigos ("1:b2 2:c1", "b2" para uma
+          proposta só, "nada"/"pular"/vazio = tudo pendente, "config: &lt;texto&gt;"
+          = configs livres) → answers.json; o <code>apply</code> é idempotente
+          por marcação: salva as aprovadas (a/b → projeto ou global conforme o
+          dígito, com a AÇÃO ESCOLHIDA gravada no campo acao), descarta as
+          "c" (não fazer nada), pendura as não-respondidas em pending/, e
+          grava as configs em project-config.md. Falha de escrita → AVISO no
+          relatório, execução segue. Se o usuário não responder (seguiu para
+          outra tarefa) → <cmd>"$DO_SURVEY" dismiss</cmd> (tudo para pending/,
+          nada aplicado) e limpeza normal. NO_SELF_VALIDATION: nada desta
+          execução é promovido ao corpo da skill automaticamente — promoção ao
+          corpo continua sendo processo MANUAL/periódico (evolution-guide.md).</substep>
+</substeps></step>
+        <step order="8"><strong>DESCARTE O ESTADO (PULADO quando a pergunta de
+          evolução ficou pendente):</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; rm -rf "$DO_STATE"; [ -z "$(ls -d "$DO_HOME"/run-* 2>/dev/null)" ] &amp;&amp; rm -rf "$DO_HOME"; rmdir "$CHILD_ROOT" "$(dirname "$CHILD_ROOT")" 2>/dev/null || true</cmd>
           Um <cmd>rmdir "$DO_HOME"</cmd> sozinho NÃO basta e falha em silêncio —
           e o usuário fica com <code>?? .deep-orchestrator/</code> no
           <cmd>git status</cmd> dele para sempre.
@@ -1572,7 +1673,11 @@ O <code>load</code> imprime as prefs do PROJETO (project-config.md — preferên
           (remove SOMENTE os ignorados que NÃO existiam na FASE 0 — o baseline
           de ignorados protege node_modules/.venv/.env.local pré-existentes do
           usuário; NUNCA use <cmd>git clean -fdX</cmd> às cegas) — deixá-las é
-          lixo de gigabytes dentro da worktree do usuário</step>
+          lixo de gigabytes dentro da worktree do usuário.
+          <strong>COM PERGUNTA PENDENTE:</strong> pule ESTE passo — a limpeza
+          acontece no passo 0.4 da próxima mensagem (resposta ou dismiss). O
+          relatório já foi entregue; apenas o run-* com evolution/ fica no
+          disco até a resolução.</step>
       </steps>
     </phase>
 
@@ -2082,8 +2187,9 @@ gerar o arquivo $BASE_DIR/EXPLAINER.html desta execução, seguindo a skill
     <![CDATA[
 Você é o AGENTE DE EVOLUÇÃO desta execução do deep-orchestrator-agent-skill.
 Sua ÚNICA missão: analisar o histórico COMPLETO da execução e propor o que a
-skill deve aprender com ela — e preparar o QUESTIONÁRIO em que o usuário decide
-cada proposta. Você NÃO decide nada sozinho: nada é salvo sem o voto do usuário.
+skill deve aprender com ela — preparando as PROPOSTAS que viram UMA PERGUNTA EM
+TEXTO no terminal (v3.9.0 — nunca mais um site). Você NÃO decide nada sozinho:
+nada é salvo sem o voto do usuário na pergunta.
 
 ## FONTES (leia ANTES de propor — contexto zero não é desculpa)
 - O arquivo de contexto preparado pelo orquestrador: {{CONTEXTO}} (se veio como
@@ -2120,20 +2226,20 @@ promovem. NUNCA invente evidência: cada proposta cita o que a originou.
 1. proposals.md — blocos separados por `---`, no formato de candidato:
    key: P001 (sequencial), title, type (correction|fact|antipattern|gotcha|
    convention), confidence (high|medium|low), source (user|repo-doc|sub-agent|
-   web|diff|model-output), tags [a, b], scope (project|global), observacao,
-   acao. Sem propostas qualificadas → arquivo VAZIO (ou sem blocos) — isso é
-   resultado válido.
-2. questionario.md — SÓ se houver ≥1 proposta. H1 ÚNICO e imutável:
-   `# Questionário de evolução — <tarefa resumida>`. Para cada proposta, uma
-   seção `## PNNN — <título>` com: observação + ação em 2-4 linhas, o motivo
-   da proposta (evidência da execução), o scope sugerido e a instrução de
-   resposta com a linha exata:
-   `P001: sim · global` / `P001: sim · projeto` / `P001: nao` /
-   `P001: pendente`. Seção final `## Configurações do projeto` com a instrução
-   `config: <texto>` (o usuário pode salvar preferências livres do projeto).
-3. questionario.html (OPCIONAL, cópia de leitura): render do questionário via
-   plannotator-visual-explainer — o round do questionário roda sobre o .md
-   (contrato garantido do Plannotator); o HTML é cortesia para o usuário.
+   web|diff|model-output), tags [a, b], scope (project|global), observacao
+   (o problema EM UMA FRASE, como o usuário falaria), acao (a ação sugerida;
+   será SUBSTITUÍDA pela opção que o usuário escolher) e as NOVAS opções da
+   pergunta:
+     opcao_a: "<primeira forma de resolver>"
+     opcao_b: "<segunda forma de resolver>"
+     opcao_c: "Não fazer nada (descartar)"
+   Formule as opções como SOLUÇÕES CONCRETAS para o problema da observacao
+   (ex.: a: "usar symlinks para as dependências"; b: "merge para principal e
+   testar"; c: "Não fazer nada (descartar)"). A opcao_c é SEMPRE "Não fazer
+   nada (descartar)" — ela é o voto de descarte na pergunta. Sem propostas
+   qualificadas → arquivo VAZIO (ou sem blocos) — isso é resultado válido.
+   NÃO gere mais questionario.md nem HTML: a pergunta em texto é montada pelo
+   script (evolution-survey.sh ask) direto deste arquivo.
 
 ## REGRAS
 - SEM LIMITE DE TEMPO — analise com calma; profundidade escala com o tamanho
@@ -2145,17 +2251,18 @@ promovem. NUNCA invente evidência: cada proposta cita o que a originou.
 
 ## VERIFICAÇÕES PRÉ-ENTREGA
 - proposals.md existe (vazio ok); se não-vazio, cada bloco tem key/type/
-  confidence/source/scope/observacao/acao válidos.
-- questionario.md existe SE há propostas; H1 único; sem "{{" residual.
-- HTML (se gerado) completo: <!DOCTYPE html> e </html>.
+  confidence/source/scope/observacao/acao E opcao_a/opcao_b/opcao_c válidos
+  (a opcao_c é "Não fazer nada (descartar)").
+- SEM questionario.md/HTML: a pergunta nasce do proposals.md no script.
+- Sem "{{" residual.
 
 ## FORMATO DE RESPOSTA
 
 ## O que fiz
-[resumo: N propostas (X globais, Y projeto), questionário gerado ou sem propostas]
+[resumo: N propostas (X globais, Y projeto) ou sem propostas]
 
 ## Arquivos gerados
-[$DO_STATE/evolution/proposals.md (+ questionario.md/html se houver propostas)]
+[$DO_STATE/evolution/proposals.md]
 
 ## Fontes usadas
 [handoffs de TODAS as ondas; transcripts do harness ou ausência registrada]
@@ -2244,14 +2351,12 @@ O arquivo EXPLAINER.html foi gerado em $BASE_DIR/EXPLAINER.html — a raiz da
 raiz-de-mundo — pelo fluxo `html-explainer-agent-skill` (brief didático +
 render `visual-explainer`), sem limite de tempo, salvo no lugar como artefato
 de execução. Degradação (fallback mínimo pelo orquestrador, exceção R1-c): [nenhuma | registrar aqui].
-## Evolução pós-execução (questionário — v3.8.0)
-| Proposta | Scope sugerido | Destino |
-|----------|----------------|---------|
-{{EVOLUTION_ROWS}}
+## Evolução pós-execução (pergunta no terminal — v3.9.0)
+- Propostas do agente de evolução: [N (X globais, Y projeto) | nenhuma | não rodou (no-evolve / degradação)]
+- Pergunta: [respondida na mensagem final — codes "1:b2" | sem candidatos (D9) | degradada (sem pergunta) | DO_EVOLUTION_SURVEY=0 (no-evolve)]
+- Resposta do usuário: [pendente — respondeu no turno seguinte (FASE 0 0.4) | salvas/descartadas/pendentes com path]
 - Configs salvas do projeto: [nenhuma | lista]
-- Pendentes (path): [nenhum | $PENDING_DIR e $GLOBAL_PENDING_DIR — re-superficiados no próximo questionário]
-- Sem propostas: [registre "evolução: sem candidatos (D9)"]
-- Degradação: [nenhuma | agente de evolução falhou (subagent-failure) | Plannotator falhou — tudo foi para pending | DO_EVOLUTION_SURVEY=0]
+- Push: [feito — $BASE_BRANCH | sem remote | falhou (registrar)]
 ]]>
   </final-report-template>
 
@@ -2601,11 +2706,14 @@ de execução. Degradação (fallback mínimo pelo orquestrador, exceção R1-c)
     Sem busca = sem sub-agentes quando a tarefa exige pesquisa (R7); sem
     pesquisa exigida, a execução prossegue sem busca, com registro.
     E lembre-se: ao fim de CADA execução, o passo EVOLUÇÃO PÓS-EXECUÇÃO (FASE 4,
-    passo 6.5) dispara um agente fresco que analisa o histórico completo e sobe
-    o questionário de evolução no Plannotator (sem limite de tempo): o usuário
-    decide o que salvar em .deep-orchestrator-preferences/ do projeto ou da
-    skill (gitignored, memória consultiva — nunca política). Fechou sem decidir
-    → as propostas ficam PENDENTES para a próxima execução. Nada é aplicado sem
+    passo 7.5) dispara um agente fresco que analisa o histórico completo
+    (handoffs + transcripts + TASK_PLAN.md) e a evolução vem como UMA PERGUNTA
+    EM TEXTO no terminal (depois de tudo — commit, push, relatório; v3.9.0,
+    nunca mais um site): o usuário responde com códigos (ex.: "1:b2") o que
+    salvar em .deep-orchestrator-preferences/ do projeto ou da skill
+    (gitignored, memória consultiva — nunca política). Respondeu "nada" ou
+    seguiu em frente → as propostas ficam PENDENTES para a próxima execução.
+    A flag no-evolve pula a pergunta E o agente de análise. Nada é aplicado sem
     a resposta dele, e nada é promovido ao corpo da skill automaticamente.
   </final-note>
 

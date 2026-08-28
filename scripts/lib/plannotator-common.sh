@@ -4,7 +4,7 @@
 # Fonte única para o contrato de máquina do Plannotator (`annotate --gate
 # --json`), usada por:
 #   • scripts/plan-approval.sh     — portão de aprovação do plano (FASE 2.5)
-#   • scripts/evolution-survey.sh  — questionário de evolução (FASE 4, 6.5)
+#   • scripts/evolution-survey.sh  — pergunta de evolução em texto (FASE 4, 7.5)
 #
 # Esta lib é SOURCEADA e só DEFINE funções/estado — nunca executa nada por
 # conta própria. Compatível com bash 3.2 (macOS). Os consumidores precisam

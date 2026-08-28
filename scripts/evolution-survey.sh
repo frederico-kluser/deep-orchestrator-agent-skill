@@ -1,51 +1,30 @@
 #!/usr/bin/env bash
 # =============================================================================
-# evolution-survey.sh — QUESTIONÁRIO DE EVOLUÇÃO pós-execução (FASE 4, 6.5)
+# evolution-survey.sh — PERGUNTA DE EVOLUÇÃO pós-execução (FASE 4, passo 7.5)
 # -----------------------------------------------------------------------------
-# O orquestrador NÃO conversa com o questionário na mão. Toda rodada passa por
-# aqui, com os mesmos invariantes do plan-approval.sh (snapshot IMUTÁVEL,
-# decisão pelo envelope --json, travas de rede 127.0.0.1/share desligado) e as
-# diferenças da natureza do questionário:
-#   • o questionário é a ÚNICA rodada da execução (não há revisões/orçamento);
-#   • SEM LIMITE DE TEMPO por decisão do usuário (DO_SURVEY_TIMEOUT=0 default;
-#     >0 liga o freio opcional para execuções headless — e aí timeout vira
-#     DISMISSED, que manda tudo para pending);
-#   • as RESPOSTAS do usuário são ANOTAÇÕES na gramática do documento:
-#         P001: sim · global      P001: sim · projeto
-#         P001: sim               P001: nao
-#         P001: pendente          config: <texto livre>
-#     A decisão do envelope vira: annotated (com feedback) = RESPONDIDO,
-#     approved (sem feedback) = NADA respondido (tudo pending), dismissed =
-#     FECHADO SEM DECIDIR (tudo pending). Em TODOS os casos, NADA é aplicado
-#     sem o voto explícito do usuário — a persistência é do `apply`.
-#   • `apply` roteia as respostas para scripts/do-prefs.sh (projeto/global/
-#     pending) — idempotente por marcação, nunca falha a execução (D9).
+# A evolução NÃO é mais um site (Plannotator): é UMA PERGUNTA EM TEXTO no
+# terminal, feita DEPOIS de TUDO (commit, push, relatório — v3.9.0). O
+# orquestrador roda `ask`, imprime o bloco da pergunta na mensagem final e
+# ENCERRA o turno; o usuário responde com códigos na próxima mensagem; o
+# orquestrador (FASE 0, passo 0.4 — continuação) roda `answer` + `apply`.
 #
 # Uso (com o ENV_FILE da FASE 0 sourceado, ou via --env <arquivo>):
-#   evolution-survey.sh round <doc.md>          UMA rodada do questionário
-#   evolution-survey.sh answers                 parseia o feedback → answers.json
-#   evolution-survey.sh apply                   aplica as respostas via do-prefs.sh
-#   evolution-survey.sh status                  imprime o trail
-#   evolution-survey.sh feedback [N]            feedback da rodada N (default: última)
-#   evolution-survey.sh doc [N]                 caminho do snapshot da rodada N
+#   evolution-survey.sh ask                  monta a pergunta → pendente.md + stdout
+#   evolution-survey.sh answer "<texto>"     parseia a resposta do usuário → answers.json
+#   evolution-survey.sh apply                aplica as respostas via do-prefs.sh
+#   evolution-survey.sh dismiss              sem resposta (seguiu em frente) → tudo pendente
+#   evolution-survey.sh status               imprime o trail do passo de evolução
 #
-# Exit codes de `round` (o orquestrador ramifica NELES, não em texto):
-#   0  FINALIZADO — usuário respondeu (annotated) OU aprovou sem responder
-#   2  USAGE/ENV  — entrada ou ambiente inválidos (inclui deriva de título)
-#   11 DISMISSED  — usuário fechou sem decidir (ou timeout com DO_SURVEY_TIMEOUT)
-#   13 TOOLFAIL   — o Plannotator rodou e falhou (ou devolveu saída ilegível)
+# Gramática da resposta (uma proposta → um código):
+#   N:XY     N = número da proposta (1..N) · X = opção (a|b|c) · Y = escopo (1|2)
+#   b2       forma abreviada quando há UMA proposta só
+#   a|b = salvar com a AÇÃO escolhida (opção vira o acao) · c = descartar
+#   1 = fix LOCAL (projeto) · 2 = fix GLOBAL (skill)
+#   "nada" | "pular" | "skip" | vazio → nada salvo (tudo pendente)
+#   "config: <texto>"                    → preferência livre do projeto
 #
-# Ambiente (todos com default; os DO_* saem do ENV_FILE da FASE 0):
-#   DO_STATE                Diretório de estado da execução (obrigatório)
-#   DO_SURVEY_TIMEOUT       Segundos de espera (default 0 = SEM limite)
-#   DO_PLANNOTATOR_BIN      Executável explícito do Plannotator
-#   DO_PLAN_SHARE           1 permite o compartilhamento externo do Plannotator
-#                           (default: DESLIGADO — nada vai a serviço de paste)
-#   DO_PLAN_REMOTE          1 deixa o Plannotator escutar em 0.0.0.0
-#                           (default: 0 = SÓ 127.0.0.1 — /api/approve não tem
-#                           autenticação; para SSH use um túnel)
-#   DO_PLAN_ORIGIN          Override do harness (claude-code|pi|opencode|codex|
-#                           copilot-cli|gemini-cli)
+# Exit codes: 0 ok · 2 uso/ambiente/gramática inválidos.
+# Ambiente: DO_STATE (obrigatório via ENV_FILE), DO_PREFS, PROJECT_* (apply).
 # =============================================================================
 
 set -uo pipefail
@@ -63,315 +42,218 @@ err()  { printf '%s\n' "$*" >&2; }
 note() { printf '%s\n' "$*" >&2; }   # diagnóstico humano: SEMPRE stderr, para
                                      # que o stdout continue sendo contrato.
 
-# --- exit codes nomeados -----------------------------------------------------
 EX_DONE=0
 EX_USAGE=2
-EX_DISMISSED=11
-EX_TOOLFAIL=13
 
-# Helpers compartilhados do contrato do Plannotator (binário, harness,
-# envelope --json, snapshot, título) — a MESMA fonte do plan-approval.sh — e
-# os parsers de bloco (split_entries/entry_field) do do-prefs.sh.
 _self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P 2>/dev/null || true)"
-# shellcheck source=/dev/null
-. "$_self_dir/lib/plannotator-common.sh"
 # shellcheck source=/dev/null
 . "$_self_dir/lib/evolve-common.sh"
 
 case "${1:-}" in
   -h|--help|help)
-    sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'
     exit 0 ;;
   '')
-    sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit "$EX_USAGE" ;;
   *) : "${DO_STATE:?evolution-survey.sh: sourceie o ENV_FILE da FASE 0 antes (ou use --env <arquivo>)}" ;;
 esac
 
-SURVEY_DIR="$DO_STATE/evolution/survey"
-TRAIL="$SURVEY_DIR/trail.tsv"
-TITLE_FILE="$SURVEY_DIR/title"
-SURVEY_TIMEOUT="${DO_SURVEY_TIMEOUT:-0}"
+EVOL_DIR="$DO_STATE/evolution"
+PROPOSALS="$EVOL_DIR/proposals.md"
+PENDENTE="$EVOL_DIR/pendente.md"
+TRAIL="$EVOL_DIR/trail.tsv"
+TRAIL_HEADER='when	step	detail'
 
-case "$SURVEY_TIMEOUT" in
-  ''|*[!0-9]*) err "evolution-survey.sh: DO_SURVEY_TIMEOUT inválido: '$SURVEY_TIMEOUT' (segundos, inteiro ≥ 0)"; exit "$EX_USAGE" ;;
-esac
-
-TRAIL_HEADER='revision	timestamp	decision	doc_sha	snapshot	feedback'
-
-ensure_dir() {
-  mkdir -p "$SURVEY_DIR" || { err "evolution-survey.sh: não consegui criar $SURVEY_DIR"; exit "$EX_USAGE"; }
+trail() { # <step> <detail>
+  mkdir -p "$EVOL_DIR" 2>/dev/null || true
   [ -f "$TRAIL" ] || printf '%s\n' "$TRAIL_HEADER" > "$TRAIL"
+  printf '%s\t%s\t%s\n' "$(now_iso)" "$1" "$2" >> "$TRAIL"
 }
 
-# A rodada é o MAIOR entre o que o trail registrou e o que existe em disco —
-# uma rodada interrompida deixa um rev-NNN.md órfão sem linha no trail; contando
-# só o trail, a tentativa seguinte reusaria o número e esbarraria no snapshot
-# somente-leitura. Cada tentativa (retry de TOOLFAIL) consome um número novo.
-last_revision() {
-  local from_trail=0 from_disk=0
-  [ -f "$TRAIL" ] && from_trail=$(awk -F'\t' 'NR>1 && $1 ~ /^[0-9]+$/ { if ($1+0 > m) m = $1+0 } END { print m+0 }' "$TRAIL")
-  if [ -d "$SURVEY_DIR" ]; then
-    from_disk=$(ls "$SURVEY_DIR" 2>/dev/null \
-      | sed -n 's/^rev-0*\([0-9]\{1,\}\)\.md$/\1/p' \
-      | sort -n | tail -n 1)
-    [ -n "$from_disk" ] || from_disk=0
+pick_json_tool() {
+  if command -v jq >/dev/null 2>&1; then
+    JSON_TOOL=jq; return 0
   fi
-  if [ "$from_disk" -gt "$from_trail" ] 2>/dev/null; then
-    printf '%s\n' "$from_disk"
-  else
-    printf '%s\n' "$from_trail"
+  if command -v python3 >/dev/null 2>&1; then
+    JSON_TOOL=python3; return 0
   fi
-}
-
-resolve_rev() { # [N] → número da rodada (default: a última registrada)
-  local n="${1:-}"
-  if [ -z "$n" ]; then n="$(last_revision)"; fi
-  case "$n" in
-    ''|*[!0-9]*) err "evolution-survey.sh: rodada inválida: '$n'"; return 1 ;;
-  esac
-  [ "$n" -ge 1 ] 2>/dev/null || { err "evolution-survey.sh: nenhuma rodada registrada ainda"; return 1; }
-  printf '%s\n' "$n"
+  err "evolution-survey.sh: preciso de jq OU python3 para montar o answers.json"
+  return 1
 }
 
 # ---------------------------------------------------------------------------
-# round <doc.md>
+# ask — monta a PERGUNTA em texto a partir das propostas (proposals.md)
 # ---------------------------------------------------------------------------
-cmd_round() {
-  local doc="${1:-}"
-  [ -n "$doc" ] || { err "uso: evolution-survey.sh round <doc.md>"; exit "$EX_USAGE"; }
+# Gera $EVOL_DIR/pendente.md (a pergunta no formato de códigos, preservada no
+# disco para a continuação FASE 0 0.4) e imprime o bloco no stdout — o
+# orquestrador cola esse bloco na mensagem final e encerra o turno.
+cmd_ask() {
+  [ -f "$PROPOSALS" ] || { err "evolution-survey.sh: proposals não encontrado: $PROPOSALS (o agente de evolução não rodou?)"; exit "$EX_USAGE"; }
 
-  ensure_dir
+  local -a blocks=()
+  read_candidates "$PROPOSALS"
+  local n=0
+  for b in "${CANDIDATES[@]}"; do
+    parse_fields "$b"
+    [ -n "$B_KEY" ] || { err "evolution-survey.sh: proposta sem 'key:' ignorada no ask"; continue; }
+    [ -n "$B_OBS" ] || { err "evolution-survey.sh: proposta $B_KEY sem 'observacao' ignorada no ask"; continue; }
+    if [ -z "$B_OPCAO_A" ] || [ -z "$B_OPCAO_B" ]; then
+      err "evolution-survey.sh: proposta $B_KEY sem 'opcao_a'/'opcao_b' — a pergunta exige as duas (v3.9.0)"; continue
+    fi
+    [ -n "$B_OPCAO_C" ] || B_OPCAO_C="Não fazer nada (descartar)"
+    n=$((n + 1))
+    blocks+=("$b")
+  done
+
+  if [ "$n" -eq 0 ]; then
+    printf 'SEM-PROPOSTAS\n'
+    trail ask "sem propostas qualificadas"
+    exit "$EX_DONE"
+  fi
+
+  local out="" i=0 blk obs oa ob oc
+  out=$(printf '%s\n' \
+    "# Pergunta de evolução — run $RUN_ID" \
+    '' \
+    'EVOLUÇÃO PÓS-EXECUÇÃO — como quer resolver? (responda com códigos; "nada" para pular)')
+  for blk in "${blocks[@]}"; do
+    i=$((i + 1))
+    parse_fields "$blk"
+    obs="$B_OBS"; oa="$B_OPCAO_A"; ob="$B_OPCAO_B"; oc="$B_OPCAO_C"
+    out=$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$out" \
+      "$i - $obs" \
+      "   como resolver definitivamente?" \
+      "   a: $oa" \
+      "   b: $ob" \
+      "   c: $oc" \
+      "   (1 = fix local · 2 = fix global — qual config você quer? ex.: $i:b2)")
+  done
+  out=$(printf '%s\n%s\n%s\n' "$out" \
+    '' \
+    'Responda com os códigos (ex.: "1:b2 2:c1"), "nada" para não salvar nada, ou "config: <texto>" para salvar uma preferência do projeto.')
+
+  mkdir -p "$EVOL_DIR" 2>/dev/null || { err "evolution-survey.sh: não consegui criar $EVOL_DIR"; exit "$EX_USAGE"; }
+  printf '%s\n' "$out" > "$PENDENTE" \
+    || { err "evolution-survey.sh: não consegui gravar $PENDENTE"; exit "$EX_USAGE"; }
+  trail ask "N propostas: $n"
+  printf '%s\n' "$out"
+  exit "$EX_DONE"
+}
+
+# ---------------------------------------------------------------------------
+# answer "<texto>" — gramática de códigos → answers.json
+# ---------------------------------------------------------------------------
+# answers.json mantém o contrato do apply: {run_id, generated_at, answers,
+# configs} com answers = {P001: {save: sim|nao|pendente, scope: project|global,
+# opcao: a|b|c}}. O `apply` consome isto.
+cmd_answer() {
+  [ -f "$PROPOSALS" ] || { err "evolution-survey.sh: proposals não encontrado: $PROPOSALS"; exit "$EX_USAGE"; }
   pick_json_tool || exit "$EX_USAGE"
 
-  # --- validação do documento ---
-  [ -f "$doc" ] || { err "evolution-survey.sh: documento não encontrado: $doc"; exit "$EX_USAGE"; }
-  [ -s "$doc" ] || { err "evolution-survey.sh: documento vazio: $doc"; exit "$EX_USAGE"; }
-  local title
-  title="$(first_h1 "$doc")"
-  if [ -z "$title" ]; then
-    err "evolution-survey.sh: o documento não tem um título '# ...'."
-    err "              O Plannotator deriva o rastreamento do PRIMEIRO heading —"
-    err "              o questionário nasce com um único H1."
-    exit "$EX_USAGE"
+  local -a keys=()
+  read_candidates "$PROPOSALS"
+  local b
+  for b in "${CANDIDATES[@]}"; do
+    parse_fields "$b"
+    [ -n "$B_KEY" ] && keys+=("$B_KEY")
+  done
+  local nprops=${#keys[@]}
+  [ "$nprops" -gt 0 ] || { err "evolution-survey.sh: nenhuma proposta com key em $PROPOSALS"; exit "$EX_USAGE"; }
+
+  local texto="${1:-}"
+  # "nada"/"pular"/vazio → nada salvo (answers.json vazio; apply pende tudo)
+  local norm
+  norm=$(printf '%s' "$texto" | tr '[:upper:]' '[:lower:]' | tr -s ' ' | sed 's/^ *//; s/ *$//')
+  if [ -z "$norm" ] || [ "$norm" = "nada" ] || [ "$norm" = "pular" ] || [ "$norm" = "skip" ] \
+     || [ "$norm" = "nao" ] || [ "$norm" = "não" ] || [ "$norm" = "nao salvar" ]; then
+    texto=""
   fi
-
-  # --- imutabilidade do título entre tentativas da MESMA execução ---
-  if [ -f "$TITLE_FILE" ]; then
-    local locked
-    locked="$(cat "$TITLE_FILE")"
-    if [ "$locked" != "$title" ]; then
-      err "evolution-survey.sh: o TÍTULO do questionário mudou entre tentativas — recusado."
-      err "              travado : $locked"
-      err "              recebido: $title"
-      err "              Restaure o título exato (evolution-survey.sh title) e repita."
-      exit "$EX_USAGE"
-    fi
-  else
-    printf '%s\n' "$title" > "$TITLE_FILE"
-  fi
-
-  local rev pad snap fb out errf decfile
-  rev="$(last_revision)"
-  rev=$((rev + 1))
-  pad="$(rev_pad "$rev")"
-  snap="$SURVEY_DIR/rev-$pad.md"
-  fb="$SURVEY_DIR/rev-$pad.feedback.md"
-  out="$SURVEY_DIR/rev-$pad.stdout"
-  errf="$SURVEY_DIR/rev-$pad.stderr"
-  decfile="$SURVEY_DIR/rev-$pad.decision"
-
-  # Snapshot IMUTÁVEL: é ELE que vai ao navegador, nunca o arquivo vivo.
-  rm -f -- "$snap" 2>/dev/null || true
-  cp -- "$doc" "$snap" \
-    || { err "evolution-survey.sh: não consegui fotografar $doc em $snap (erro de I/O)"; exit "$EX_TOOLFAIL"; }
-  chmod a-w "$snap" 2>/dev/null || true
-
-  local bin
-  if ! bin="$(resolve_bin)"; then
-    err "evolution-survey.sh: Plannotator não encontrado. Rode primeiro:"
-    err "              \$SKILL_HOME/scripts/check-plannotator.sh --install"
-    exit "$EX_TOOLFAIL"
-  fi
-
-  local harness origin
-  harness="$(detect_harness)"
-  origin="$(origin_for_plannotator "$harness")"
-
-  # --- ambiente da sessão (mesmas travas do plan-approval.sh) ---
-  local -a envv=()
-  envv+=("PLANNOTATOR_CWD=${BASE_DIR:-$PWD}")
-  [ -n "$origin" ] && envv+=("PLANNOTATOR_ORIGIN=$origin")
-  if [ "${DO_PLAN_REMOTE:-0}" = "1" ]; then
-    envv+=("PLANNOTATOR_REMOTE=1")
-    note "  ATENÇÃO: DO_PLAN_REMOTE=1 — o Plannotator vai escutar em 0.0.0.0 (porta"
-    note "           ${PLANNOTATOR_PORT:-19432}). QUALQUER pessoa que alcance esta máquina pode LER o"
-    note "           questionário e RESPONDÊ-LO (o endpoint /api/approve não tem autenticação)."
-    note "           O caminho seguro para SSH é o túnel: ssh -L 19432:127.0.0.1:19432 <host>"
-  else
-    envv+=("PLANNOTATOR_REMOTE=0")
-  fi
-  if [ "${DO_PLAN_SHARE:-0}" = "1" ]; then
-    note "QUESTIONÁRIO: compartilhamento externo HABILITADO por DO_PLAN_SHARE=1"
-  else
-    envv+=("PLANNOTATOR_SHARE=disabled")
-  fi
-
-  note "QUESTIONÁRIO DE EVOLUÇÃO — abrindo o Plannotator (sem limite de tempo)"
-  note "  documento : $snap"
-  note "  título    : $title"
-  note "  harness   : $harness${origin:+ (PLANNOTATOR_ORIGIN=$origin)}"
-  note "  timeout   : ${SURVEY_TIMEOUT}s (0 = sem limite)"
-  note "  Responda anotando as linhas da gramática (P001: sim · global etc.) e envie;"
-  note "  clique Approve só para terminar SEM responder (tudo fica pendente)."
-  note "  Se o navegador não abrir, reabra a sessão ativa com: plannotator sessions --open 1"
-
-  # --- execução ---
-  # Sem limite de tempo por decisão do usuário; DO_SURVEY_TIMEOUT>0 liga o
-  # freio opcional (headless). As flags do timeout(1) são sondadas, não
-  # presumidas — um timeout BSD recusaria --foreground e o erro voltaria como
-  # rc!=0, que leríamos como "o Plannotator falhou".
-  local rc=0
-  local -a runner=()
-  if [ "$SURVEY_TIMEOUT" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
-    if timeout --foreground -k 1 1 true >/dev/null 2>&1; then
-      runner=(timeout --foreground -k 10 "$SURVEY_TIMEOUT")
-    elif timeout -k 1 1 true >/dev/null 2>&1; then
-      runner=(timeout -k 10 "$SURVEY_TIMEOUT")
-    elif timeout 1 true >/dev/null 2>&1; then
-      runner=(timeout "$SURVEY_TIMEOUT")
-    else
-      note "  AVISO: timeout(1) presente mas não utilizável — a rodada pode bloquear"
-    fi
-  elif [ "$SURVEY_TIMEOUT" -gt 0 ]; then
-    note "  AVISO: timeout(1) ausente — DO_SURVEY_TIMEOUT=$SURVEY_TIMEOUT não será aplicado"
-  fi
-
-  # </dev/null é OBRIGATÓRIO, não higiene: o dispatch do Plannotator cai num
-  # `else` final que LÊ STDIN como evento de hook (mesmo contrato do
-  # plan-approval.sh).
-  (
-    cd "${BASE_DIR:-$PWD}" 2>/dev/null || cd "$PWD" || exit 127
-    env "${envv[@]}" "${runner[@]+"${runner[@]}"}" \
-      "$bin" annotate "$snap" --gate --json </dev/null
-  ) > "$out" 2> "$errf"
-  rc=$?
-
-  # --- interpretação ---
-  local decision="" json_line
-  json_line="$(last_json_line "$out")"
-
-  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
-    decision="timeout"
-  elif [ -n "$json_line" ]; then
-    printf '%s\n' "$json_line" > "$out.json"
-    decision="$(json_field "$out.json" decision)"
-    if [ -z "$decision" ]; then
-      decision="unparseable"
-    fi
-  elif [ "$rc" -ne 0 ]; then
-    decision="toolfail"
-  else
-    decision="unparseable"
-  fi
-
-  # Feedback: o envelope contractado só traz feedback em 'annotated', mas
-  # lemos o campo REGARDLESS da decisão (forward-compat: se uma versão futura
-  # anexar feedback a 'approved', as respostas não se perdem).
-  : > "$fb"
-  if [ -f "$out.json" ]; then
-    json_field "$out.json" feedback > "$fb" 2>/dev/null || true
-  fi
-  if ! grep -q '[^[:space:]]' "$fb"; then
-    : > "$fb"
-  fi
-
-  # Classificação final:
-  #   annotated   → RESPONDIDO (exit 0; answers parseia o feedback)
-  #   approved    → FINALIZADO sem respostas (exit 0; apply pendes tudo)
-  #   dismissed   → FECHADO SEM DECIDIR (exit 11)
-  #   timeout     → DISMISSED (exit 11; ninguém respondeu)
-  #   toolfail/unparseable → TOOLFAIL (exit 13)
-  case "$decision" in
-    annotated)
-      if ! grep -q '[^[:space:]]' "$fb"; then
-        note "  AVISO: decisão 'annotated' sem feedback — tratando como aprovado sem respostas"
-        decision="approved"
-      fi ;;
-  esac
-  printf '%s\n' "$decision" > "$decfile"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$rev" "$(now_iso)" "$decision" "$(sha_of "$snap")" "$snap" \
-    "$([ -s "$fb" ] && printf '%s' "$fb" || printf '-')" >> "$TRAIL"
-
-  # Linha de contrato em stdout — uma só, parseável, sempre no mesmo formato.
-  printf 'EVOLUTION_SURVEY decision=%s revision=%s snapshot=%s feedback=%s\n' \
-    "$decision" "$rev" "$snap" \
-    "$([ -s "$fb" ] && printf '%s' "$fb" || printf '-')"
-
-  case "$decision" in
-    annotated)
-      note "QUESTIONÁRIO: RESPONDIDO na rodada $rev — rode 'evolution-survey.sh answers' e 'apply'."
-      exit "$EX_DONE" ;;
-    approved)
-      note "QUESTIONÁRIO: FINALIZADO sem respostas na rodada $rev — 'apply' mandará TUDO para pending."
-      exit "$EX_DONE" ;;
-    dismissed)
-      note "QUESTIONÁRIO: FECHADO sem decisão na rodada $rev — 'apply' mandará TUDO para pending."
-      exit "$EX_DISMISSED" ;;
-    timeout)
-      note "QUESTIONÁRIO: TIMEOUT (${SURVEY_TIMEOUT}s) na rodada $rev — tratado como FECHADO (tudo pending)."
-      exit "$EX_DISMISSED" ;;
-    *)
-      note "QUESTIONÁRIO: o Plannotator falhou na rodada $rev (exit $rc, decisão '$decision')."
-      note "           stdout: $out"
-      note "           stderr: $errf"
-      exit "$EX_TOOLFAIL" ;;
-  esac
-}
-
-# ---------------------------------------------------------------------------
-# answers — gramática estrita → answers.json
-# ---------------------------------------------------------------------------
-# A página do questionário instrui o usuário a anotar com a linha exata:
-#   P001: sim · global      P001: sim · projeto
-#   P001: sim               P001: nao
-#   P001: pendente          config: <texto livre>
-# A última resposta por proposta vence; resposta ilegível ou ausente →
-# save=pending com o scope da proposta (o `apply` decide o escopo final).
-cmd_answers() {
-  ensure_dir
-  pick_json_tool || exit "$EX_USAGE"
-  local n fb
-  n="$(resolve_rev "${1:-}")" || exit "$EX_USAGE"
-  fb="$SURVEY_DIR/rev-$(rev_pad "$n").feedback.md"
 
   local tmp
-  tmp="$(mktemp -d "${TMPDIR:-/tmp}/evol-survey.XXXXXX")" || { err "sem tmp"; exit "$EX_USAGE"; }
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/evol-answer.XXXXXX")" || { err "sem tmp"; exit "$EX_USAGE"; }
   trap 'rm -rf "$tmp"' RETURN
+  : > "$tmp/raw.tsv"
 
-  # Passada 1: extrai respostas em TSV (chave<TAB>save<TAB>scope) e configs.
-  local line key save scope rest
-  if [ -f "$fb" ]; then
-    while IFS= read -r line || [ -n "$line" ]; do
-      if printf '%s\n' "$line" | grep -Eq '^[[:space:]]*P0?[0-9]{3}:[[:space:]]*(sim|nao|pendente)([[:space:]]*[·•][[:space:]]*(global|projeto))?[[:space:]]*$'; then
-        key=$(printf '%s\n' "$line" | sed -E 's/^[[:space:]]*P0?([0-9]{3}):.*/P\1/')
-        save=$(printf '%s\n' "$line" | sed -E 's/^[[:space:]]*P0?[0-9]{3}:[[:space:]]*//' | sed -E 's/[[:space:]]*[·•].*$//' | tr -d ' ')
-        rest=$(printf '%s\n' "$line" | sed -E 's/^[[:space:]]*P0?[0-9]{3}:[[:space:]]*(sim|nao|pendente)[[:space:]]*//')
-        scope=""
-        case "$rest" in
-          *[·•]*global*) scope=global ;;
-          *[·•]*projeto*) scope=project ;;
-        esac
-        printf 'answers\t%s\t%s\t%s\n' "$key" "$save" "$scope" >> "$tmp/raw.tsv"
-      elif printf '%s\n' "$line" | grep -Eq '^[[:space:]]*config:[[:space:]]*[^[:space:]]'; then
-        printf 'configs\t%s\n' "$(printf '%s\n' "$line" | sed -E 's/^[[:space:]]*config:[[:space:]]*//' | tr -d '\t\r\n')" >> "$tmp/raw.tsv"
+  # Passada 1: linha a linha sobre o texto bruto. Uma linha pode ser:
+  #   • uma cláusula `config: <texto>` (o texto tem espaços — nunca quebrar),
+  #     no início OU no meio da linha ("1:b2 config: texto");
+  #   • códigos separados por espaço/vírgula/ponto-e-vírgula (ex.: "1:b2 2:c1").
+  # (aqui-string, NÃO pipeline — um pipeline roda o loop em subshell e o
+  # flag de erro não propagaria; compatível com bash 3.2)
+  local ok=1 line key save scope opcao tok restline cfgpart
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    [ -n "$line" ] || continue
+    # cláusula config: pode vir no início OU no meio da linha — tudo a
+    # partir de 'config:' até o fim da linha é o texto da config
+    restline="$line"
+    if printf '%s\n' "$line" | grep -Eq '(^|[[:space:]])config:'; then
+      cfgpart=$(printf '%s\n' "$line" | sed -E 's/^.*config:[[:space:]]*//')
+      restline=$(printf '%s\n' "$line" | sed -E 's/[[:space:]]*config:.*//')
+      [ -n "$cfgpart" ] && printf 'configs\t%s\n' "$(printf '%s' "$cfgpart" | tr -d '\t\r\n')" >> "$tmp/raw.tsv"
+    fi
+    # quebra o restante em tokens (espaço/vírgula/ponto-e-vírgula)
+    while IFS= read -r tok || [ -n "$tok" ]; do
+      [ -n "$tok" ] || continue
+      if printf '%s\n' "$tok" | grep -Eq '^[0-9]+:[abc][12]$'; then
+        printf 'answers\t%s\t%s\t%s\n' \
+          "$(printf '%s\n' "$tok" | sed -E 's/^([0-9]+):.*/\1/')" \
+          "$(printf '%s\n' "$tok" | sed -E 's/^[0-9]+:([abc]).*/\1/')" \
+          "$(printf '%s\n' "$tok" | sed -E 's/^[0-9]+:[abc]([12]).*/\1/')" >> "$tmp/raw.tsv"
+      elif [ "$nprops" -eq 1 ] && printf '%s\n' "$tok" | grep -Eq '^[abc][12]$'; then
+        printf 'answers\t1\t%s\t%s\n' \
+          "$(printf '%s\n' "$tok" | sed -E 's/^([abc]).*/\1/')" \
+          "$(printf '%s\n' "$tok" | sed -E 's/^[abc]([12]).*/\1/')" >> "$tmp/raw.tsv"
+      else
+        err "evolution-survey.sh: resposta ilegível: '$tok'"
+        err "              Esperado: N:XY (ex.: 1:b2) · 'nada' · 'config: <texto>'"
+        ok=0
       fi
-    done < "$fb"
-  fi
+    done <<< "$(printf '%s\n' "$restline" | tr -s ' ,;' '\n')"
+  done <<< "$texto"
+  [ "$ok" = 1 ] || exit "$EX_USAGE"
 
-  # Passada 2: monta o JSON com a ferramenta escolhida (nunca à mão).
-  local gen run_id
+  # Passada 2: resolve chaves (N → key do proposals) e deriva save/scope/opcao.
+  # (sem arrays associativos — compatível com bash 3.2: mapa em arquivo)
+  : > "$tmp/ans.tsv"
+  : > "$tmp/keymap"
+  local i=0 k
+  for k in "${keys[@]}"; do
+    i=$((i + 1))
+    printf '%s\t%s\n' "$i" "$k" >> "$tmp/keymap"
+  done
+  local line_num keynum opt digit scope_k save_k opcao_k
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      answers*)
+        keynum=$(printf '%s\n' "$line" | cut -f2)
+        opt=$(printf '%s\n' "$line" | cut -f3)
+        digit=$(printf '%s\n' "$line" | cut -f4)
+        [ "$keynum" -ge 1 ] 2>/dev/null && [ "$keynum" -le "$nprops" ] 2>/dev/null || {
+          err "evolution-survey.sh: número de proposta fora do intervalo: $keynum (1..$nprops)"; exit "$EX_USAGE"; }
+        k=$(awk -F'\t' -v n="$keynum" '$1==n { print $2; exit }' "$tmp/keymap")
+        [ -n "$k" ] || { err "evolution-survey.sh: chave não resolvida para a proposta $keynum"; exit "$EX_USAGE"; }
+        case "$opt" in
+          a|b) save_k=sim ;;
+          c)   save_k=nao ;;
+        esac
+        case "$digit" in
+          1) scope_k=project ;;
+          2) scope_k=global ;;
+        esac
+        opcao_k="$opt"
+        # schema do jq/python3 da passada 3: answers<TAB>key<TAB>save<TAB>scope<TAB>opcao
+        printf 'answers\t%s\t%s\t%s\t%s\n' "$k" "$save_k" "$scope_k" "$opcao_k" >> "$tmp/ans.tsv"
+        ;;
+      configs*)
+        printf '%s\n' "$line" >> "$tmp/ans.tsv" ;;
+    esac
+  done < "$tmp/raw.tsv"
+
+  # Passada 3: raw.tsv → answers.json (nunca à mão — jq ou python3).
+  local run_id gen
   gen="$(now_iso)"
   run_id="${RUN_ID:-$(date +%s)}"
   case "$JSON_TOOL" in
@@ -380,13 +262,13 @@ cmd_answers() {
         reduce inputs as $l ({run_id: $run, generated_at: $gen, answers: {}, configs: []};
           ($l | split("\t")) as $p |
           if $p[0] == "answers" then
-            .answers[$p[1]] = {save: $p[2], scope: $p[3]}
+            .answers[$p[1]] = {save: $p[2], scope: $p[3], opcao: $p[4]}
           elif $p[0] == "configs" then
             .configs += [$p[1]]
-          else . end)' < "$tmp/raw.tsv" > "$tmp/answers.json" 2>/dev/null || true
+          else . end)' < "$tmp/ans.tsv" > "$tmp/answers.json" 2>/dev/null || true
       ;;
     python3)
-      python3 - "$tmp/raw.tsv" "$run_id" "$gen" > "$tmp/answers.json" <<'PYEOF' || true
+      python3 - "$tmp/ans.tsv" "$run_id" "$gen" > "$tmp/answers.json" <<'PYEOF' || true
 import json, sys
 raw, run_id, gen = sys.argv[1], sys.argv[2], sys.argv[3]
 out = {"run_id": run_id, "generated_at": gen, "answers": {}, "configs": []}
@@ -395,7 +277,7 @@ try:
         for line in f:
             p = line.rstrip("\n").split("\t")
             if p[0] == "answers" and len(p) >= 4:
-                out["answers"][p[1]] = {"save": p[2], "scope": p[3]}
+                out["answers"][p[1]] = {"save": p[2], "scope": p[3], "opcao": p[4]}
             elif p[0] == "configs" and len(p) >= 2:
                 out["configs"].append(p[1])
 except FileNotFoundError:
@@ -408,18 +290,22 @@ PYEOF
     printf '{\n  "run_id": "%s",\n  "generated_at": "%s",\n  "answers": {},\n  "configs": []\n}\n' "$run_id" "$gen" > "$tmp/answers.json"
   fi
 
-  cp "$tmp/answers.json" "$SURVEY_DIR/answers.json" \
-    || { err "evolution-survey.sh: não consegui gravar $SURVEY_DIR/answers.json"; exit "$EX_USAGE"; }
-  printf 'EVOLUTION_SURVEY answers=%s\n' "$SURVEY_DIR/answers.json"
-  cat "$SURVEY_DIR/answers.json"
+  mkdir -p "$EVOL_DIR" 2>/dev/null || { err "evolution-survey.sh: não consegui criar $EVOL_DIR"; exit "$EX_USAGE"; }
+  cp "$tmp/answers.json" "$EVOL_DIR/answers.json" \
+    || { err "evolution-survey.sh: não consegui gravar $EVOL_DIR/answers.json"; exit "$EX_USAGE"; }
+  trail answer "resposta registrada em answers.json"
+  printf 'EVOLUTION_SURVEY answer=%s\n' "$EVOL_DIR/answers.json"
+  cat "$EVOL_DIR/answers.json"
   exit "$EX_DONE"
 }
 
 # ---------------------------------------------------------------------------
 # apply — respostas → do-prefs.sh (idempotente; nunca falha a execução — D9)
 # ---------------------------------------------------------------------------
+# v3.9.0: a opção escolhida (a/b) SUBSTITUI o campo acao do bloco — o usuário
+# decidiu a AÇÃO definitiva, não só "salvar ou não".
 cmd_apply() {
-  local proposals="${DO_STATE}/evolution/proposals.md" answers="$SURVEY_DIR/answers.json"
+  local proposals="$PROPOSALS" answers="$EVOL_DIR/answers.json"
   local a
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -431,7 +317,6 @@ cmd_apply() {
     esac
   done
 
-  ensure_dir
   pick_json_tool || exit "$EX_USAGE"
   : "${DO_PREFS:?apply: DO_PREFS não resolvido — sourceie o ENV_FILE da FASE 0}"
   : "${PROJECT_LEARNINGS:?apply: PROJECT_LEARNINGS não resolvido — sourceie o ENV_FILE}"
@@ -439,8 +324,6 @@ cmd_apply() {
   : "${PROJECT_CONFIG:?apply: PROJECT_CONFIG não resolvido — sourceie o ENV_FILE}"
   : "${PROJECT_PENDING:?apply: PROJECT_PENDING não resolvido — sourceie o ENV_FILE}"
   : "${GLOBAL_PENDING:?apply: GLOBAL_PENDING não resolvido — sourceie o ENV_FILE}"
-  # Fallback defensivo: o ENV_FILE da FASE 0 exporta PROJECT_PREFS_DIR, mas se
-  # faltar (env fabricado/parcial), deriva da raiz de PROJECT_PENDING.
   PROJECT_PREFS_DIR="${PROJECT_PREFS_DIR:-$(dirname "$(dirname "$PROJECT_PENDING")")}"
   export PROJECT_PREFS_DIR
 
@@ -448,9 +331,8 @@ cmd_apply() {
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/evol-apply.XXXXXX")" || { err "sem tmp"; exit "$EX_USAGE"; }
   trap 'rm -rf "$tmp"' RETURN
 
-  # Idempotência: answers já aplicado com o MESMO conteúdo → skip.
   local marker sig
-  marker="$SURVEY_DIR/apply.done"
+  marker="$EVOL_DIR/apply.done"
   if [ -f "$answers" ]; then
     sig="$(sha_of "$answers")"
     if [ -f "$marker" ] && [ "$(cat "$marker" 2>/dev/null)" = "$sig" ]; then
@@ -461,13 +343,13 @@ cmd_apply() {
     sig="<sem answers.json>"
   fi
 
-  # Dump das respostas em TSV (key<TAB>save<TAB>scope) + configs.
+  # Dump das respostas em TSV (key<TAB>save<TAB>scope<TAB>opcao) + configs.
   : > "$tmp/ans.tsv"
   : > "$tmp/configs.tsv"
   if [ -f "$answers" ]; then
     case "$JSON_TOOL" in
       jq)
-        jq -r '.answers | to_entries[] | "\(.key)\t\(.value.save // "pending")\t\(.value.scope // "")"' "$answers" >> "$tmp/ans.tsv" 2>/dev/null || true
+        jq -r '.answers | to_entries[] | "\(.key)\t\(.value.save // "pending")\t\(.value.scope // "")\t\(.value.opcao // "")"' "$answers" >> "$tmp/ans.tsv" 2>/dev/null || true
         jq -r '.configs[]?' "$answers" >> "$tmp/configs.tsv" 2>/dev/null || true
         ;;
       python3)
@@ -479,7 +361,7 @@ except Exception:
     d = {"answers": {}, "configs": []}
 with open(sys.argv[2], "w", encoding="utf-8") as a, open(sys.argv[3], "w", encoding="utf-8") as c:
     for k, v in d.get("answers", {}).items():
-        a.write(f"{k}\t{v.get('save','pending')}\t{v.get('scope','')}\n")
+        a.write(f"{k}\t{v.get('save','pending')}\t{v.get('scope','')}\t{v.get('opcao','')}\n")
     for line in d.get("configs", []):
         c.write(str(line).replace("\t", " ").replace("\n", " ") + "\n")
 PYEOF
@@ -487,11 +369,12 @@ PYEOF
     esac
   fi
 
-  # Propostas em blocos — o MESMO parser do do-prefs.sh (read_candidates
-  # espera o formato de candidato: um '---' separando blocos). Chave = campo
-  # 'key:' de cada bloco; scope final = resposta do usuário, senão o da proposta.
+  # Propostas em blocos — o MESMO parser do do-prefs.sh (read_candidates espera
+  # o formato de candidato: um '---' separando blocos). Chave = campo 'key:'.
+  # Scope final = resposta do usuário, senão o da proposta. Opção a/b = a ação
+  # ESCOLHIDA vira o acao do bloco salvo.
   local -a yes_project=() yes_global=() pend_project=() pend_global=() discard=()
-  local bi bkey bscope save scope line
+  local bi=0 bkey bscope save scope opcao line
   if [ -f "$proposals" ]; then
     read_candidates "$proposals"
     for b in "${CANDIDATES[@]}"; do
@@ -500,15 +383,21 @@ PYEOF
       bkey="$B_KEY"
       bscope="${B_SCOPE:-project}"
       [ -n "$bkey" ] || { warn_apply "proposta #$bi sem 'key:' ignorada no apply"; continue; }
-      save="pending"; scope=""
+      save="pending"; scope=""; opcao=""
       while IFS= read -r line; do
         case "$line" in
-          "$bkey"*) save=$(printf '%s\n' "$line" | cut -f2); scope=$(printf '%s\n' "$line" | cut -f3) ;;
+          "$bkey"*) save=$(printf '%s\n' "$line" | cut -f2)
+                    scope=$(printf '%s\n' "$line" | cut -f3)
+                    opcao=$(printf '%s\n' "$line" | cut -f4) ;;
         esac
       done < "$tmp/ans.tsv"
       case "$save" in
         sim)
           scope="${scope:-$bscope}"
+          # opção escolhida (a|b) → ação definitiva no bloco
+          if [ -n "$opcao" ] && [ "$opcao" != c ]; then
+            b="$(block_with_opcao "$b" "$opcao")"
+          fi
           case "$scope" in
             project) yes_project+=("$b") ;;
             global)  yes_global+=("$b") ;;
@@ -517,7 +406,6 @@ PYEOF
         nao)
           discard+=("$bkey") ;;
         *)
-          # pendente (explícito ou sem resposta): escopo da resposta, senão da proposta
           scope="${scope:-$bscope}"
           case "$scope" in
             global) pend_global+=("$b") ;;
@@ -529,8 +417,6 @@ PYEOF
     warn_apply "proposals não encontrado: $proposals — nada a aplicar (todas as respostas viram no-op)"
   fi
 
-  # Monta os arquivos de candidatos aprovados (blocos com o scope FINAL gravado)
-  # e os pendentes, e chama o do-prefs.sh.
   build_batch() { # <array-nome> <scope-final> <arquivo-saída>
     local -a src=()
     local arr="$1[@]" scope="$2" out="$3" x
@@ -570,8 +456,8 @@ PYEOF
       || warn_apply "não consegui criar $(dirname "$PROJECT_CONFIG")"
     if [ ! -f "$PROJECT_CONFIG" ]; then
       printf '%s\n\n' '# Project config — deep-orchestrator-agent-skill' \
-        '> Preferências DESTE projeto, escolhidas pelo usuário no questionário de' \
-        '> evolução (FASE 4, passo 6.5). Gitignored. Carregadas no início de cada' \
+        '> Preferências DESTE projeto, escolhidas pelo usuário na pergunta de' \
+        '> evolução (FASE 4, passo 7.5). Gitignored. Carregadas no início de cada' \
         '> execução (FASE 1, passo 8.5: do-prefs.sh load).' \
         '' '## Preferências do usuário' > "$PROJECT_CONFIG" \
         || warn_apply "não consegui gravar $PROJECT_CONFIG"
@@ -591,6 +477,7 @@ PYEOF
   fi
 
   printf '%s\n' "$sig" > "$marker"
+  trail apply "$n_saved salvas · $n_disc descartadas · $n_pend pendentes"
 
   say_apply ""
   say_apply "apply: $n_saved salva(s) (projeto/global) · $n_disc descartada(s) · $n_pend pendente(s)"
@@ -601,6 +488,34 @@ PYEOF
   exit "$EX_DONE"
 }
 
+# block_with_opcao: <bloco> <opcao> → bloco com o acao substituído pela opção
+block_with_opcao() {
+  local blk="$1" op="$2" val=""
+  case "$op" in
+    a) val="$B_OPCAO_A" ;;
+    b) val="$B_OPCAO_B" ;;
+  esac
+  [ -n "$val" ] || { printf '%s' "$blk"; return; }
+  local esc
+  esc=$(printf '%s' "$val" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  printf '%s\n' "$blk" | sed -E "s/^acao: .*/acao: \"$esc\"/"
+}
+
+# ---------------------------------------------------------------------------
+# dismiss — sem resposta (usuário seguiu em frente) → tudo pendente
+# ---------------------------------------------------------------------------
+cmd_dismiss() {
+  pick_json_tool || exit "$EX_USAGE"
+  local gen run_id
+  gen="$(now_iso)"
+  run_id="${RUN_ID:-$(date +%s)}"
+  mkdir -p "$EVOL_DIR" 2>/dev/null || { err "evolution-survey.sh: não consegui criar $EVOL_DIR"; exit "$EX_USAGE"; }
+  printf '{\n  "run_id": "%s",\n  "generated_at": "%s",\n  "answers": {},\n  "configs": []\n}\n' "$run_id" "$gen" > "$EVOL_DIR/answers.json" \
+    || { err "evolution-survey.sh: não consegui gravar $EVOL_DIR/answers.json"; exit "$EX_USAGE"; }
+  trail dismiss "sem resposta — tudo vai para pending"
+  cmd_apply
+}
+
 say_apply()  { printf 'EVOLUTION_SURVEY %s\n' "$*"; }
 warn_apply() { printf 'EVOLUTION_SURVEY AVISO %s\n' "$*" >&2; }
 
@@ -609,7 +524,7 @@ warn_apply() { printf 'EVOLUTION_SURVEY AVISO %s\n' "$*" >&2; }
 # ---------------------------------------------------------------------------
 cmd_status() {
   if [ ! -f "$TRAIL" ]; then
-    note "QUESTIONÁRIO: nenhum trail em $SURVEY_DIR"
+    note "EVOLUÇÃO: nenhum trail em $TRAIL"
     return 0
   fi
   if command -v column >/dev/null 2>&1; then
@@ -619,42 +534,19 @@ cmd_status() {
   fi
 }
 
-cmd_feedback() {
-  local n f
-  n="$(resolve_rev "${1:-}")" || exit "$EX_USAGE"
-  f="$SURVEY_DIR/rev-$(rev_pad "$n").feedback.md"
-  [ -f "$f" ] || { err "evolution-survey.sh: sem feedback para a rodada $n"; exit "$EX_USAGE"; }
-  cat "$f"
-}
-
-cmd_doc() {
-  local n f
-  n="$(resolve_rev "${1:-}")" || exit "$EX_USAGE"
-  f="$SURVEY_DIR/rev-$(rev_pad "$n").md"
-  [ -f "$f" ] || { err "evolution-survey.sh: sem snapshot para a rodada $n"; exit "$EX_USAGE"; }
-  printf '%s\n' "$f"
-}
-
-cmd_title() {
-  [ -f "$TITLE_FILE" ] || { err "evolution-survey.sh: nenhum título travado ainda"; exit "$EX_USAGE"; }
-  cat "$TITLE_FILE"
-}
-
 usage() {
-  sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # ---------------------------------------------------------------------------
 # dispatch
 # ---------------------------------------------------------------------------
 case "${1:-}" in
-  round)    shift; cmd_round "$@" ;;
-  answers)  shift; cmd_answers "$@" ;;
+  ask)      shift; cmd_ask "$@" ;;
+  answer)   shift; cmd_answer "$@" ;;
   apply)    shift; cmd_apply "$@" ;;
+  dismiss)  shift; cmd_dismiss "$@" ;;
   status)   shift; cmd_status "$@" ;;
-  feedback) shift; cmd_feedback "$@" ;;
-  doc)      shift; cmd_doc "$@" ;;
-  title)    shift; cmd_title "$@" ;;
   -h|--help|help) usage; exit 0 ;;
   '')       usage >&2; exit "$EX_USAGE" ;;
   *)        err "evolution-survey.sh: subcomando desconhecido: $1"; usage >&2; exit "$EX_USAGE" ;;

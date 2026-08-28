@@ -26,24 +26,25 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 |--------|-----------|
 | `check-install.sh` | Prova de que UMA INSTALACAO da skill esta COMPLETA: verifica o contrato de instalacao num diretorio (SKILL.md com `name:` correto + ferramentas executaveis `scripts/{do-context,do-wt,search,search-parallel,check-search-credits,check-plannotator,plan-approval,evolve-skill,do-prefs,evolution-survey}.sh` + `prompts/{ecc-prompts,ecc-skills,search-prompts,plan-approval-prompts}.md`). Aceita a raiz do repo OU a pasta `.claude/skills/...` (que espelha scripts/prompts por symlink). `--root <dir>` (default: a propria casa da skill), `--json`, `--quiet`. Exit 0 completo · 1 faltando itens · 2 uso. Detecta o estado "so SKILL.md, sem scripts" que faz a FASE 0 abortar com "PARE: do-context.sh nao encontrado". |
 
-## Auto-evolucao (questionario de evolucao + prefs — v3.8.0)
+## Auto-evolucao (PERGUNTA de evolucao + prefs — v3.9.0)
 
 | Script | Proposito |
 |--------|-----------|
 | `do-prefs.sh` | Motor de PREFERENCIAS: le/cria/apenda a memoria consultiva em `.deep-orchestrator-preferences/` do projeto (`project-config.md`, `learnings.md`, `pending/proposals.md`) e da skill (`global-tips.md`, `pending/proposals.md`). Tudo gitignored, NUNCA versionado. Subcomandos: load, add-project, add-global, pending-add, pending-list, ensure-gitignore, status. Exit: 0 ok · 2 lote invalido/uso · 3 escrita fora da raiz de prefs. |
-| `evolution-survey.sh` | O QUESTIONARIO DE EVOLUCAO pos-execucao (FASE 4, passo 6.5): `round` abre UMA rodada no Plannotator SEM limite de tempo (annotate --gate --json; travas 127.0.0.1/share desligado, como o plan-approval.sh); `answers` parseia a gramatica de respostas (`P001: sim · global` etc.) para answers.json; `apply` roteia para do-prefs.sh (salvar projeto/global, descartar, pendente) — idempotente, nunca falha a execucao (D9). Exit de round: 0 finalizado · 2 uso · 11 dismissed · 13 toolfail. |
+| `evolution-survey.sh` | A PERGUNTA DE EVOLUCAO em TEXTO no terminal (FASE 4, passo 7.5 — v3.9.0, nunca mais um site): `ask` monta a pergunta numerada (cada proposta com observacao + opcoes a/b/c + escopo "1 = fix local · 2 = fix global") em `pendente.md` e imprime o bloco; `answer "<codigos>"` parseia a resposta (`1:b2` — opcao + escopo; "nada" = tudo pendente; `config: <texto>` = preferencias livres) para answers.json; `apply` roteia para do-prefs.sh (salvar projeto/global com a ACAO da opcao escolhida, descartar, pendente) — idempotente, nunca falha a execucao (D9); `dismiss` = sem resposta (tudo pendente); `status` = trail. Exit: 0 ok · 2 uso/gramatica invalida. |
 | `evolve-skill.sh` | Evolucao do CORPO da skill (SKILL.md/prompts/docs): search (agora varre as prefs + prompts + SKILL.md), diff/apply (qualquer mudanca de corpo -> branch evolve/YYYY-MM-DD + diff, nunca merge sozinho), status. `add`/`consolidate` FORA (exit 2 apontando para do-prefs.sh): a memoria nao e mais commitada — o LEARNINGS.md foi removido do repo na v3.8.0. |
-| `lib/evolve-common.sh` | Validadores/parsers COMPARTILHADOS do formato de bloco (normalize, parse_fields, validate_candidate, secret_scan, split_entries, next_id_for) — fonte unica usada por do-prefs.sh e evolve-skill.sh. |
-| `lib/plannotator-common.sh` | Contrato de maquina do Plannotator compartilhado (resolve_bin, detect_harness, envelope --json via jq/python3, snapshot/titulo) — fonte unica usada por plan-approval.sh e evolution-survey.sh. |
+| `lib/evolve-common.sh` | Validadores/parsers COMPARTILHADOS do formato de bloco (normalize, sha_of, now_iso, parse_fields — incluindo opcao_a/b/c —, validate_candidate, secret_scan, split_entries, next_id_for) — fonte unica usada por do-prefs.sh, evolution-survey.sh e evolve-skill.sh. |
+| `lib/plannotator-common.sh` | Contrato de maquina do Plannotator compartilhado (resolve_bin, detect_harness, envelope --json via jq/python3, snapshot/titulo) — fonte unica usada por plan-approval.sh (o portao de aprovacao do plano CONTINUA no Plannotator). |
 
-Fluxo v3.8.0: ao fim de cada execucao o orquestrador dispara um AGENTE DE EVOLUCAO
-fresco que analisa o historico completo (TASK_PLAN.md + transcripts do harness quando
-existem) e produz propostas + o questionario (pagina propria via
-plannotator-visual-explainer, so as perguntas). O usuario responde por proposta
-(salvar? projeto ou global?) e as respostas viram escrita em prefs — gitignored, memoria
-CONSULTIVA, nunca politica. Fechou sem responder (ou headless) -> NADA e aplicado: as
-propostas ficam PENDENTES para a proxima execucao. Nada e promovido ao corpo da skill
-automaticamente.
+Fluxo v3.9.0: ao fim de cada execucao — DEPOIS de commit, push e relatorio — o
+orquestrador dispara um AGENTE DE EVOLUCAO fresco que analisa o historico completo
+(TASK_PLAN.md + transcripts do harness quando existem) e produz propostas com
+opcoes a/b/c. A evolucao vem como UMA PERGUNTA EM TEXTO no terminal: o usuario
+responde com codigos (ex.: "1:b2" — opcao b, fix global) na proxima mensagem e as
+respostas viram escrita em prefs — gitignored, memoria CONSULTIVA, nunca politica.
+Respondeu "nada" ou seguiu em frente -> NADA e aplicado: as propostas ficam
+PENDENTES para a proxima execucao. A flag `no-evolve` na invocacao pula a pergunta
+E o agente de analise. Nada e promovido ao corpo da skill automaticamente.
 
 ## Busca (search)
 

@@ -5,7 +5,7 @@
 # A memória da skill vive em pastas gitignored `.deep-orchestrator-preferences/`:
 #   • PROJETO:   <projeto>/.deep-orchestrator-preferences/
 #         project-config.md   preferências livres do projeto (escolhidas pelo
-#                             usuário no questionário de evolução)
+#                             usuário na pergunta de evolução)
 #         learnings.md        aprendizados do PROJETO (blocos, scope: project)
 #         pending/proposals.md  propostas ainda sem decisão do usuário
 #   • GLOBAL:    $SKILL_HOME/.deep-orchestrator-preferences/
@@ -14,7 +14,7 @@
 #
 # Tudo é MEMÓRIA CONSULTIVA (contexto NÃO revisado, nunca política executável)
 # e NUNCA versionado: a evolução não polui o repo da skill nem o repo do
-# projeto. O questionário de evolução (evolution-survey.sh, FASE 4 passo 6.5)
+# projeto. A pergunta de evolução (evolution-survey.sh, FASE 4 passo 7.5)
 # é quem decide o que entra aqui, com voto do usuário. Nada é aplicado sem a
 # resposta dele — o que não for respondido fica PENDING.
 #
@@ -203,17 +203,17 @@ LEARNINGS_HEADER_PROJECT='# Learnings do projeto — deep-orchestrator-agent-ski
 
 PENDING_HEADER_GLOBAL='# Propostas pendentes (global) — deep-orchestrator-agent-skill
 
-> Propostas de evolução GLOBAL que o usuário ainda não decidiu no questionário
+> Propostas de evolução GLOBAL que o usuário ainda não decidiu na pergunta de evolução
 > (fechou sem responder, ou execução headless). NADA aqui é aplicado: vira
 > memória consultiva só com voto EXPLÍCITO do usuário. O agente de evolução da
-> próxima execução re-superficia as relevantes no questionário. Gitignored.
+> próxima execução re-superficia as relevantes na pergunta de evolução. Gitignored.
 
 <!-- FORMATO: blocos com status: pending, mesmo formato das dicas ativas. -->'
 
 PENDING_HEADER_PROJECT='# Propostas pendentes (projeto) — deep-orchestrator-agent-skill
 
 > Propostas de evolução DESTE projeto que o usuário ainda não decidiu no
-> questionário (fechou sem responder, ou execução headless). NADA aqui é
+> pergunta (fechou sem responder, ou seguiu em frente). NADA aqui é
 > aplicado: vira memória consultiva só com voto EXPLÍCITO do usuário. O agente
 > de evolução da próxima execução re-superficia as relevantes. Gitignored.
 
@@ -221,7 +221,7 @@ PENDING_HEADER_PROJECT='# Propostas pendentes (projeto) — deep-orchestrator-ag
 
 CONFIG_HEADER='# Project config — deep-orchestrator-agent-skill
 
-> Preferências DESTE projeto, escolhidas pelo usuário no questionário de
+> Preferências DESTE projeto, escolhidas pelo usuário na pergunta de evolução
 > evolução (FASE 4, passo 6.5). Gitignored — vive nesta máquina, fora do git.
 > Carregadas no início de cada execução (FASE 1, passo 8.5: do-prefs.sh load).
 > Memória consultiva, nunca política executável.

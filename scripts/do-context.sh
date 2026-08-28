@@ -168,7 +168,7 @@ if [ "$NEW_RUN" = 0 ]; then
     fi
     # Revalidação anti-stale do QUESTIONÁRIO DE EVOLUÇÃO (v3.8.0): mesma classe
     # das anteriores — reaproveitar um env cujo DO_EVOLUTION_SURVEY diverge do
-    # que ESTA invocação resolveu ligaria/desligaria o questionário pós-execução
+    # que ESTA invocação resolveu ligaria/desligaria a pergunta de evolução pós-execução
     # sem o usuário pedir, nos dois sentidos. Um env anterior à v3.8.0 nem tem a
     # chave — também diverge, e também precisa de execução nova.
     _want_survey="${DO_EVOLUTION_SURVEY:-1}"
@@ -180,7 +180,7 @@ if [ "$NEW_RUN" = 0 ]; then
     fi
     if [ "$_reuse_survey" != "$_want_survey" ]; then
       say "DO_STALE: a execução em andamento tem EVOLUTION_SURVEY='$_reuse_survey' e esta invocação"
-      say "          resolveu '$_want_survey' — reaproveitar inverteria a decisão do questionário em silêncio."
+      say "          resolveu '$_want_survey' — reaproveitar inverteria a decisão da pergunta de evolução em silêncio."
       say "          Criando execução NOVA (equivalente a --new-run)."
       say ""
       continue
@@ -474,14 +474,14 @@ mkdir -p "$DO_STATE" "$CHILD_ROOT" || die 7 "não consegui criar $DO_STATE / $CH
 printf 'run_id\tkind\tname\tbranch\tpath\tbase_sha\tpre_merge_sha\tpost_merge_sha\tstatus\n' > "$OWNED"
 
 # --- (0.9b) DO_MAX_PARALLEL: cap de paralelismo (F3-02) ----------------------
-# O orquestrador parseia o prefixo `mp=N` da invocação e exporta
+# O orquestrador parseia o prefixo `max-parallel=N` da invocação e exporta
 # DO_MAX_PARALLEL antes da FASE 0; ausente → default 50 (CAP protetor).
 # Validação: inteiro positivo. Só dígitos, então a
 # interpolação no ENV_FILE (aspas simples) é segura.
 case "${DO_MAX_PARALLEL:-}" in
   "") DO_MAX_PARALLEL=50 ;;   # ausente → default 50 (CAP protetor)
   *[!0-9]*)
-    die 2 "DO_MAX_PARALLEL inválido: '${DO_MAX_PARALLEL}' — precisa ser um inteiro positivo (ex.: mp=50)" ;;
+    die 2 "DO_MAX_PARALLEL inválido: '${DO_MAX_PARALLEL}' — precisa ser um inteiro positivo (ex.: max-parallel=50)" ;;
 esac
 [ "$DO_MAX_PARALLEL" -gt 0 ] 2>/dev/null \
   || die 2 "DO_MAX_PARALLEL inválido: '$DO_MAX_PARALLEL' — precisa ser maior que zero"
@@ -521,20 +521,16 @@ case "${DO_NO_STOP:-}" in
   1|on|yes|true)     DO_NO_STOP=1 ;;
   *) die 2 "DO_NO_STOP inválido: '${DO_NO_STOP}' — use 0/1 (ou no-stop na invocação)" ;;
 esac
-# (0.9e) DO_EVOLUTION_SURVEY / DO_SURVEY_TIMEOUT (v3.8.0): o questionário de
-# evolução pós-execução (FASE 4, passo 6.5). Ausente → 1 — o questionário SEMPRE
-# aparece, por decisão do usuário (inclusive com gatilhos de autonomia); =0 é o
-# kill-switch manual. DO_SURVEY_TIMEOUT em segundos: 0 = SEM limite de tempo
-# (decisão do usuário); >0 = freio para execuções headless (timeout vira
-# DISMISSED, que manda tudo para pending — nada é aplicado sem resposta).
+# (0.9e) DO_EVOLUTION_SURVEY (v3.9.0): a PERGUNTA DE EVOLUÇÃO pós-execução
+# (FASE 4, passo 7.5). Ausente → 1 — a pergunta SEMPRE aparece, por decisão do
+# usuário (inclusive com gatilhos de autonomia); =0 é o kill-switch manual, o
+# mesmo que a flag `no-evolve` na invocação (o orquestrador parseia o token e
+# exporta antes da FASE 0). Com 0, o passo é pulado INTEIRO: o agente de
+# evolução não é disparado (sem análise do histórico) e nada é aplicado.
 case "${DO_EVOLUTION_SURVEY:-}" in
   ""|1|on|yes|true) DO_EVOLUTION_SURVEY=1 ;;
   0|off|no|false)   DO_EVOLUTION_SURVEY=0 ;;
-  *) die 2 "DO_EVOLUTION_SURVEY inválido: '${DO_EVOLUTION_SURVEY}' — use 0/1" ;;
-esac
-case "${DO_SURVEY_TIMEOUT:-}" in
-  "") DO_SURVEY_TIMEOUT=0 ;;
-  *[!0-9]*) die 2 "DO_SURVEY_TIMEOUT inválido: '${DO_SURVEY_TIMEOUT}' — segundos, inteiro ≥ 0" ;;
+  *) die 2 "DO_EVOLUTION_SURVEY inválido: '${DO_EVOLUTION_SURVEY}' — use 0/1 (ou no-evolve na invocação)" ;;
 esac
 
 PLAN_APPROVAL_DIR="$DO_STATE/plan-approval"
@@ -576,7 +572,6 @@ DO_PLAN_MAX_REVISIONS='$DO_PLAN_MAX_REVISIONS'
 DO_PLAN_TIMEOUT='$DO_PLAN_TIMEOUT'
 DO_NO_STOP='$DO_NO_STOP'
 DO_EVOLUTION_SURVEY='$DO_EVOLUTION_SURVEY'
-DO_SURVEY_TIMEOUT='$DO_SURVEY_TIMEOUT'
 PLAN_APPROVAL_DIR='$PLAN_APPROVAL_DIR'
 PLAN_DOC='$PLAN_DOC'
 DO_PLAN_APPROVAL_SH='$SKILL_HOME/scripts/plan-approval.sh'
@@ -594,7 +589,7 @@ export MODE BASE_DIR BASE_BRANCH BASE_NAME BASE_SLUG MAIN_ROOT MAIN_ROOT_DESC
 export COMMON_DIR PARENT_DIR CHILD_ROOT PLACEMENT RUN_ID BRANCH_NS SKILL_HOME
 export DO_HOME DO_STATE PLAN_FILE OWNED DO_WT DO_MAX_PARALLEL
 export DO_PLAN_APPROVAL DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_NO_STOP PLAN_APPROVAL_DIR PLAN_DOC DO_PLAN_APPROVAL_SH
-export DO_EVOLUTION_SURVEY DO_SURVEY_TIMEOUT
+export DO_EVOLUTION_SURVEY
 export PROJECT_PREFS_ROOT PROJECT_PREFS_DIR GLOBAL_PREFS_DIR PROJECT_CONFIG
 export PROJECT_LEARNINGS PENDING_DIR GLOBAL_TIPS GLOBAL_PENDING_DIR DO_PREFS DO_SURVEY
 
@@ -684,9 +679,9 @@ else
   say "  NO_STOP       = OFF  (teto histórico de 10 ondas por execução — FASE 3)"
 fi
 if [ "$DO_EVOLUTION_SURVEY" = 1 ]; then
-  say "  EVOLUTION     = ON   (questionário de evolução ao fim — FASE 4, passo 6.5; timeout ${DO_SURVEY_TIMEOUT}s, 0 = sem limite)"
+  say "  EVOLUTION     = ON   (pergunta de evolução em texto ao fim de TUDO — FASE 4, passo 7.5; no-evolve desliga)"
 else
-  say "  EVOLUTION     = OFF  (DO_EVOLUTION_SURVEY=0 — kill-switch manual; análise não roda)"
+  say "  EVOLUTION     = OFF  (no-evolve / DO_EVOLUTION_SURVEY=0 — pergunta e análise não rodam)"
 fi
 say "  PREFS projeto = ${PROJECT_PREFS_DIR:-<não resolvido>}  (memória consultiva, gitignored — do-prefs.sh)"
 say "  PREFS global  = ${GLOBAL_PREFS_DIR:-<não resolvido>}  (dicas globais da skill, gitignored)"

@@ -1,12 +1,12 @@
-# deep-orchestrator-agent-skill v3.8.0
+# deep-orchestrator-agent-skill v3.9.0
 
-![Versão](https://img.shields.io/badge/version-3.8.0-00d4ff)
+![Versão](https://img.shields.io/badge/version-3.9.0-00d4ff)
 
 Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda (`scripts/search.sh`: surf-agent-skill → Brave Search API → DuckDuckGo keyless, com `check-search-credits.sh` e lotes via `search-parallel.sh`), e commita tudo ao final **sem perguntar nada ao usuário**.
 
 A única exceção — e ela só existe quando você pede — é o **PORTÃO DE APROVAÇÃO DO PLANO** (FASE 2.5): quando a invocação pede um plano, o plano vai para o [Plannotator](https://github.com/backnotprop/plannotator) e você aprova ou anota. Cada anotação **regera o plano e abre um Plannotator NOVO**, até a aprovação — e nenhuma worktree nasce antes dela. Sem pedido de plano, a autonomia total continua exatamente como sempre foi.
 
-Ao FIM da execução há uma segunda interação, também pelo Plannotator: o **QUESTIONÁRIO DE EVOLUÇÃO** (v3.8.0) — você decide o que a skill aprende com aquela execução (salvar/não salvar, por proposta, no projeto ou globalmente). Sem resposta, nada é aplicado: as propostas ficam pendentes.
+Ao FIM da execução — depois de TUDO (commit, push e relatório) — a evolução vem como **UMA PERGUNTA EM TEXTO no terminal** (v3.9.0, nunca mais um site): cada proposta numerada com opções e escopo, e você responde com códigos (ex.: `1:b2` — opção b, fix global), ou `nada` para pular (tudo fica pendente, nada é aplicado). A flag `no-evolve` na invocação pula a pergunta **e** a análise do histórico.
 
 ## Glossário (leia antes do resto)
 
@@ -17,7 +17,7 @@ Ao FIM da execução há uma segunda interação, também pelo Plannotator: o **
 | **`$BASE_BRANCH`** | O branch em HEAD na raiz-de-mundo. É o **único** alvo de integração. Nunca é resolvido por convenção (main/master). |
 | **`$MAIN_ROOT`** | O checkout principal do repositório. Em MODO CONTIDO é **zona proibida**. |
 | **WORKTREE-FILHA** | Uma worktree por sub-agente, criada sob `$CHILD_ROOT`, com branch `$BRANCH_NS/<nome>`. |
-| **`.deep-orchestrator-preferences/`** | Memória consultiva da skill e do projeto (contexto **NÃO revisado**, nunca política executável, **gitignored**). Do projeto: `project-config.md` + `learnings.md` + `pending/`; da skill: `global-tips.md` + `pending/`. Escrita por `scripts/do-prefs.sh` (validada, deduplicada) com o voto do usuário no questionário (`scripts/evolution-survey.sh`); consultada pela FASE 1 antes de planejar. |
+| **`.deep-orchestrator-preferences/`** | Memória consultiva da skill e do projeto (contexto **NÃO revisado**, nunca política executável, **gitignored**). Do projeto: `project-config.md` + `learnings.md` + `pending/`; da skill: `global-tips.md` + `pending/`. Escrita por `scripts/do-prefs.sh` (validada, deduplicada) com o voto do usuário na pergunta de evolução (`scripts/evolution-survey.sh`); consultada pela FASE 1 antes de planejar. |
 | **`prompts/evolution-guide.md`** | Framework de decisão da evolução: o que qualifica, como classificar project vs global, e o caminho das prefs ao corpo da skill. |
 
 ## Instalação (o contrato)
@@ -28,7 +28,7 @@ A skill é distribuída como um repositório git; a **casa da skill (`$SKILL_HOM
 - **Instalar**: a skill NÃO assume onde cada agente vive — crie UMA entrada onde o SEU harness descobre skills (um symlink para a raiz do repo, não a pasta interna; ex.: `ln -s /caminho/do/repo <diretório-de-skills-do-seu-harness>/deep-orchestrator-agent-skill`). Confira a doc do seu harness para o caminho de descoberta. Qualquer casa é válida — a FASE 0 resolve `$SKILL_HOME` pela localização dos próprios scripts, nunca por um caminho fixo. Depois verifique com `./scripts/check-install.sh --root <casa>`.
 - **Harnesses** (Claude Code, DSH, pi, jcode, opencode...): cada um descobre skills à sua maneira — crie o symlink no caminho que o SEU usa (a FASE 0 testa primeiro as variáveis do harness, ex. `$CLAUDE_SKILL_DIR`, e depois alguns diretórios comuns apenas como última tentativa). Sem script de "publicação global": instalar é um comando seu, um symlink, e pronto.
 - **Verificar** uma instalação: `./scripts/check-install.sh [--root <dir>]` — exit 0 = completo (SKILL.md + ferramentas executáveis + prompts), 1 = faltando itens, 2 = uso inválido. Rode depois de qualquer instalação/atualização.
-- Um clone legado por **cópia** (ex.: `~/.local/share/deep-orchestrator/`) congela a versão do dia — prefira o symlink (`sync-global-skill.sh` converte cópias em symlinks automaticamente, preservando backup em `.bak-<data>`).
+- Um clone legado por **cópia** (ex.: `~/.local/share/deep-orchestrator/`) congela a versão do dia — prefira o symlink (recrie o link apontando para a raiz do repo).
 
 ## MODO CONTIDO
 
@@ -45,9 +45,25 @@ O único vestígio compartilhado aceito é o registro administrativo das filhas 
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
 
+## Novidades na v3.9.0
+
+- **EVOLUÇÃO COMO PERGUNTA NO TERMINAL (nunca mais um site)**: o questionário Plannotator acabou — depois de TUDO (commit, push e relatório), o orquestrador imprime **uma pergunta em texto** com as propostas do agente de evolução, cada uma numerada com opções e escopo:
+  ```
+  1 - Toda vez que criamos uma worktree precisamos instalar as dependências
+     como resolver definitivamente?
+     a: usar symlinks para as dependências
+     b: merge para principal e testar
+     c: Não fazer nada (descartar)
+     (1 = fix local · 2 = fix global — qual config você quer? ex.: 1:b2)
+  ```
+  Você responde na próxima mensagem com códigos (`1:b2`, `nada` para pular, `config: <texto>` para preferências livres). A opção escolhida **vira a ação salva** (a/b = salvar no escopo indicado; c = descartar). Sem resposta → tudo fica pendente, nada é aplicado (`scripts/evolution-survey.sh` ask/answer/apply/dismiss).
+- **FLAG `no-evolve`**: na invocação (`/deep-orchestrator-agent-skill no-evolve <tarefa>`), pula a pergunta **e** o pós-processamento — o agente de evolução que lê todo o histórico (handoffs + transcripts + TASK_PLAN.md) nem roda.
+- **PUSH NO COMMIT-FINAL**: o passo final agora commita **e** faz push do `$BASE_BRANCH` (nunca bloqueia; sem remote → registra e segue) — a pergunta de evolução vem depois de TUDO, incluindo o push.
+- **Prefixo `max-parallel=N`**: `mp=N` virou `max-parallel=N` na invocação (`DO_MAX_PARALLEL`, default 50) — mesmo cap de concorrência, nome explícito. Decisões D18–D22 em `docs/decisions/2026-08-28-pergunta-evolucao-terminal.md`.
+
 ## Novidades na v3.8.0
 
-- **QUESTIONÁRIO DE EVOLUÇÃO PÓS-EXECUÇÃO**: ao fim de cada execução, UM sub-agente fresco analisa o histórico completo (handoffs de todas as ondas + transcripts do harness quando existem) e sobe um questionário próprio no Plannotator (só as perguntas, SEM limite de tempo): o usuário decide por proposta **salvar/não salvar** e o escopo **projeto ou global** (`scripts/evolution-survey.sh` round/answers/apply). Fechou sem responder → tudo fica PENDENTE e nada é aplicado.
+- **QUESTIONÁRIO DE EVOLUÇÃO PÓS-EXECUÇÃO (substituído pela v3.9.0)**: ao fim de cada execução, UM sub-agente fresco analisa o histórico completo (handoffs de todas as ondas + transcripts do harness quando existem) e sobe um questionário próprio no Plannotator (só as perguntas, SEM limite de tempo): o usuário decide por proposta **salvar/não salvar** e o escopo **projeto ou global** (`scripts/evolution-survey.sh` round/answers/apply). Fechou sem responder → tudo fica PENDENTE e nada é aplicado.
 - **PREFS POR PROJETO (`.deep-orchestrator-preferences/`)**: configs e aprendizados do projeto ficam no PRÓPRIO projeto (carregados na FASE 1, salvo quando o usuário decide salvar); dicas globais ficam na MESMA pasta dentro da skill — tudo **gitignored** (memória consultiva, nunca política). `ensure-gitignore` acrescenta a linha no `.gitignore` de cada projeto automaticamente.
 - **LEARNINGS.md REMOVIDO DO REPO**: as 59 entradas antigas foram reclassificadas — as globais migraram para `global-tips.md`; as de projeto específico saíram (git history preserva). `evolve-skill.sh` não commita mais memória (`add`/`consolidate` saem com mensagem de migração); o `apply` de CORPO vai sempre para branch `evolve/YYYY-MM-DD` + diff, nunca merge sozinho.
 - **A FASE 1 consulta prefs + memória** antes de planejar (`do-prefs.sh load` + `evolve-skill.sh search`) — evita repetir erros e respeita as preferências declaradas do projeto. Decisões D12–D17 em `docs/decisions/2026-08-27-questionario-evolucao.md`. Testes: `scripts/test-evolve.sh` (suíte F1–Fxx nova).
@@ -94,7 +110,7 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 - **Subwaves duplas (F2-02/F2-04)**: TESTING (`test-ondaN-*`, máximo 3 worktrees de teste por onda — contam no teto DO_MAX_PARALLEL) e VALIDATION (`val-ondaN-*`, gate completo + revisão adversarial do diff integrado) rodam em background após cada onda e são integradas na onda seguinte (passo 3.5) ou no COMMIT-FINAL — nunca bloqueiam o disparo das ondas de feature.
 - **Correções críticas da Fase 1 (F1-01 a F1-04)**: `do-wt.sh undo` seguro (reset --hard só com working tree exclusivamente untracked; o commit desfeito é arquivado em `refs/do-archive/$RUN_ID/undo-<nome>`), baseline de ignorados na FASE 0 + `clean-ignored-delta` no lugar do `git clean -fdXq` genérico (nunca apaga ignorados pré-existentes do usuário), `stage-delta` com `-uall` nos dois lados (arquivos novos dentro de dirs untracked do usuário entram no commit; a sujeira preexistente continua fora) e `--budget-ms` no Tier 1 do search.sh (`--timeout` em segundos vira milissegundos para o surf-search-normal).
 - **Gate em snapshot de integração (F3-01)**: o squash-merge é atômico e o gate (build + testes + linter) sai da seção crítica — roda em background numa worktree efêmera `int-ondaN-<nome>` (kind=integration, registrada no owned.tsv) criada no SHA pós-merge. Merges seguem em sequência; a limpeza de cada filha e o fim da onda aguardam o respectivo gate de snapshot (`status=gate-pending` no owned.tsv; o `do-wt.sh sweep` detecta gate-pending, avisa e sai != 0). Falha tardia: `do-wt.sh undo <nome>` reverte exatamente aquele squash com HEAD avançado, arquivando o commit em `refs/do-archive/$RUN_ID/undo-<nome>`. **Decisão D1**: builds duplicados (snapshot + validação + gate final) são esperados.
-- **DO_MAX_PARALLEL (F3-02)**: prefixo `mp=N` na invocação (`/deep-orchestrator-agent-skill mp=N <tarefa>`) — o orquestrador exporta `DO_MAX_PARALLEL` antes da FASE 0; ausente, default 50. Orçamento: features por onda ≤ DO_MAX_PARALLEL; in-flight total ≤ DO_MAX_PARALLEL (features + worktrees de teste/validação das subwaves + revisores + REVISOR DE PLANO — tudo no mesmo teto); ondas maiores viram batches sequenciais com a própria barreira.
+- **DO_MAX_PARALLEL (F3-02)**: prefixo `max-parallel=N` na invocação (`/deep-orchestrator-agent-skill max-parallel=N <tarefa>`) — o orquestrador exporta `DO_MAX_PARALLEL` antes da FASE 0; ausente, default 50. Orçamento: features por onda ≤ DO_MAX_PARALLEL; in-flight total ≤ DO_MAX_PARALLEL (features + worktrees de teste/validação das subwaves + revisores + REVISOR DE PLANO — tudo no mesmo teto); ondas maiores viram batches sequenciais com a própria barreira.
 - **Gate definido uma vez (F3-03)**: a FASE 1 detecta e registra no TASK_PLAN.md o trio exato `GATE_BUILD`/`GATE_TEST`/`GATE_LINT` do projeto-alvo (package.json/Makefile/pyproject.toml/Cargo.toml/go.mod); toda invocação de gate referencia esse trio, com cwd conforme o contexto (snapshot, validação ou `$BASE_DIR` no gate final).
 - **Lockfile como singleton (F3-04)**: manifesto + lockfile entram no mapa de propriedade como recurso singleton — no máximo 1 agente por onda adiciona dependências; os demais registram "deps pendentes: <pacote@versão>" no handoff e a adição acontece no COMMIT PREP da onda seguinte.
 - **Tiering de modelos por papel (F3-09)**: quando o harness permite, agentes de teste e revisores adversariais rodam em modelo médio, REVISOR DE PLANO e síntese final em modelo forte, features no padrão; regra de escala: ≤2 sub-tarefas pequenas e independentes não geram fan-out extra.
@@ -201,9 +217,9 @@ deep-orchestrator-agent-skill/
 │   ├── do-wt.sh                 # ciclo de vida das worktrees-filhas (guardas de contenção)
 │   ├── evolve-skill.sh          # evolução do CORPO da skill: search (prefs+prompts)/diff/apply (branch evolve/*, nunca merge sozinho)/status
 │   ├── do-prefs.sh              # motor de prefs: .deep-orchestrator-preferences/ do projeto e da skill (load/add-project/add-global/pending/ensure-gitignore/status)
-│   ├── evolution-survey.sh      # questionário de evolução pós-execução (round/answers/apply — Plannotator, sem limite de tempo)
+│   ├── evolution-survey.sh      # PERGUNTA de evolução em texto no terminal (ask/answer/apply/dismiss — v3.9.0, sem Plannotator)
 │   ├── lib/evolve-common.sh     # parsers/validadores compartilhados do formato de bloco
-│   ├── lib/plannotator-common.sh # contrato do Plannotator compartilhado (plan-approval.sh + evolution-survey.sh)
+│   ├── lib/plannotator-common.sh # contrato do Plannotator compartilhado (plan-approval.sh — o portão de plano continua no Plannotator)
 │   ├── search.sh                # interface única de busca 3-tier (surf-agent-skill → Brave → DDG keyless)
 │   ├── search-parallel.sh       # busca em lote paralelo (uma chamada por lote, nunca loop)
 │   ├── check-search-credits.sh  # verificador multi-tier pré-onda (exit 0/1/2)
@@ -260,12 +276,13 @@ export BRAVE_API_KEY=<chave>
 
 ```
 /deep-orchestrator-agent-skill <descrição da tarefa>
-/deep-orchestrator-agent-skill mp=N <descrição da tarefa>            # prefixo OPCIONAL
+/deep-orchestrator-agent-skill max-parallel=N <descrição da tarefa>   # prefixo OPCIONAL — cap de concorrência
 /deep-orchestrator-agent-skill plan=on <descrição da tarefa>          # prefixo OPCIONAL — força o portão
 /deep-orchestrator-agent-skill plan=off faça um plano e execute       # força a autonomia total
 /deep-orchestrator-agent-skill wt=on <descrição da tarefa>            # prefixo OPCIONAL — worktree irmã nomeada como raiz-de-mundo
 /deep-orchestrator-agent-skill wt=feature-x <descrição da tarefa>     # prefixo OPCIONAL — com nome explícito
 /deep-orchestrator-agent-skill no-stop <descrição da tarefa>         # prefixo OPCIONAL — remove o teto de 10 ondas
+/deep-orchestrator-agent-skill no-evolve <descrição da tarefa>       # prefixo OPCIONAL — pula a pergunta de evolução e a análise
 ```
 
 O prefixo `wt=` (WT-ROOT) é o fato novo desta versão. Ele cria — ou reentra — uma worktree **irmã verdadeira** do projeto em `<pai>/<repo>.worktrees/<nome>` e faz **todo** o trabalho **dentro dela**, preservando o checkout principal intacto. O fluxo:
@@ -276,7 +293,7 @@ O prefixo `wt=` (WT-ROOT) é o fato novo desta versão. Ele cria — ou reentra 
 
 A worktree irmã é **persistente** (ao contrário das worktrees-filhas efêmeras por onda): o branch `do/wt/<nome>` é reusado entre execuções. Variáveis: `DO_WT_ROOT` (`1` quando ativo), `DO_WT_NAME` (o slug/nome resolvido), `DO_WT_ROOT_ENTERED` (sentinel interno de re-entrada).
 
-O prefixo `mp=N` define o cap de concorrência (F3-02): o orquestrador o parseia antes da FASE 0 e exporta `DO_MAX_PARALLEL=N` (validado como inteiro positivo; inválido → aborta com mensagem clara). Ausente → default **50**. O teto vale para TUDO em voo — features da onda, worktrees de teste/validação das subwaves (incluindo as até 3 worktrees de teste por onda), revisores e REVISOR DE PLANO. Ondas com mais features que o cap viram batches sequenciais, cada batch com a sua barreira. Nota: o harness do Claude Code impõe um teto próprio de ~20 sub-agentes concorrentes por sessão (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`), então o com `mp=` acima de 20 a concorrência real fica limitada pelo harness (o resto espera em fila) — o `mp=` continua servindo para dimensionar as ondas/batches.
+O prefixo `max-parallel=N` (antigo `mp=N`) define o cap de concorrência (F3-02): o orquestrador o parseia antes da FASE 0 e exporta `DO_MAX_PARALLEL=N` (validado como inteiro positivo; inválido → aborta com mensagem clara). Ausente → default **50**. O teto vale para TUDO em voo — features da onda, worktrees de teste/validação das subwaves (incluindo as até 3 worktrees de teste por onda), revisores e REVISOR DE PLANO. Ondas com mais features que o cap viram batches sequenciais, cada batch com a sua barreira. Nota: o harness do Claude Code impõe um teto próprio de ~20 sub-agentes concorrentes por sessão (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`), então o com `max-parallel=` acima de 20 a concorrência real fica limitada pelo harness (o resto espera em fila) — o `max-parallel=` continua servindo para dimensionar as ondas/batches.
 
 O prefixo `no-stop` (booleano, sem valor) remove o **teto de 10 ondas por execução**: o orquestrador o parseia antes da FASE 0 e exporta `DO_NO_STOP=1` (validado como 0/1; inválido → aborta com mensagem clara). Ausente → default `0`, que preserva o comportamento histórico (máximo de 10 ondas). Com `no-stop`, a execução dura **quantas ondas forem necessárias** até o REVISOR DE PLANO declarar convergência — ideal para tarefas que exigem qualidade máxima sem teto arbitrário de rodadas. A válvula anti-loop **permanece ativa** mesmo com `no-stop`: 2 REPLANs consecutivos sem novas sub-tarefas aceitas forçam a convergência (documentada no relatório final), garantindo que a execução nunca itere para sempre sem progresso.
 
@@ -351,6 +368,12 @@ O orquestrador vai:
 Ao final, o histórico do **branch da raiz-de-mundo** (o branch da worktree em que a skill foi invocada; `main`/`master` apenas quando a invocação foi na árvore principal) terá 3 commits squash de feature — um por sub-agente —, um squash commit por worktree de teste das testing subwaves (até 3 por subwave; `test-onda1-*`, `test-onda2-*`), os fixes das validation subwaves (`val-ondaN-*`) e o commit final com o `EXPLAINER.html`. Nenhuma worktree-filha nem branch desta execução sobra; worktrees e branches pré-existentes de outras sessões não são tocados.
 
 ## Versão
+
+**3.9.0** — evolução como **PERGUNTA EM TEXTO no terminal** (fim do questionário Plannotator): depois de TUDO (commit, push, relatório) cada proposta vem numerada com opções a/b/c + escopo 1/2 (ex.: "1:b2"); o usuário responde com códigos na próxima mensagem e a opção escolhida vira a ação salva (`evolution-survey.sh` ask/answer/apply/dismiss); flag **`no-evolve`** pula a pergunta e o agente de análise; **push** explícito no COMMIT-FINAL (nunca bloqueia); prefixo `mp=N` → **`max-parallel=N`**; continuação da pergunta pendente na FASE 0 (passo 0.4); testes S1–S10 reescritos (78 PASS). Decisões D18–D22 em `docs/decisions/2026-08-28-pergunta-evolucao-terminal.md`.
+
+**3.8.0** — questionário de evolução pós-execução (substituído pela v3.9.0): agente de evolução + prefs por projeto em `.deep-orchestrator-preferences/` (gitignored), `evolution-survey.sh` (round no Plannotator), `do-prefs.sh`, `evolve-skill.sh` sem `add`, decisões D12–D17.
+
+**3.7.0** — auto-evolução contínua (substituída pela v3.8.0): `evolve-skill.sh add` + `LEARNINGS.md`.
 
 **3.6.0** — HTML Explainer novo fluxo: fim do gerador/template antigos (scripts/generate-explainer.sh + templates/html-explainer.html removidos); geração delegada a sub-agente seguindo html-explainer-agent-skill + visual-explainer, sem limite de tempo, salvo em EXPLAINER.html no lugar; contrato de instalação (check-install.sh) atualizado.
 
