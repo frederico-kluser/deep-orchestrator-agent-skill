@@ -30,7 +30,7 @@ A resposta implementada tem três camadas:
 
 ## 2. O estudo (pesquisa multi-agente)
 
-**Método:** 6 sub-agentes paralelos de pesquisa (interface de busca 3-tier;
+**Método:** 6 sub-agentes paralelos de pesquisa (interface de busca 3-tier vigente na v3.7.0;
 ~135 + 252 + 326 + 12×12 resultados únicos; fontes primárias verificadas por
 fetch direto — repo ECC, arXiv via export API, docs oficiais Anthropic/OpenAI/
 OWASP/Microsoft). Nenhum fato foi inventado; cada relatório trouxe achados
@@ -312,7 +312,7 @@ centrais — virou aprendizado `LEARN-20260823-002` da própria skill.
 ### 4.3 Gates
 
 build (`bash -n` em 16 scripts) + lint (`shellcheck -S error`) + 4 suítes
-(test-contencao 85 · test-plan-approval 151 · test-search 64 · test-evolve 139) +
+(test-contencao 85 · test-plan-approval 151 · test-surf-gate 46 · test-evolve 139) +
 `check-install.sh` 15/15 — **508 asserções verdes** no estado final, rodadas em
 snapshots de integração por onda e no gate final.
 

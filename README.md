@@ -1,8 +1,8 @@
-# deep-orchestrator-agent-skill v3.9.0
+# deep-orchestrator-agent-skill v4.0.0
 
-![Versão](https://img.shields.io/badge/version-3.9.0-00d4ff)
+![Versão](https://img.shields.io/badge/version-4.0.0-00d4ff)
 
-Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica o sistema de busca 3-tier antes de cada onda (`scripts/search.sh`: surf-agent-skill → Brave Search API → DuckDuckGo keyless, com `check-search-credits.sh` e lotes via `search-parallel.sh`), e commita tudo ao final **sem perguntar nada ao usuário**.
+Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas **ILIMITADAS** (com recálculo dinâmico), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-ondaN-*`, fora da seção crítica), verifica a dependência de pesquisa antes de cada onda (**surf-agent-skill v8** — Brave é o único backend; sem chave válida o `surf` sai 78 e a onda não dispara), e commita tudo ao final **sem perguntar nada ao usuário**.
 
 A única exceção — e ela só existe quando você pede — é o **PORTÃO DE APROVAÇÃO DO PLANO** (FASE 2.5): quando a invocação pede um plano, o plano vai para o [Plannotator](https://github.com/backnotprop/plannotator) e você aprova ou anota. Cada anotação **regera o plano e abre um Plannotator NOVO**, até a aprovação — e nenhuma worktree nasce antes dela. Sem pedido de plano, a autonomia total continua exatamente como sempre foi.
 
@@ -106,9 +106,9 @@ Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, c
 
 ## Novidades na v3.3.0
 
-- **Sistema de busca 3-tier (F1-03)**: `scripts/search.sh` — surf-agent-skill (Tier 1, multi-provider AI-powered) → Brave Search API (Tier 2, via `search_brave_api()` do `brave-search.sh`) → DuckDuckGo keyless (Tier 3, Instant Answer, cobertura limitada). Verificação de tiers antes de cada onda via `scripts/check-search-credits.sh` (exit 0 = Tier 1/2 disponível; exit 1 = só Tier 3, degradado; exit 2 = nada disponível) e lotes paralelos via `scripts/search-parallel.sh` (uma chamada por lote, nunca loop). O surf-agent-skill voltou como Tier 1 — a busca Brave interna da v3.0.0 não o substitui mais.
+- **Sistema de busca 3-tier (F1-03)** — **SUPERADO na v4.0.0**: o sistema de busca interno foi REMOVIDO; a pesquisa é 100% surf-agent-skill v8 (ver `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md`). Descrição histórica: `scripts/search.sh` — surf-agent-skill (Tier 1, multi-provider AI-powered) → Brave Search API (Tier 2, via `search_brave_api()` do `brave-search.sh`) → DuckDuckGo keyless (Tier 3, Instant Answer, cobertura limitada). Verificação de tiers antes de cada onda via `scripts/check-search-credits.sh` (exit 0 = Tier 1/2 disponível; exit 1 = só Tier 3, degradado; exit 2 = nada disponível) e lotes paralelos via `scripts/search-parallel.sh` (uma chamada por lote, nunca loop). O surf-agent-skill voltou como Tier 1 — a busca Brave interna da v3.0.0 não o substitui mais.
 - **Subwaves duplas (F2-02/F2-04)**: TESTING (`test-ondaN-*`, máximo 3 worktrees de teste por onda — contam no teto DO_MAX_PARALLEL) e VALIDATION (`val-ondaN-*`, gate completo + revisão adversarial do diff integrado) rodam em background após cada onda e são integradas na onda seguinte (passo 3.5) ou no COMMIT-FINAL — nunca bloqueiam o disparo das ondas de feature.
-- **Correções críticas da Fase 1 (F1-01 a F1-04)**: `do-wt.sh undo` seguro (reset --hard só com working tree exclusivamente untracked; o commit desfeito é arquivado em `refs/do-archive/$RUN_ID/undo-<nome>`), baseline de ignorados na FASE 0 + `clean-ignored-delta` no lugar do `git clean -fdXq` genérico (nunca apaga ignorados pré-existentes do usuário), `stage-delta` com `-uall` nos dois lados (arquivos novos dentro de dirs untracked do usuário entram no commit; a sujeira preexistente continua fora) e `--budget-ms` no Tier 1 do search.sh (`--timeout` em segundos vira milissegundos para o surf-search-normal).
+- **Correções críticas da Fase 1 (F1-01 a F1-03)**: `do-wt.sh undo` seguro (reset --hard só com working tree exclusivamente untracked; o commit desfeito é arquivado em `refs/do-archive/$RUN_ID/undo-<nome>`), baseline de ignorados na FASE 0 + `clean-ignored-delta` no lugar do `git clean -fdXq` genérico (nunca apaga ignorados pré-existentes do usuário), `stage-delta` com `-uall` nos dois lados (arquivos novos dentro de dirs untracked do usuário entram no commit; a sujeira preexistente continua fora) e `--budget-ms` no Tier 1 do search.sh (`--timeout` em segundos vira milissegundos para o surf-search-normal — o `--budget-ms` do surf continua em MILISSEGUNDOS, e na v8 o `--timeout` também).
 - **Gate em snapshot de integração (F3-01)**: o squash-merge é atômico e o gate (build + testes + linter) sai da seção crítica — roda em background numa worktree efêmera `int-ondaN-<nome>` (kind=integration, registrada no owned.tsv) criada no SHA pós-merge. Merges seguem em sequência; a limpeza de cada filha e o fim da onda aguardam o respectivo gate de snapshot (`status=gate-pending` no owned.tsv; o `do-wt.sh sweep` detecta gate-pending, avisa e sai != 0). Falha tardia: `do-wt.sh undo <nome>` reverte exatamente aquele squash com HEAD avançado, arquivando o commit em `refs/do-archive/$RUN_ID/undo-<nome>`. **Decisão D1**: builds duplicados (snapshot + validação + gate final) são esperados.
 - **DO_MAX_PARALLEL (F3-02)**: prefixo `max-parallel=N` na invocação (`/deep-orchestrator-agent-skill max-parallel=N <tarefa>`) — o orquestrador exporta `DO_MAX_PARALLEL` antes da FASE 0; ausente, default 50. Orçamento: features por onda ≤ DO_MAX_PARALLEL; in-flight total ≤ DO_MAX_PARALLEL (features + worktrees de teste/validação das subwaves + revisores + REVISOR DE PLANO — tudo no mesmo teto); ondas maiores viram batches sequenciais com a própria barreira.
 - **Gate definido uma vez (F3-03)**: a FASE 1 detecta e registra no TASK_PLAN.md o trio exato `GATE_BUILD`/`GATE_TEST`/`GATE_LINT` do projeto-alvo (package.json/Makefile/pyproject.toml/Cargo.toml/go.mod); toda invocação de gate referencia esse trio, com cwd conforme o contexto (snapshot, validação ou `$BASE_DIR` no gate final).
@@ -145,21 +145,21 @@ ANALYZE  →  PLAN  →  EXECUTE-ONDA (repeat, ILIMITADO)  →  COMMIT-FINAL
 | Fase | Nome | O que faz |
 |------|------|-----------|
 | 0 | **DELIMITAR O MUNDO** | Roda `$SKILL_HOME/scripts/do-context.sh`: detecta se o cwd está numa worktree vinculada, resolve `$BASE_DIR`, `$BASE_BRANCH`, `$MAIN_ROOT`, `$CHILD_ROOT`, `$BRANCH_NS` e `$SKILL_HOME`, e captura os baselines de contenção. Aborta com mensagem acionável se não houver branch de integração |
-| 1 | **ANALYZE** | Lê o prompt, mapeia a estrutura do repositório, identifica subsistemas, classifica greenfield/brownfield, localiza golden masters e verifica o sistema de busca 3-tier (`$SKILL_HOME/scripts/check-search-credits.sh --fail-fast` — exit 0 = Tier 1/2, exit 1 = só Tier 3 keyless, exit 2 = nada disponível) |
+| 1 | **ANALYZE** | Lê o prompt, mapeia a estrutura do repositório, identifica subsistemas, classifica greenfield/brownfield, localiza golden masters e reconfirma o portão da surf (`surf doctor` — 0/1 = pronto, 78 = sem chave Brave válida, 127 = pacote ausente) |
 | 2 | **PLAN** | Decompõe a tarefa em sub-tarefas atômicas, identifica o grafo de dependências, organiza em ondas topológicas (número NÃO fixo — o plano é um ponto de partida), define o mapa de propriedade de arquivos, batiza cada worktree, escreve os prompts de delegação, publica o TASK_PLAN.md |
 | 2.5 | **APROVAR O PLANO** | *Só quando `PLAN_APPROVAL=1`.* Garante o Plannotator na máquina (`check-plannotator.sh --install`), escreve o plano legível em `$PLAN_DOC` e roda `plan-approval.sh round`: aprovado → FASE 3; anotado → **regera o plano e abre um Plannotator NOVO** (até `DO_PLAN_MAX_REVISIONS`); fechado/timeout/orçamento → para limpo, sem nenhuma worktree criada. Desligado (o default), a fase é pulada inteira |
-| 3 | **EXECUTE-ONDA** | Para cada onda: verificação de tiers de busca (`check-search-credits.sh`) → commit prep (se necessário) → cria worktrees → dispara agentes em paralelo (escalonado) → barreira → **recálculo dinâmico (REVISOR DE PLANO)** → revisão adversarial → squash-merge um a um (gate em snapshot `int-ondaN-*`, em background; limpeza aguarda o verde de cada snapshot) → remoção APENAS das worktrees-filhas e branches desta execução, por nome registrado → prova de contenção → handoff para a próxima onda. Repete até o REVISOR DE PLANO declarar CONVERGÊNCIA |
+| 3 | **EXECUTE-ONDA** | Para cada onda: portão da surf (`surf doctor`) → commit prep (se necessário) → cria worktrees → dispara agentes em paralelo (escalonado) → barreira → **recálculo dinâmico (REVISOR DE PLANO)** → revisão adversarial → squash-merge um a um (gate em snapshot `int-ondaN-*`, em background; limpeza aguarda o verde de cada snapshot) → remoção APENAS das worktrees-filhas e branches desta execução, por nome registrado → prova de contenção → handoff para a próxima onda. Repete até o REVISOR DE PLANO declarar CONVERGÊNCIA |
 | 4 | **COMMIT-FINAL** | Remove o TASK_PLAN.md, roda o gate completo (o trio GATE_BUILD/GATE_TEST/GATE_LINT da FASE 1), commita **apenas o que esta execução produziu** (a sujeira preexistente do usuário é preservada), varredura final restrita à lista nominal registrada, **gera o EXPLAINER.html** pelo fluxo `html-explainer-agent-skill` (sub-agente delegado, sem limite de tempo, salvo em `EXPLAINER.html` na raiz) e produz o relatório final |
 
 ### Regras fundamentais
 
 1. **Nunca escreve código** — delega tudo a sub-agentes
-2. **Nunca pergunta ao usuário** — autonomia total, infere com confiança. Quatro exceções, e apenas estas: (a) `BRAVE_API_KEY` não definida E a tarefa exige pesquisa de alta qualidade (só o Tier 3 keyless não basta); (b) `check-search-credits.sh` retorna exit 2 (todos os tiers de busca indisponíveis) E a tarefa ou alguma sub-tarefa exige pesquisa; (c) abort da FASE 0 (não é repositório, HEAD destacado, repo sem commits, índice sujo); (d) o **portão de aprovação do plano** está ativo (`PLAN_APPROVAL=1`) — aí a interação é a entrega pedida, acontece no navegador (nunca por pergunta em texto) e só na FASE 2.5
+2. **Nunca pergunta ao usuário** — autonomia total, infere com confiança. Cinco exceções, e apenas estas: (a) a **surf-agent-skill não está instalada** (`command -v surf-search-normal` falha) E a tarefa ou alguma sub-tarefa exige pesquisa — instalar é `npm -g`, vedado por R9, então informa e aguarda; (b) qualquer comando `surf` saiu com **78** (sem chave Brave válida) E a tarefa ou alguma sub-tarefa exige pesquisa — é configuração, não pesquisa: retentar é inútil e não há provedor de reserva; (c) abort da FASE 0 (não é repositório, HEAD destacado, repo sem commits, índice sujo); (d) o **portão de aprovação do plano** está ativo (`PLAN_APPROVAL=1`) — aí a interação é a entrega pedida, acontece no navegador (nunca por pergunta em texto) e só na FASE 2.5; (e) o abort de contenção da FASE 0
 3. **Trabalho completo, do início ao commit** — nunca entrega trabalho parcial. Única saída antecipada legítima: o portão terminar sem aprovação — e aí nada foi construído, então o repositório fica exatamente como estava
 4. **Worktree é a unidade de isolamento** — cada sub-agente trabalha em sua própria worktree Git com nome descritivo (ex.: `onda1-cache-service`)
 5. **Squash-merge um a um, nunca octopus** — integração sequencial em `$BASE_BRANCH`; o gate roda em snapshot de integração `int-ondaN-*` (fora da seção crítica) e a limpeza de cada filha aguarda o verde do snapshot (decisão D1: builds duplicados são esperados)
 6. **Worktree nasce nomeada e morre no fim da própria onda** — limpeza imediata após gate verde, sempre por nome registrado
-7. **Verificar o sistema de busca 3-tier antes de cada onda** — `$SKILL_HOME/scripts/check-search-credits.sh --fail-fast`; exit 0 = Tier 1/2 disponível (pesquisa completa), exit 1 = só Tier 3 keyless (degradado — registre no TASK_PLAN.md e prossiga), exit 2 = nada disponível: se a tarefa exige pesquisa, nenhuma worktree é criada e nenhum sub-agente é disparado; sem pesquisa exigida, a execução prossegue sem busca, com registro
+7. **Verificar a dependência de pesquisa antes de cada onda** — `surf doctor`: **0/1** = pronto (1 = só faltam os symlinks das skills do próprio surf, irrelevante para os binários), **78** = sem chave Brave válida (configuração; retentar é inútil), **127** = pacote ausente. Em 78/127 com pesquisa exigida, nenhuma worktree é criada e nenhum sub-agente é disparado; sem pesquisa exigida, a execução prossegue sem busca, com registro
 8. **A worktree de invocação é a raiz-de-mundo** — nada é escrito fora dela; o branch dela é o único alvo de integração; a limpeza só toca o que esta execução registrou
 9. **Dependências: dentro da worktree, congeladas, nunca globais** — instale só se necessário, com cwd na filha e `HUSKY=0`; cache global do usuário é permitido
 10. **Só executa plano que o usuário aprovou** — quando o portão está ativo, nenhuma worktree nasce antes do APROVADO; o título do plano é imutável entre revisões; cada anotação regera o plano num Plannotator novo; e o feedback do usuário é correção **do plano**, nunca tarefa de implementação
@@ -177,18 +177,68 @@ O [ECC — Everything Claude Code](https://github.com/affaan-m/ECC) (MIT) é um 
 
 Princípio transversal herdado: **entrada NÃO confiável** — planos, diffs e repos clonados são lidos como texto não confiável; comandos embutidos só rodam após sanitização contra whitelist (test, lint, typecheck, coverage).
 
-### Busca em camadas — o caso surf-agent-skill e a pesquisa nativa do harness
+### Pesquisa — surf-agent-skill v8 (dependência dura)
 
-A pesquisa externa segue uma cadeia com fallback automático (`scripts/search.sh`), verificada antes de cada onda (`check-search-credits.sh`) e processada em lotes paralelos (`search-parallel.sh`):
+**Esta skill não tem sistema de busca.** Desde a v4.0.0 (decisão D23), toda
+pesquisa web passa pelos binários globais da
+[surf-agent-skill v8](https://www.npmjs.com/package/surf-agent-skill), e por
+mais nada. Não há tabela de tiers porque não há cadeia: há um backend.
 
-| Tier | Provedor | Notas |
-|------|----------|-------|
-| 0 | **Pesquisa nativa do harness** (Claude Code: `WebSearch`/`WebFetch`) | quando o harness que hospeda a skill expõe ferramentas de busca próprias, usamos a dele — sem chave, sem script |
-| 1 | surf-agent-skill (`surf-search-normal`) | multi-provider AI-powered; qualidade máxima; exige o CLI surf-ai |
-| 2 | Brave Search API (`brave-search.sh` + `BRAVE_API_KEY`) | API direta; atenção ao modelo metered da Brave (fev/2026) — créditos mensais |
-| 3 | DuckDuckGo Instant Answer | keyless, disponível enquanto houver rede; cobertura limitada (não é full-text) |
+```bash
+npm i -g surf-agent-skill    # dependência dura
+surf                         # adiciona a chave Brave — validá-la é grátis
+```
 
-**O caso surf-agent-skill**: o surf-agent-skill foi o provedor original da busca, substituído por uma busca Brave interna na v3.0.0, e **voltou como Tier 1 na v3.3.0** — a cadeia ficou em 3 tiers de novo (a busca Brave virou Tier 2). A regra do Tier 0 é a do harness: **se o agente que está rodando a skill já tem pesquisa nativa (o Claude Code tem `WebSearch`/`WebFetch`), usamos a dele**; o `search.sh` continua sendo a interface unificada e o fallback determinístico para harnesses sem ferramenta de busca (pi, jcode, opencode) e para sub-agentes sem acesso a ela. No template de delegação do SKILL.md, o sub-agente usa `{{SKILL_HOME}}/scripts/search.sh` — e, no Claude Code, pode usar as ferramentas nativas do harness quando disponíveis.
+| Binário | Quando |
+|---|---|
+| `surf-search-normal "<pergunta>" --sub-agents=N` | uma onda; o caminho padrão |
+| `surf-search-unlimit "<pergunta>" --sub-agents=N --max-depth 3` | pergunta aberta que precisa descer em várias ondas |
+| `surf-research-skill search-parallel "q1" "q2" --sub-agents=N --json` | lote de perguntas cruas, sem síntese |
+| `surf doctor` | **o portão** |
+
+**Brave é o único backend.** Não existe Tavily, Parallel, Wikipedia,
+DuckDuckGo, provedor de reserva nem tier sem chave — o próprio surf estreitou
+para Brave-only na v8. **Não existe modo degradado**: ou há chave válida e a
+pesquisa funciona, ou a execução para.
+
+**Códigos de saída** (o orquestrador e todo sub-agente branqueiam neles):
+
+| Código | Significado | Ação |
+|---|---|---|
+| 0 | funcionou | cite as URLs que o surf devolveu |
+| 1 | rodou e não achou nada | registre o vazio e siga; **nunca** troque de ferramenta |
+| 2 | o comando está errado | corrija o comando |
+| **78** | **sem chave Brave válida** (`EX_CONFIG`) | **PARE.** É configuração, não pesquisa: retentar não conserta e não há de onde mais buscar |
+| 143 | o harness matou por timeout | refaça com `surf-search-normal`, que se auto-orça |
+
+**`--sub-agents` é o único botão de simultaneidade, e ele SOMA com
+`DO_MAX_PARALLEL`.** Seja `N` o teto global (`surf-sub-agents=N` na invocação,
+default 10, faixa 1..20) e `R` a quantidade de sub-agentes da onda que
+pesquisam: cada um recebe `--sub-agents=max(1, floor(N / R))`, de modo que a
+soma da onda nunca passa de `N`. Se multiplicassem, uma onda cheia seria
+`50 × 10 = 500` buscas simultâneas contra um plano Brave que pode servir uma
+por segundo.
+
+**É proibido envolver o surf em `sleep`, jitter, backoff ou retry.** Ele
+aprende o requests-per-second real do plano Brave nos headers da resposta e o
+aplica num token bucket **cross-process**, compartilhado por todos os processos
+surf da máquina. Um ritmo por cima briga com o limitador e provoca exatamente
+o 429 que ele evita.
+
+**WebSearch/WebFetch do harness não descobrem fontes.** Fonte que não veio pelo
+surf não pode ser citada em handoff nem em deliverable. Uso legítimo, único:
+abrir com `Read`/`WebFetch` uma URL **que o surf já devolveu** — é a única
+forma de ler o corpo de uma página, já que a Brave devolve título, URL e
+trecho, e os verbos `extract`/`crawl`/`map` foram removidos no surf v8.
+
+**Histórico:** o surf foi o provedor original (v3.0.0), foi substituído por uma
+busca Brave interna, voltou como Tier 1 na v3.3.0, e na v4.0.0 virou a
+dependência única — os Tiers 2 (Brave direto) e 3 (DDG keyless) desta skill
+foram removidos. O gatilho está registrado no D23: `search.sh` tratava todo
+exit code não-zero do surf como falha transitória, então o `exit 78` da v8
+ficava indistinguível de um timeout e o wrapper respondia a mesma pergunta pelo
+DuckDuckGo — reproduzindo, uma camada acima, o defeito que o surf acabara de
+eliminar.
 
 ### Sub-agentes no Claude Code — nativos, nenhum plugin necessário
 
@@ -212,7 +262,7 @@ deep-orchestrator-agent-skill/
 ├── README.md                    # Este arquivo
 ├── SKILL.md                     # Definição do skill v3.8.0 (frontmatter YAML + XML do orquestrador)
 ├── scripts/
-│   ├── README.md                # Índice de todos os scripts e o fluxo de busca 3-tier
+│   ├── README.md                # Índice de todos os scripts
 │   ├── do-context.sh            # FASE 0 — delimita a raiz-de-mundo e grava o estado
 │   ├── do-wt.sh                 # ciclo de vida das worktrees-filhas (guardas de contenção)
 │   ├── evolve-skill.sh          # evolução do CORPO da skill: search (prefs+prompts)/diff/apply (branch evolve/*, nunca merge sozinho)/status
@@ -220,15 +270,11 @@ deep-orchestrator-agent-skill/
 │   ├── evolution-survey.sh      # PERGUNTA de evolução em texto no terminal (ask/answer/apply/dismiss — v3.9.0, sem Plannotator)
 │   ├── lib/evolve-common.sh     # parsers/validadores compartilhados do formato de bloco
 │   ├── lib/plannotator-common.sh # contrato do Plannotator compartilhado (plan-approval.sh — o portão de plano continua no Plannotator)
-│   ├── search.sh                # interface única de busca 3-tier (surf-agent-skill → Brave → DDG keyless)
-│   ├── search-parallel.sh       # busca em lote paralelo (uma chamada por lote, nunca loop)
-│   ├── check-search-credits.sh  # verificador multi-tier pré-onda (exit 0/1/2)
+│   ├── check-install.sh         # prova de instalação completa
+│   ├── test-surf-gate.sh        # testes do portão da surf (46 asserções)
 │   ├── check-plannotator.sh     # FASE 2.5 — resolve/instala o Plannotator (exit 0/1/2)
 │   ├── plan-approval.sh         # FASE 2.5 — uma rodada de aprovação no Plannotator
-│   ├── brave-search.sh          # fonte da função search_brave_api() — Tier 2
-│   ├── check-brave-credits.sh   # (DEPRECATED) — use check-search-credits.sh
 │   ├── test-contencao.sh        # testes de regressão do MODO CONTIDO (85 asserções)
-│   ├── test-search.sh           # testes da cadeia de busca 3-tier (64 asserções)
 │   ├── test-evolve.sh           # testes do motor de prefs/questionário/evolução (suíte F1–Fxx)
 │   └── test-plan-approval.sh    # testes do portão de aprovação (133 asserções, mockado)
 ├── prompts/
@@ -242,8 +288,10 @@ deep-orchestrator-agent-skill/
 
 - Claude Code (CLI)
 - Git
-- **Brave Search API key** — `export BRAVE_API_KEY=<chave>` (https://api.search.brave.com/app/keys) — **OPCIONAL**: habilita o Tier 2. Sem ela, a busca segue funcional em modo degradado (Tier 3 DuckDuckGo keyless, Instant Answer com cobertura limitada) e o Tier 1 (surf-agent-skill) dispensa a chave. **Modelo metered da Brave (desde fev/2026)**: os planos dão créditos mensais e passam a COBRAR pelo uso que excede a quota — a verificação pré-onda (`check-search-credits.sh`) é também proteção financeira
-- **`surf-search-normal` (surf-agent-skill)** — **OPCIONAL**: habilita o Tier 1 (multi-provider AI-powered). Ausente, a busca cai direto para os Tiers 2/3
+- **Node.js ≥ 18 + npm** — para instalar a surf-agent-skill
+- **surf-agent-skill v8** — **OBRIGATÓRIA** sempre que a tarefa exigir pesquisa: `npm i -g surf-agent-skill`, depois `surf` para adicionar a chave. Sem ela, o orquestrador para e pede (nunca instala sozinho: `npm -g` é vedado pela regra R9)
+- **Chave Brave Search** — **OBRIGATÓRIA** (https://api-dashboard.search.brave.com). Não há tier sem chave: sem ela todo comando `surf` sai **78** e a execução para. Validá-la é **grátis** e o surf faz isso sozinho a cada invocação (veredito em cache por 7 dias). Uma **segunda** chave não é redundância — cada uma carrega o próprio orçamento de requisições por segundo, então duas dobram o paralelismo real
+- **Chave OpenRouter** — *recomendada* (`surf-research-skill ai-setup`): sem ela o surf ainda faz buscas reais, mas devolve evidência crua em vez de síntese
 - `curl` e `jq` (usados pelos scripts de busca)
 - `project-router` skill resolvido a partir da raiz-de-mundo (`<raiz>/.claude/skills/project-router/` ou `<raiz>/.agents/skills/project-router/`). Ausente, o sub-agente registra no handoff e segue — não cai para o repositório principal nem para `~/.claude`
 - **Plannotator** — **AUTO-INSTALADO** se ausente (`scripts/check-plannotator.sh --install`; binário `--minimal` em `~/.local/bin`, mínimo 0.19.1). Usado pela UI de anotação do EXPLAINER final (opcional — o arquivo é a entrega) e pelo PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5). Verificado na v3.6.0 em 0.27.6.
@@ -267,9 +315,12 @@ cp -r SKILL.md scripts prompts .claude/skills/deep-orchestrator-agent-skill/
 # execução da skill — NUNCA por um sub-agente. A skill não se auto-instala no
 # repositório-alvo: ela é lida de $SKILL_HOME.
 
-# OPCIONAL — defina a chave da Brave Search API (habilita o Tier 2); sem ela,
-# a busca segue via Tier 1 (surf-agent-skill) e/ou Tier 3 (DDG keyless)
-export BRAVE_API_KEY=<chave>
+# OBRIGATÓRIO se a tarefa exigir pesquisa — a skill não tem busca própria:
+npm i -g surf-agent-skill
+surf                                  # interativo: chave Brave (validação grátis)
+# …ou, não-interativo:
+export BRAVE_API_KEY=<chave>          # https://api-dashboard.search.brave.com
+export OPENROUTER_API_KEY=<chave>     # recomendada: liga a síntese do surf-ai
 ```
 
 ## Uso
@@ -358,7 +409,7 @@ Tarefas complexas que se beneficiam de decomposição em ondas paralelas — esp
 
 O orquestrador vai:
 
-1. Analisar o repositório e identificar os subsistemas afetados (verificando os tiers de busca antes — `check-search-credits.sh`)
+1. Analisar o repositório e identificar os subsistemas afetados (confirmando antes que há chave Brave válida — sem ela o `surf` sai 78 e a execução para)
 2. Criar um plano inicial com 2 ondas:
    - **Onda 1 (Fundação):** `onda1-cache-service` (CacheService genérico) + `onda1-schema-busca` (mapear schema de busca) — paralelo
    - **Onda 2 (Implementação):** `onda2-endpoint-busca` (endpoint com cache + testes)
@@ -367,7 +418,47 @@ O orquestrador vai:
 
 Ao final, o histórico do **branch da raiz-de-mundo** (o branch da worktree em que a skill foi invocada; `main`/`master` apenas quando a invocação foi na árvore principal) terá 3 commits squash de feature — um por sub-agente —, um squash commit por worktree de teste das testing subwaves (até 3 por subwave; `test-onda1-*`, `test-onda2-*`), os fixes das validation subwaves (`val-ondaN-*`) e o commit final com o `EXPLAINER.html`. Nenhuma worktree-filha nem branch desta execução sobra; worktrees e branches pré-existentes de outras sessões não são tocados.
 
+## Novidades na v4.0.0
+
+A skill deixou de ter um sistema de busca. O gatilho foi um bug: `search.sh`
+tratava **todo** exit code não-zero do `surf` como falha transitória, então o
+`exit 78` da v8 — "não há chave Brave válida" — ficava indistinguível de um
+timeout, e o wrapper respondia a mesma pergunta pelo cliente Brave interno ou
+pelo DuckDuckGo. A skill reproduzia, uma camada acima, exatamente o defeito que
+o surf v8 acabara de eliminar: uma resposta confiante vinda de um provedor que
+o usuário não escolheu, sem nenhum sinal de que a chave estava quebrada.
+
+Manter um "shim fino" em volta do surf não resolveria: um shim **é** um sistema
+de busca (mapeamento de flags, envelope próprio, códigos de saída próprios), e
+é exatamente onde o próximo mantenedor reintroduz um fallback. Por isso os seis
+scripts foram apagados, e o SKILL.md manda o sub-agente chamar os binários
+globais direto.
+
+O que se perdeu de propósito: o piso keyless (uma resposta de Instant Answer
+apresentada com a mesma confiança de uma pesquisa real), a dedup por URL entre
+queries de um lote e o cache intra-run — todos substituídos por **uma** chamada
+`surf-search-normal` com brief, que planeja o conjunto de queries por LLM, roda
+até `--sub-agents` delas em paralelo e dedupa canonicamente no ledger.
+
+Ver `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md`.
+
 ## Versão
+
+**4.0.0** — **fim do sistema de busca interno.** `search.sh`,
+`search-parallel.sh`, `check-search-credits.sh`, `brave-search.sh`,
+`check-brave-credits.sh` e `test-search.sh` REMOVIDOS (3.346 linhas). A
+pesquisa é 100% **surf-agent-skill v8** — dependência obrigatória
+(`npm i -g surf-agent-skill`), Brave como único backend, sem tier sem chave e
+sem provedor de reserva. **`exit 78` = configuração** (sem chave Brave válida):
+o orquestrador PARA, informa e aguarda; retentar não conserta. Portão passa a
+ser `surf doctor`, na FASE 0 e no passo 0 de cada onda. **`--sub-agents` é o
+único teto de simultaneidade do surf e SOMA com `DO_MAX_PARALLEL`**: cada
+sub-agente que pesquisa recebe `max(1, floor(N/R))`, prefixo `surf-sub-agents=N`
+na invocação (default 10, faixa 1..20). É proibido envolver o surf em
+jitter/backoff — ele já ritma pelo plano Brave, cross-process. WebSearch e
+WebFetch deixam de descobrir fontes (só abrem URL que o surf devolveu). Nova
+suíte `test-surf-gate.sh` (46 asserções) substitui `test-search.sh`. Decisão
+**D23** em `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md`.
 
 **3.9.0** — evolução como **PERGUNTA EM TEXTO no terminal** (fim do questionário Plannotator): depois de TUDO (commit, push, relatório) cada proposta vem numerada com opções a/b/c + escopo 1/2 (ex.: "1:b2"); o usuário responde com códigos na próxima mensagem e a opção escolhida vira a ação salva (`evolution-survey.sh` ask/answer/apply/dismiss); flag **`no-evolve`** pula a pergunta e o agente de análise; **push** explícito no COMMIT-FINAL (nunca bloqueia); prefixo `mp=N` → **`max-parallel=N`**; continuação da pergunta pendente na FASE 0 (passo 0.4); testes S1–S10 reescritos (78 PASS). Decisões D18–D22 em `docs/decisions/2026-08-28-pergunta-evolucao-terminal.md`.
 
