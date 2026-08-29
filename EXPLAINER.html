@@ -1,65 +1,62 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="plannotator-theme" content="host">
-<meta name="generator" content="html-explainer-agent-skill + plannotator-visual-explainer (visual explainer route)">
-<title>Como a deep-orchestrator-agent-skill passou a evoluir a si mesma (v3.7.0)</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%235537eb'/%3E%3Cpath d='M18 40V24l14-8 14 8v16l-14 8-14-8Z' fill='none' stroke='%23f5f5f4' stroke-width='4' stroke-linejoin='round'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%23f59e0b'/%3E%3C/svg%3E">
+<title>surf v8 + deep-orchestrator v4 — o bug e o de-para</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%236d28d9'/%3E%3Cpath d='M14 40c6-10 12-10 18 0s12 10 18 0' fill='none' stroke='%23ffffff' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='20' r='4' fill='%23fbbf24'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  /* ============ TOKENS DE TEMA (Plannotator) ============ */
+
+  /* ============ PLANNOTATOR TOKENS (references/theme-override.md) ============ */
   :root {
-    color-scheme: light;
-    /* Surfaces */
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+    --font-display: ui-serif, Georgia, 'Times New Roman', serif;
+
     --background: oklch(0.97 0.005 260);
     --foreground: oklch(0.18 0.02 260);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.18 0.02 260);
     --muted: oklch(0.92 0.01 260);
     --muted-foreground: oklch(0.40 0.02 260);
-
-    /* Accents */
     --primary: oklch(0.50 0.25 280);
-    --primary-foreground: oklch(1 0 0);
     --secondary: oklch(0.50 0.18 180);
     --accent: oklch(0.60 0.22 50);
-    --accent-foreground: oklch(0.18 0.02 260);
-
-    /* Semantic */
     --destructive: oklch(0.50 0.25 25);
     --success: oklch(0.45 0.20 150);
     --warning: oklch(0.55 0.18 85);
-
-    /* Structure */
     --border: oklch(0.88 0.01 260);
-    --code-bg: oklch(0.92 0.01 260);
-    --ring: oklch(0.50 0.25 280);
+    --code-bg: oklch(0.94 0.008 260);
     --radius: 0.625rem;
 
-    /* Typography */
-    --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, 'SF Mono', Consolas, monospace;
-    --font-display: ui-serif, Georgia, 'Times New Roman', serif;
+    /* aliases the template CSS already speaks */
+    --bg: var(--background);
+    --surface: var(--card);
+    --text: var(--foreground);
+    --text-dim: var(--muted-foreground);
+    --primary-dim: color-mix(in oklab, var(--primary) 12%, transparent);
+    --tertiary: var(--accent);
+    --danger: var(--destructive);
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      color-scheme: dark;
-      --background: oklch(0.15 0.02 260);
-      --foreground: oklch(0.90 0.01 260);
-      --card: oklch(0.22 0.02 260);
-      --card-foreground: oklch(0.90 0.01 260);
-      --muted: oklch(0.26 0.02 260);
+      --background: oklch(0.17 0.015 260);
+      --foreground: oklch(0.95 0.008 260);
+      --card: oklch(0.22 0.018 260);
+      --muted: oklch(0.28 0.02 260);
       --muted-foreground: oklch(0.72 0.02 260);
-      --primary: oklch(0.75 0.18 280);
-      --primary-foreground: oklch(0.15 0.02 260);
-      --accent: oklch(0.70 0.20 60);
-      --border: oklch(0.35 0.02 260);
-      --code-bg: oklch(0.26 0.02 260);
-      --destructive: oklch(0.65 0.20 25);
-      --success: oklch(0.72 0.17 150);
-      --warning: oklch(0.75 0.15 85);
+      --primary: oklch(0.72 0.18 285);
+      --secondary: oklch(0.72 0.14 190);
+      --accent: oklch(0.78 0.16 65);
+      --destructive: oklch(0.70 0.19 25);
+      --success: oklch(0.72 0.16 155);
+      --warning: oklch(0.80 0.14 85);
+      --border: oklch(0.32 0.02 260);
+      --code-bg: oklch(0.24 0.02 260);
     }
   }
 
@@ -67,83 +64,25 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    background-color: var(--background);
-    color: var(--foreground);
-    font-family: var(--font-sans);
-    font-size: 16px;
-    line-height: 1.65;
-    padding: 48px 24px 64px;
+    background-color: var(--bg);
+    background-image: none;
+    color: var(--text);
+    font-family: var(--font-body);
+    padding: 40px;
     min-height: 100vh;
-    -webkit-font-smoothing: antialiased;
   }
 
-  .container {
-    max-width: 980px;
-    margin: 0 auto;
-  }
-
-  h1, h2, h3 {
-    text-wrap: balance;
-    line-height: 1.2;
-  }
-
-  h1 {
-    font-family: var(--font-display);
-    font-size: 40px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    margin-bottom: 8px;
-  }
-
-  h2 {
-    font-family: var(--font-display);
-    font-size: 26px;
-    font-weight: 700;
-    margin-bottom: 14px;
-  }
-
-  h3 {
-    font-size: 17px;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-
-  p { max-width: 66ch; }
-  p + p { margin-top: 0.9em; }
-
-  a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
-  a:focus-visible, summary:focus-visible, button:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-    border-radius: 4px;
-  }
-
-  code {
-    font-family: var(--font-mono);
-    font-size: 0.86em;
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 0.08em 0.35em;
-  }
-
-  strong { font-weight: 650; }
-
-  .eyebrow {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--muted-foreground);
-    margin-bottom: 10px;
-  }
-
-  /* ============ ANIMAÇÃO (sutil) ============ */
+  /* ============ ANIMATION ============ */
   @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(10px); }
+    from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
   }
-  .animate { animation: fadeUp 0.4s ease-out both; animation-delay: calc(var(--i, 0) * 0.06s); }
+
+  .animate {
+    animation: fadeUp 0.4s ease-out both;
+    animation-delay: calc(var(--i, 0) * 0.06s);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
@@ -152,181 +91,59 @@
     }
   }
 
-  /* ============ HEADER / HERO ============ */
-  .hero { margin-bottom: 36px; }
-
-  .prompt-box {
-    margin-top: 22px;
-    background: var(--card);
-    border: 1.5px solid var(--border);
-    border-left: 3px solid var(--primary);
-    border-radius: var(--radius);
-    padding: 16px 20px;
-    font-size: 14px;
-    color: var(--muted-foreground);
-    max-width: 72ch;
-  }
-  .prompt-box .prompt-label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--primary);
-    display: block;
-    margin-bottom: 6px;
-  }
-  .prompt-box blockquote {
-    font-style: italic;
-    color: var(--foreground);
+  /* ============ LAYOUT ============ */
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
   }
 
-  /* ============ RESPOSTA EM UMA FRASE ============ */
-  .answer {
-    background: color-mix(in oklab, var(--primary) 5%, var(--card));
-    border: 1.5px solid var(--primary);
-    border-radius: var(--radius);
-    box-shadow: 0 4px 24px color-mix(in oklab, var(--primary) 10%, transparent);
-    padding: 22px 26px;
-    margin-bottom: 14px;
-  }
-  .answer p {
-    font-size: 19px;
-    line-height: 1.55;
-    max-width: none;
-  }
-  .reader-note {
-    font-size: 13.5px;
-    color: var(--muted-foreground);
-    max-width: 72ch;
-    margin-bottom: 30px;
-  }
-
-  /* ============ STAT CARDS ============ */
-  .kpi-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 14px;
-    margin: 26px 0 8px;
-  }
-  .kpi-card {
-    background: var(--card);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px 18px;
-  }
-  .kpi-value {
-    font-family: var(--font-display);
-    font-size: 30px;
+  h1 {
+    font-size: 38px;
     font-weight: 700;
-    color: var(--primary);
-    line-height: 1.1;
-  }
-  .kpi-label {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    color: var(--muted-foreground);
-    margin-top: 4px;
-    letter-spacing: 0.04em;
+    letter-spacing: -1px;
+    margin-bottom: 6px;
+    text-wrap: balance;
   }
 
-  /* ============ SEÇÕES (segmentos) ============ */
-  .seg {
-    margin-top: 52px;
-    padding-top: 28px;
-    border-top: 1px solid var(--border);
-  }
-  .seg-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
-  .seg-num {
+  .subtitle {
+    color: var(--text-dim);
     font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--primary);
-    letter-spacing: 0.08em;
+    font-size: 12px;
+    margin-bottom: 32px;
   }
-  .seg-lead {
-    color: var(--muted-foreground);
-    font-size: 15.5px;
-    max-width: 66ch;
-    margin-bottom: 18px;
-  }
-  .seg-body > * + * { margin-top: 14px; }
 
-  /* ============ PRÉ-TREINO (termos do diagrama) ============ */
-  .pretrain {
-    background: var(--card);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 18px;
+  .description {
     font-size: 14px;
-    margin-bottom: 22px;
-    max-width: 72ch;
+    line-height: 1.7;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+    max-width: 700px;
   }
-  .pretrain .pretrain-label {
+
+  .description code {
     font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-size: 12px;
+    background: var(--primary-dim);
     color: var(--primary);
-    display: block;
-    margin-bottom: 8px;
-  }
-  .pretrain ul { list-style: none; padding: 0; }
-  .pretrain li { margin: 6px 0; }
-  .pretrain code { margin-right: 2px; }
-
-  .callout {
-    background: var(--card);
-    border: 1.5px solid var(--border);
-    border-left: 3px solid var(--accent);
-    border-radius: 0 var(--radius) var(--radius) 0;
-    padding: 14px 18px;
-    font-size: 14.5px;
-    max-width: 72ch;
-  }
-  .callout strong { color: var(--foreground); }
-
-  .crit-callout {
-    border-left-color: var(--destructive);
-    background: color-mix(in oklab, var(--destructive) 4%, var(--card));
+    padding: 1px 5px;
+    border-radius: 3px;
   }
 
-  /* ============ FIGURAS ============ */
-  figure {
-    margin: 26px 0;
-  }
-  figcaption {
-    font-size: 14.5px;
-    line-height: 1.5;
-    margin-top: 14px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border);
-    color: var(--foreground);
-    max-width: 72ch;
-  }
-  figcaption .claim { font-weight: 650; }
-
-  /* ============ MERMAID SHELL (diagram-shell canônico) ============ */
-  .diagram-shell { position: relative; }
-  .diagram-shell__hint {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--muted-foreground);
-    margin-bottom: 8px;
-    opacity: 0.75;
-  }
+  /* ============ MERMAID CONTAINER ============ */
   .mermaid-wrap {
     position: relative;
-    background: var(--card);
-    border: 1.5px solid var(--border);
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 30px 22px;
+    padding: 32px 24px;
     overflow: auto;
+    margin-bottom: 24px;
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 380px;
+    min-height: 400px;
   }
-  .mermaid-wrap { cursor: grab; }
-  .mermaid-wrap.is-panning { cursor: grabbing; user-select: none; }
+
   .zoom-controls {
     position: absolute;
     top: 8px;
@@ -334,19 +151,20 @@
     display: flex;
     gap: 2px;
     z-index: 10;
-    background: var(--card);
-    border: 1.5px solid var(--border);
+    background: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 2px;
   }
+
   .zoom-controls button {
     width: 28px;
     height: 28px;
     border: none;
     background: transparent;
-    color: var(--muted-foreground);
+    color: var(--text-dim);
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: 14px;
     cursor: pointer;
     border-radius: 4px;
     display: flex;
@@ -354,744 +172,751 @@
     justify-content: center;
     transition: background 0.15s ease, color 0.15s ease;
   }
-  .zoom-controls button:hover { background: var(--muted); color: var(--foreground); }
+
+  .zoom-controls button:hover {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  .mermaid-wrap { cursor: grab; }
+  .mermaid-wrap.is-panning { cursor: grabbing; user-select: none; }
+
+  /* ============ MULTI-DIAGRAM STRUCTURE ============ */
+  .diagram-shell {
+    position: relative;
+  }
+
+  .diagram-shell__hint {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    opacity: 0.7;
+  }
+
   .mermaid-viewport {
     position: relative;
     overflow: hidden;
     width: 100%;
     height: 100%;
-    min-height: 320px;
+    min-height: 300px;
   }
-  .mermaid-canvas { position: absolute; top: 0; left: 0; }
+
+  .mermaid-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
   .zoom-label {
     font-family: var(--font-mono);
     font-size: 10px;
-    color: var(--muted-foreground);
+    color: var(--text-dim);
     padding: 0 6px;
     white-space: nowrap;
+  }
+
+  /* ============ MERMAID SVG OVERRIDES ============ */
+  .mermaid .nodeLabel {
+    font-family: var(--font-body) !important;
+    font-size: 16px !important;
+  }
+
+  .mermaid .edgeLabel {
+    /* MESMA família que themeVariables.fontFamily: o Mermaid dimensiona a caixa
+       do rótulo medindo com ela. Trocar para mono aqui deixava o texto mais
+       largo que a caixa e cortava o fim de cada rótulo. */
+    font-family: var(--font-body) !important;
+    font-size: 13px !important;
+  }
+
+  .mermaid .node rect,
+  .mermaid .node circle,
+  .mermaid .node polygon {
+    stroke-width: 1.5px !important;
+  }
+
+  .mermaid .edge-pattern-solid {
+    stroke-width: 1.5px !important;
+  }
+
+  /* ============ LEGEND ============ */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
     display: flex;
     align-items: center;
-  }
-
-  /* Mermaid SVG overrides */
-  .mermaid .nodeLabel { font-size: 14px !important; }
-  .mermaid .edgeLabel { font-size: 12px !important; }
-  .mermaid .node rect, .mermaid .node circle, .mermaid .node polygon { stroke-width: 1.5px !important; }
-
-  /* ============ TABELAS ============ */
-  .table-scroll { overflow-x: auto; border: 1.5px solid var(--border); border-radius: var(--radius); }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-    background: var(--card);
-    min-width: 560px;
-  }
-  th, td {
-    text-align: left;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: top;
-  }
-  th {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--muted-foreground);
-    background: var(--muted);
-  }
-  tr:last-child td { border-bottom: none; }
-  td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
-
-  .badge {
-    display: inline-block;
+    gap: 6px;
     font-family: var(--font-mono);
     font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    padding: 2px 8px;
-    border-radius: 999px;
-    border: 1px solid transparent;
+    color: var(--text-dim);
   }
-  .badge--verde { color: var(--success); border-color: color-mix(in oklab, var(--success) 45%, transparent); background: color-mix(in oklab, var(--success) 10%, transparent); }
-  .badge--warning { color: var(--warning); border-color: color-mix(in oklab, var(--warning) 45%, transparent); background: color-mix(in oklab, var(--warning) 10%, transparent); }
-  .badge--block { color: var(--destructive); border-color: color-mix(in oklab, var(--destructive) 45%, transparent); background: color-mix(in oklab, var(--destructive) 10%, transparent); }
-  .badge--alta { color: var(--destructive); border-color: color-mix(in oklab, var(--destructive) 45%, transparent); background: color-mix(in oklab, var(--destructive) 10%, transparent); }
 
-  /* ============ DOBRÁVEL (andaime) ============ */
-  details {
-    background: var(--card);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 4px 18px;
-    margin-top: 16px;
-  }
-  details summary {
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 14.5px;
-    padding: 12px 0;
-    list-style: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  details summary::-webkit-details-marker { display: none; }
-  details summary::before {
-    content: "▸";
-    color: var(--primary);
-    font-family: var(--font-mono);
-    font-size: 13px;
-    transition: transform 0.15s ease;
-  }
-  details[open] summary::before { transform: rotate(90deg); }
-  details .details-body {
-    padding: 0 4px 16px;
-    font-size: 14.5px;
-  }
-  details .details-body > * + * { margin-top: 10px; }
-  details ul { padding-left: 1.3em; }
-  details li { margin: 6px 0; max-width: 66ch; }
-
-  /* ============ TIMELINE ============ */
-  .timeline { position: relative; margin: 10px 0 6px; padding-left: 26px; }
-  .timeline::before {
-    content: "";
-    position: absolute;
-    left: 7px;
-    top: 6px;
-    bottom: 6px;
-    width: 2px;
-    background: var(--border);
-  }
-  .tl-item { position: relative; padding: 0 0 20px 10px; max-width: 66ch; }
-  .tl-item::before {
-    content: "";
-    position: absolute;
-    left: -25px;
-    top: 7px;
+  .legend-swatch {
     width: 12px;
     height: 12px;
-    border-radius: 50%;
-    background: var(--card);
-    border: 2.5px solid var(--primary);
+    border-radius: 3px;
   }
-  .tl-item.tl--final::before { background: var(--primary); }
-  .tl-time {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--muted-foreground);
-  }
-  .tl-title { font-weight: 650; font-size: 15px; }
-  .tl-desc { font-size: 14px; color: var(--muted-foreground); margin-top: 2px; }
 
-  /* ============ RODAPÉ ============ */
+  /* ============ CALLOUT ============ */
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--primary);
+    border-radius: 0 10px 10px 0;
+    padding: 16px 20px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    margin-top: 24px;
+  }
+
+  .callout strong { color: var(--text); }
+
+  .callout code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--primary-dim);
+    color: var(--primary);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width: 768px) {
+    body { padding: 16px; }
+    h1 { font-size: 22px; }
+    .mermaid-wrap { padding: 16px 12px; }
+  }
+
+  /* ============ PROSE + COMPONENTS ============ */
+  .container { max-width: 1080px; margin: 0 auto; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 14px;
+  }
+  h1 {
+    font-family: var(--font-display); font-size: clamp(30px, 4.2vw, 46px);
+    line-height: 1.12; font-weight: 600; text-wrap: balance; margin-bottom: 20px;
+    letter-spacing: -0.015em;
+  }
+  h2 {
+    font-family: var(--font-display); font-size: clamp(21px, 2.4vw, 27px);
+    font-weight: 600; margin: 0 0 14px; text-wrap: balance; letter-spacing: -0.01em;
+  }
+  h3 { font-size: 16px; font-weight: 650; margin: 26px 0 10px; }
+  p { max-width: 68ch; margin-bottom: 14px; line-height: 1.62; }
+  section.seg { margin-top: 60px; }
+  section.seg > .seg-num {
+    font-family: var(--font-mono); font-size: 11px; color: var(--primary);
+    letter-spacing: .12em; display: block; margin-bottom: 6px;
+  }
+  .lede {
+    font-size: 19px; line-height: 1.55; max-width: 62ch;
+    border-left: 3px solid var(--primary); padding: 2px 0 2px 20px; margin-bottom: 34px;
+  }
+  code {
+    font-family: var(--font-mono); font-size: .875em; background: var(--code-bg);
+    padding: .12em .38em; border-radius: 4px; overflow-wrap: break-word;
+  }
+  a { color: var(--primary); }
+  strong { font-weight: 650; }
+  ul, ol { margin: 0 0 14px 1.15rem; max-width: 68ch; }
+  li { margin-bottom: 7px; line-height: 1.6; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 52px 0 0; }
+
+  .tablewrap { overflow-x: auto; margin: 0 0 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 480px; }
+  th, td {
+    text-align: left; padding: 10px 13px; border-bottom: 1px solid var(--border);
+    vertical-align: top; overflow-wrap: break-word;
+  }
+  th {
+    font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .09em; color: var(--muted-foreground); font-weight: 500;
+  }
+  tbody tr:hover { background: color-mix(in oklab, var(--primary) 5%, transparent); }
+  td.num { font-variant-numeric: tabular-nums; }
+
+  .pill {
+    display: inline-block; font-family: var(--font-mono); font-size: 11px;
+    padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  }
+  .pill.stop { background: color-mix(in oklab, var(--destructive) 16%, transparent); color: var(--destructive); }
+  .pill.go   { background: color-mix(in oklab, var(--success) 16%, transparent); color: var(--success); }
+  .pill.warn { background: color-mix(in oklab, var(--warning) 20%, transparent); color: var(--warning); }
+
+  .callout {
+    background: var(--card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: var(--radius);
+    padding: 16px 20px; margin: 22px 0; max-width: 72ch;
+  }
+  .callout.danger { border-left-color: var(--destructive); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .depara { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .depara > div {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px; min-width: 0;
+  }
+  .depara h4 {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; margin-bottom: 12px; font-weight: 500;
+  }
+  .depara .was h4 { color: var(--muted-foreground); }
+  .depara .is  h4 { color: var(--primary); }
+  .depara ul { margin-left: 1.05rem; }
+  .depara li { font-size: 14.5px; }
+  @media (max-width: 720px) { .depara { grid-template-columns: 1fr; } }
+
+  details {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 0 20px; margin: 20px 0; max-width: 72ch;
+  }
+  details[open] { padding-bottom: 6px; }
+  summary {
+    cursor: pointer; padding: 14px 0; font-weight: 600; font-size: 14.5px;
+    list-style: none; display: flex; align-items: center; gap: 9px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before {
+    content: '▸'; color: var(--primary); font-size: 12px; transition: transform .15s ease;
+  }
+  details[open] summary::before { transform: rotate(90deg); }
+  summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
+  details > *:not(summary) { font-size: 14.5px; }
+
+  figure { margin: 0 0 8px; }
+  figcaption {
+    font-size: 14.5px; color: var(--muted-foreground); line-height: 1.55;
+    max-width: 72ch; margin-top: 10px; padding-left: 2px;
+  }
+  figcaption b { color: var(--foreground); font-weight: 600; }
+  .sig {
+    background: color-mix(in oklab, var(--destructive) 9%, transparent);
+    border-left: 3px solid var(--destructive);
+    padding: 12px 18px; border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 14px 0 30px; max-width: 72ch; font-size: 15px;
+  }
+  .sig p { margin: 0; max-width: none; }
+  .sig .lbl {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--destructive); display: block; margin-bottom: 5px;
+  }
   footer {
-    margin-top: 64px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--muted-foreground);
+    margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--muted-foreground);
   }
-  footer p { max-width: none; }
-  footer p + p { margin-top: 4px; }
+  footer p { max-width: 72ch; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-  /* ============ RESPONSIVO ============ */
-  @media (max-width: 720px) {
-    body { padding: 26px 14px 40px; }
-    h1 { font-size: 27px; }
-    h2 { font-size: 21px; }
-    .answer p { font-size: 16.5px; }
-    .mermaid-wrap { padding: 18px 10px; min-height: 300px; }
-  }
 </style>
 </head>
 <body>
 <div class="container">
 
-  <!-- ================= HEADER ================= -->
-  <header class="hero animate" style="--i:0">
-    <p class="eyebrow">deep-orchestrator-agent-skill · v3.7.0 · 2026-08-23</p>
-    <h1>Como a deep-orchestrator-agent-skill passou a evoluir a si mesma</h1>
-    <div class="prompt-box">
-      <span class="prompt-label">Tarefa original (invocação /deep-orchestrator-agent-skill no-stop)</span>
-      <blockquote>“Quero que não importa onde essa skill for chamada, se ela aprender algo novo, possa modificar as skills dentro da pasta onde está instalada, para evoluir continuamente e não repetir os mesmos erros. Use muitas subskills para pesquisar como fazer essa auto-evolução da maneira correta e aplique isso.”</blockquote>
-    </div>
-  </header>
+  <p class="eyebrow animate" style="--i:0">surf-agent-skill v8.0.1 &middot; deep-orchestrator-agent-skill v4.0.0 &middot; 2026-08-29</p>
+  <h1 class="animate" style="--i:0">Por que as duas skills pararam de ter um plano B — e o bug que forçou isso</h1>
 
-  <!-- ================= RESPOSTA EM UMA FRASE ================= -->
-  <section class="animate" style="--i:1">
-    <div class="answer">
-      <p>
-        Nesta execução, a <strong>skill</strong> (um pacote de instruções que um agente de IA segue para
-        executar uma tarefa) construiu um mecanismo de <strong>auto-evolução</strong> (a skill passa a
-        alterar as próprias skills instaladas a partir do que aprendeu em execuções passadas): ao fim de
-        cada execução ela registra o que aprendeu no <strong>LEARNINGS.md</strong> (o arquivo da skill
-        onde os aprendizados são gravados em formato que o motor lê) e aplica as mudanças — protegida por
-        guardas de segurança —, com cada etapa de trabalho validada por testes antes de entrar no repositório.
-      </p>
+  <p class="lede animate" style="--i:1">
+    As duas skills passaram a responder <strong>pelo Brave ou não responder</strong>, porque a auditoria
+    achou o mesmo defeito repetido em duas camadas: um código de saída que significava
+    <em>&ldquo;sua chave está quebrada&rdquo;</em> era lido como <em>&ldquo;tenta outro provedor&rdquo;</em>,
+    e o usuário recebia uma resposta confiante vinda do DuckDuckGo sem nenhum sinal de que algo tinha falhado.
+  </p>
+
+  <details class="animate" style="--i:2">
+    <summary>Os termos que aparecem daqui para frente</summary>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Termo</th><th>O que é</th></tr></thead>
+        <tbody>
+          <tr><td><code>exit 78</code> / <code>EX_CONFIG</code></td><td>Código sysexits(3) para &ldquo;configuração quebrada&rdquo;. Distinto de 1 (operação falhou) e 2 (comando errado).</td></tr>
+          <tr><td>tier keyless</td><td>Camada de busca que funciona sem chave de API — aqui, o DuckDuckGo Instant Answer.</td></tr>
+          <tr><td>SERP</td><td>Página de resultados de busca: devolve links e trechos, nunca o corpo da página.</td></tr>
+          <tr><td>token bucket cross-process</td><td>Limitador de taxa cujo estado vive em disco, compartilhado por todos os processos da máquina.</td></tr>
+          <tr><td>fronteira de prioridade</td><td>Fila ordenada por prioridade em que cada query guarda seu nó pai e sua profundidade.</td></tr>
+          <tr><td><code>OPTION_NOT_IN_PLAN</code></td><td>Erro 400 da Brave: &ldquo;seu plano não inclui esse recurso&rdquo;. A chave está boa.</td></tr>
+          <tr><td><code>--sub-agents</code></td><td>Teto único de buscas simultâneas do surf: é ao mesmo tempo largura da onda e do pool.</td></tr>
+          <tr><td><code>DO_MAX_PARALLEL</code></td><td>Teto de sub-agentes simultâneos do deep-orchestrator numa onda (default 50).</td></tr>
+          <tr><td>plano legado &ldquo;Free&rdquo;</td><td>Plano Brave descontinuado que ainda é honrado: 1 requisição por segundo, 2.000 por mês.</td></tr>
+        </tbody>
+      </table>
     </div>
-    <p class="reader-note">
-      Leitor assumido: misto/desconhecido — este documento trata você como iniciante e dobra o que o
-      experiente pode pular (tudo em <code>&lt;details&gt;</code>). A primeira tela já responde o título;
-      os termos novos são definidos na primeira vez em que aparecem.
+  </details>
+
+  <section class="seg">
+    <span class="seg-num">01</span>
+    <h2>O bug cabe num operador</h2>
+    <p>
+      O <code>search.sh</code> era o wrapper unificado de busca da deep-orchestrator: tentava o surf,
+      e se ele falhasse caía para o cliente Brave interno e depois para o DuckDuckGo. A linha 398
+      decidia o que era &ldquo;falhar&rdquo;:
     </p>
-  </section>
-
-  <!-- ================= STATS ================= -->
-  <section class="kpi-grid animate" style="--i:2">
-    <div class="kpi-card">
-      <div class="kpi-value">4 ondas</div>
-      <div class="kpi-label">ondas = fases com agentes em paralelo</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-value">6 sub-agentes</div>
-      <div class="kpi-label">sub-agentes = agentes de IA com contexto próprio</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-value">6 squash commits</div>
-      <div class="kpi-label">squash = onda integrada como um único commit</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-value">120 asserções</div>
-      <div class="kpi-label">asserções = checagens automáticas de teste</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-value">v3.7.0</div>
-      <div class="kpi-label">sobe de 3.6.0 — MINOR: capacidade nova</div>
-    </div>
-  </section>
-
-  <!-- ================= FIGURA 1 — O CICLO ================= -->
-  <section class="seg animate" style="--i:3">
-    <div class="seg-head">
-      <span class="seg-num">VISÃO GERAL</span>
-    </div>
-    <h2>O ciclo de auto-evolução, do início ao fim</h2>
-    <p class="seg-lead">
-      Tudo o que esta execução construiu serve a um único desenho: um ciclo fechado. A execução
-      consulta a memória antes de planejar, coleta aprendizados ao terminar, registra, aplica e só
-      commita depois de validar — e a próxima execução começa consultando de novo.
+    <p><code>if [[ $surf_rc -ne 0 ]]; then … return 1</code></p>
+    <p>
+      Esse <code>-ne 0</code> é o defeito inteiro. Quando o surf v8 passou a sair <strong>78</strong>
+      para dizer <em>&ldquo;não existe chave Brave válida&rdquo;</em>, o wrapper leu isso como leria um
+      timeout: Tier 1 falhou, desce a cadeia. E a cadeia respondia.
     </p>
-
-    <div class="pretrain">
-      <span class="pretrain-label">Termos que aparecem neste diagrama</span>
-      <ul>
-        <li><code>gate</code> — verificação obrigatória (testes/lint) que uma etapa precisa passar antes de ser integrada;</li>
-        <li><code>allowlist</code> — lista fechada dos arquivos que o motor tem permissão de alterar;</li>
-        <li><code>append-only</code> — o registro só anexa ao arquivo, nunca reescreve o que já existe;</li>
-        <li><code>anti-poisoning</code> — guardas que impedem conteúdo não confiável de virar regra da skill.</li>
-      </ul>
-    </div>
-
-    <figure>
-      <div class="diagram-shell" role="img" aria-label="Ciclo fechado de auto-evolução: executar, consultar a memória, coletar aprendizados, registrar com add, aplicar com apply, validar e commitar, voltando à próxima execução.">
-        <p class="diagram-shell__hint">Ctrl/Cmd + roda para zoom · arraste para navegar quando ampliado · duplo clique ajusta · botão ↖ abre em tamanho cheio.</p>
-        <div class="mermaid-wrap">
-          <div class="zoom-controls">
-            <button type="button" data-action="zoom-in" title="Aproximar">+</button>
-            <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
-            <button type="button" data-action="zoom-fit" title="Ajustar à tela">&#8634;</button>
-            <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
-            <button type="button" data-action="zoom-expand" title="Abrir em tamanho cheio">&#x26F6;</button>
-            <span class="zoom-label">Carregando…</span>
-          </div>
-          <div class="mermaid-viewport">
-            <div class="mermaid mermaid-canvas"></div>
-          </div>
+  <figure class="animate" style="--i:3">
+    <section class="diagram-shell" role="img" aria-label="Fluxograma: os códigos de saída 78, 1 e 143 do surf colapsam num único return 1 na linha 398 do search.sh, que faz a cadeia cair para o Tier 2 e depois para o DuckDuckGo, entregando uma resposta confiante com exit 0 e sem nenhuma marca de degradação">
+      <p class="diagram-shell__hint">Ctrl/Cmd + roda para dar zoom &middot; arraste para deslocar &middot; duplo clique para reenquadrar</p>
+      <div class="mermaid-wrap">
+        <div class="zoom-controls">
+          <button type="button" data-action="zoom-in" title="Aproximar">+</button>
+          <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
+          <button type="button" data-action="zoom-fit" title="Reenquadrar">&#8634;</button>
+          <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
+          <button type="button" data-action="zoom-expand" title="Abrir em tamanho real">&#x26F6;</button>
+          <span class="zoom-label">Carregando&hellip;</span>
         </div>
+        <div class="mermaid-viewport"><div class="mermaid mermaid-canvas"></div></div>
       </div>
       <script type="text/plain" class="diagram-source">
 flowchart TD
-    A["Execução da skill<br/>(FASE 1–4)"] -->|"passo 8.5: consulta a memória"| B["LEARNINGS.md<br/>(memória evolutiva)"]
-    B -->|"passo 6.5: coleta aprendizados"| C["evolve-skill.sh add<br/>(append-only)"]
-    C -->|"fonte registrada + anti-poisoning"| D["evolve-skill.sh apply<br/>(só allowlist)"]
-    D -->|"mudança dentro da allowlist"| E["Validação<br/>(test-evolve E1–E27)"]
-    E -->|"gate VERDE"| F["Commit<br/>evolve(learnings)"]
-    F -->|"próxima execução"| A
-    class E crit;
-    classDef crit fill:#ffd166,stroke:#b45309,color:#1f2937,font-weight:bold;
+  B["o sub-agente chama<br/>surf-search-normal"]
+  B -->|"exit 78 · sem chave Brave válida"| D
+  B -->|"exit 1 · rodou e não achou nada"| D
+  B -->|"exit 143 · o harness matou por timeout"| D
+  D["search.sh linha 398<br/>if surf_rc -ne 0"]:::crit
+  D -->|"os três viram o mesmo return 1<br/>main() lê: Tier 1 falhou"| G["Tier 2 · cliente Brave interno"]
+  G -->|"sem chave, falha também"| H["Tier 3 · DuckDuckGo keyless"]
+  H -->|"Instant Answer responde alguma coisa"| I["resposta confiante · exit 0<br/>o usuário não vê sinal nenhum"]
+  classDef crit fill:%%CRIT_BG%%,stroke:%%CRIT_ST%%,color:%%CRIT_FG%%,stroke-width:3px
       </script>
-      <figcaption>
-        <span class="claim">A auto-evolução é um ciclo fechado:</span> a skill consulta a memória antes
-        de planejar (passo 8.5), coleta aprendizados ao terminar (passo 6.5), registra com
-        <code>add</code>, aplica com <code>apply</code> e só commita depois de validar — a próxima
-        execução recomeça do mesmo ponto.
-      </figcaption>
-    </figure>
+    </section>
+    <figcaption><b>Figura 1 — Um <code>-ne 0</code> apagava a diferença entre &ldquo;sua chave quebrou&rdquo; e &ldquo;tenta de novo&rdquo;, e a resposta vinha do DuckDuckGo.</b></figcaption>
+  </figure>
+  <div class="sig animate" style="--i:3"><span class="lbl">Caminho crítico</span><p>O nó vermelho é onde três significados diferentes viram um só. <strong>O defeito inteiro cabe num operador:</strong> <code>-ne 0</code> trata 78 (configuração), 1 (nada encontrado) e 143 (o harness matou) como a mesma coisa — e a partir dali nada mais consegue distinguir uma chave quebrada de um resultado vazio.</p></div>
 
-    <div class="callout crit-callout">
-      <strong>O elo crítico é a validação antes do commit</strong> (nó em destaque): um aprendizado só
-      vira regra da skill depois de passar pelos testes <code>E1–E27</code>. Sem essa trava, o ciclo
-      fecharia sem prova de que a mudança não quebra nada.
-    </div>
-  </section>
-
-  <!-- ================= SEGMENTO 1 ================= -->
-  <section class="seg animate" style="--i:4">
-    <div class="seg-head">
-      <span class="seg-num">01</span>
-      <p class="eyebrow" style="margin:0">O problema</p>
-    </div>
-    <h2>A skill repetia os mesmos erros</h2>
-    <p class="seg-lead">O pedido do usuário é o sintoma de uma ausência: memória.</p>
-    <div class="seg-body">
+    <div class="callout danger">
       <p>
-        Uma skill que aprende durante uma execução — descobre uma correção, um anti-padrão, uma
-        pegadinha — mas não guarda nada disso, recomeça do zero na próxima chamada. O resultado é o
-        erro que o usuário descreveu: <em>repetir os mesmos erros</em> em qualquer pasta onde a skill
-        estiver instalada.
-      </p>
-      <p>
-        A tarefa pediu duas coisas: (1) um mecanismo que permita à skill <strong>modificar as skills
-        dentro da pasta onde está instalada</strong> a partir do que aprendeu, e (2) que essa mudança
-        seja feita <strong>da maneira correta</strong> — pesquisada, não inventada. A execução respondeu
-        com pesquisa ampla (Onda 1), construção (Ondas 2–3) e correção pelo crivo adverso (Onda 4).
+        <strong>O que torna isso pior do que um bug comum:</strong> a saída não tinha marca nenhuma.
+        Exit 0, resposta citada, fontes listadas. Um sub-agente que pesquisou &ldquo;limites do pgvector&rdquo;
+        e recebeu um Instant Answer do DuckDuckGo entregava isso ao orquestrador com a mesma confiança
+        de uma pesquisa real — e o handoff seguia adiante como fato.
       </p>
     </div>
   </section>
 
-  <!-- ================= SEGMENTO 2 ================= -->
-  <section class="seg animate" style="--i:5">
-    <div class="seg-head">
-      <span class="seg-num">02</span>
-      <p class="eyebrow" style="margin:0">Pesquisa</p>
-    </div>
-    <h2>Pesquisar antes de construir: a Onda 1</h2>
-    <p class="seg-lead">Seis sub-agentes paralelos, análise pura, zero código — para saber o que já
-    existia antes de desenhar o próprio mecanismo.</p>
-    <div class="seg-body">
-      <p>
-        As <strong>worktrees</strong> (cópias isoladas do repositório onde cada um trabalha sem colidir
-        com os outros) são a unidade de isolamento: a primeira <strong>Onda</strong> — grupo de
-        sub-agentes trabalhando em paralelo numa mesma fase — disparou 6 sub-agentes, cada um
-        responsável por uma frente de pesquisa. A worktree garante que a análise de um não suje a do
-        outro.
-      </p>
-      <p>
-        As seis frentes cobriram exatamente as perguntas que o mecanismo precisava responder antes de
-        existir: o que já existe como memória contínua, quais arquiteturas de auto-melhoria funcionam,
-        como se defender de conteúdo malicioso, como as convenções oficiais de skill tratam aprendizados,
-        como automatizar o loop e como a memória evolutiva falha.
-      </p>
-
-      <details>
-        <summary>As 6 frentes da pesquisa (detalhe)</summary>
-        <div class="details-body">
-          <ul>
-            <li><strong>Memória contínua:</strong> ECC continuous-learning v2 + memory vault — verificado no código-fonte.</li>
-            <li><strong>Arquiteturas self-improving:</strong> Voyager, Reflexion, AgentOptimizer, MemGPT, A-MEM.</li>
-            <li><strong>Guardrails anti-poisoning:</strong> Anthropic, OpenAI, OWASP, Microsoft + MLAS (V-S4/V-S5).</li>
-            <li><strong>Convenções de skill/LEARNINGS:</strong> spec oficial Agent Skills, ECC, OKF, MindStudio.</li>
-            <li><strong>Automação do loop:</strong> hooks, branch de review, CI, versionamento semântico.</li>
-            <li><strong>Modos de falha da memória evolutiva:</strong> bloat, contradição, stale, overfitting, skill rot — 27 abstracts verificados; ETH 2602.11988 confirmado.</li>
-          </ul>
-        </div>
-      </details>
-    </div>
-  </section>
-
-  <!-- ================= SEGMENTO 3 ================= -->
-  <section class="seg animate" style="--i:6">
-    <div class="seg-head">
-      <span class="seg-num">03</span>
-      <p class="eyebrow" style="margin:0">Fundação</p>
-    </div>
-    <h2>O motor e a memória: a Onda 2</h2>
-    <p class="seg-lead">Duas peças nascem juntas: um motor de linha de comando e um arquivo de memória
-    que ele sabe ler e escrever.</p>
-    <div class="seg-body">
-      <p>
-        O coração é o <code>scripts/evolve-skill.sh</code>, uma <strong>CLI</strong> (programa de linha
-        de comando) com 6 comandos — <code>add</code>, <code>search</code>, <code>diff</code>,
-        <code>apply</code>, <code>consolidate</code> e <code>status</code> —, guardas de saída
-        (<code>exit 2/3/4</code>), anti-poisoning como código, <code>flock</code> (trava de arquivo que
-        impede duas execuções simultâneas de corromper a memória) e um parser com consciência de
-        code-fences. O <code>add</code> é <strong>append-only</strong>: a memória é um registro que não
-        se perde por sobrescrita.
-      </p>
-      <p>
-        A memória em si é o <strong>LEARNINGS.md</strong>, escrito num formato parseável — o motor
-        consegue extrair cada aprendizado de volta. A fundação fecha com 11 decisões de projeto
-        registradas em <code>docs/decisions/2026-08-23-auto-evolucao.md</code> (D1–D11), e o gate da
-        onda passou VERDE com 300 asserções.
-      </p>
-    </div>
-  </section>
-
-  <!-- ================= SEGMENTO 4 ================= -->
-  <section class="seg animate" style="--i:7">
-    <div class="seg-head">
-      <span class="seg-num">04</span>
-      <p class="eyebrow" style="margin:0">Guardas</p>
-    </div>
-    <h2>As guardas: como o motor não se envenena</h2>
-    <p class="seg-lead">A pesquisa da Onda 1 deixou um aviso que virou regra de projeto: memória
-    evolutiva sem filtro é porta aberta para conteúdo malicioso. Todo aprendizado passa por quatro
-    guardas antes de virar regra.</p>
-    <div class="seg-body">
-      <p>
-        O <strong>anti-poisoning</strong> funciona por ordem de confiança: a fonte do aprendizado é
-        obrigatória, e fontes não-confiáveis — web, sub-agente, diff, saída de modelo — nunca promovem.
-        Antes disso, o <strong>secret_scan</strong> (varredura que rejeita o lote inteiro se achar padrão
-        de credencial, sem imprimir o valor) impede que um segredo vaze para a memória. A
-        <strong>allowlist</strong> limita o estrago possível, e o <strong>flock</strong> serializa o
-        acesso.
-      </p>
-      <p>
-        Contradição nunca é apagada: a entrada mais nova vence e a antiga vira
-        <strong>superseded</strong> (marcada como superada, com referência à substituta — o corpo antigo
-        fica riscado e preservado). E há <strong>orçamento</strong> (limite de tamanho da memória: até
-        100 linhas ativas e arquivo até 400): no teto, o <code>consolidate</code> move o excedente para
-        o <code>learnings_archive.md</code>, preservado. O <code>apply</code> roda em
-        <strong>dry-run</strong> por padrão (mostra o que mudaria sem aplicar) e nunca faz merge sozinho:
-        se tocou só o LEARNINGS.md, commit direto; se tocou SKILL.md/prompts/docs, branch
-        <code>evolve/AAAA-MM-DD</code> para revisão.
-      </p>
-
-      <figure>
-        <div class="diagram-shell" role="img" aria-label="Caminho de um aprendizado bruto até a memória: fonte obrigatória, secret_scan, anti-poisoning por ordem de confiança, allowlist, flock; fora da allowlist o motor recusa com exit 2/3/4.">
-          <p class="diagram-shell__hint">Ctrl/Cmd + roda para zoom · arraste para navegar · duplo clique ajusta · botão ↖ abre em tamanho cheio.</p>
-          <div class="mermaid-wrap">
-            <div class="zoom-controls">
-              <button type="button" data-action="zoom-in" title="Aproximar">+</button>
-              <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
-              <button type="button" data-action="zoom-fit" title="Ajustar à tela">&#8634;</button>
-              <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
-              <button type="button" data-action="zoom-expand" title="Abrir em tamanho cheio">&#x26F6;</button>
-              <span class="zoom-label">Carregando…</span>
-            </div>
-            <div class="mermaid-viewport">
-              <div class="mermaid mermaid-canvas"></div>
-            </div>
-          </div>
-        </div>
-        <script type="text/plain" class="diagram-source">
-flowchart TD
-    IN["Aprendizado bruto<br/>(surpresa, correção, achado)"] -->|"fonte obrigatória<br/>(source)"| S1["secret_scan<br/>(credenciais)"]
-    S1 -->|"lote limpo"| S2["Anti-poisoning<br/>(ordem de confiança)"]
-    S1 -. "achou segredo<br/>(rejeita o lote inteiro)" .-> R1["RECUSA<br/>lote inteiro"]
-    S2 -->|"web / sub-agente / diff /<br/>model-output nunca promovem"| S3["Allowlist<br/>(arquivos permitidos)"]
-    S3 -->|"dentro da lista"| S4["flock<br/>(uma execução por vez)"]
-    S3 -. "fora da lista<br/>(exit 2/3/4)" .-> R2["RECUSA<br/>exit 2/3/4"]
-    S4 -->|"apply com dry-run"| OUT["LEARNINGS.md / SKILL.md"]
-    class R1,R2 rej;
-    classDef rej fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d,font-weight:bold;
-        </script>
-        <figcaption>
-          <span class="claim">Um aprendizado só chega à memória depois de passar por quatro guardas;</span>
-          fora da allowlist o motor recusa com <code>exit 2/3/4</code> (ramos tracejados em vermelho).
-        </figcaption>
-      </figure>
-
-      <div class="callout crit-callout">
-        <strong>A recusa é o comportamento esperado:</strong> o motor prefere negar uma mudança legítima
-        a aceitar uma fora da allowlist. Err para o lado seguro — foi o que a pesquisa sobre
-        anti-poisoning recomendou.
-      </div>
-    </div>
-  </section>
-
-  <!-- ================= SEGMENTO 5 ================= -->
-  <section class="seg animate" style="--i:8">
-    <div class="seg-head">
-      <span class="seg-num">05</span>
-      <p class="eyebrow" style="margin:0">Integração</p>
-    </div>
-    <h2>A skill passa a se consultar e se evoluir: a Onda 3</h2>
-    <p class="seg-lead">Motor e memória prontos, faltava amarrá-los no corpo da própria skill — em dois
-    pontos do fluxo, com testes e documentação de uso.</p>
-    <div class="seg-body">
-      <p>
-        A integração entrou no <code>SKILL.md</code> v3.7.0 em dois pontos novos: o <strong>passo 8.5</strong>
-        (na FASE 1, a skill consulta a memória com <code>evolve-skill.sh search</code> antes de planejar —
-        o ciclo da Figura 1 começando a girar) e o <strong>passo 6.5</strong> (na FASE 4, a EVOLUÇÃO
-        PÓS-EXECUÇÃO: coleta, filtra e persiste os aprendizados da execução). Além disso, a versão nova
-        traz relatório e final-note, e uma exceção de regra registrada (R8-h2 — o identificador interno
-        da exceção que permite esta auto-modificação).
-      </p>
-      <p>
-        Em volta do núcleo, a Onda 3 entregou: <code>prompts/evolution-guide.md</code> (as regras que
-        filtram o que merece virar aprendizado), <code>prompts/ecc-skills.md</code> (o "Doctor"
-        mecanizado), <code>scripts/test-evolve.sh</code> (testes E1–E20), README + scripts-README +
-        check-install, e o symlink do LEARNINGS.md para a pasta interna da skill. Duas decisões
-        autônomas marcaram a onda: a subwave de teste da Onda 2 foi dobrada na worktree de docs da Onda 3
-        (evitando colisão de arquivo — subwave é um grupo de teste rodando em paralelo à onda), e a
-        subwave de teste da Onda 3 foi NO-OP (sem operação — nada novo a testar: docs declarativas; o
-        contrato é exercitado no gate via check-install).
-      </p>
-      <p>
-        O <strong>semver</strong> (versionamento semântico <code>MAJOR.MINOR.PATCH</code>) subiu de
-        3.6.0 para 3.7.0 — <strong>MINOR</strong>, porque a mudança adiciona uma capacidade nova sem
-        quebrar o comportamento existente.
-      </p>
-    </div>
-  </section>
-
-  <!-- ================= SEGMENTO 6 ================= -->
-  <section class="seg animate" style="--i:9">
-    <div class="seg-head">
-      <span class="seg-num">06</span>
-      <p class="eyebrow" style="margin:0">Validação</p>
-    </div>
-    <h2>A validação: gates, asserções e revisão adversarial</h2>
-    <p class="seg-lead">Nada entra no repositório sem prova. Cada onda trabalhou em worktrees isoladas e
-    só foi integrada por squash-merge depois do gate VERDE.</p>
-    <div class="seg-body">
-      <p>
-        Um <strong>gate</strong> acompanhou cada onda; cada integração entrou como um
-        <strong>squash-merge</strong>, totalizando 6 squash commits. A <strong>revisão adversarial</strong>
-        (revisão que procura ativamente erros no diff antes de integrar) rodou em paralelo e foi o crivo
-        mais duro: bloqueou a Onda 2 (veredito <strong>BLOCK</strong> — reprovado), aprovou a Onda 3 com
-        <strong>WARNING</strong> (10 achados, dos quais 2 ALTA), e os fixes da Onda 4 fecharam com
-        <strong>VERDE</strong> (aprovado). Cada <strong>asserção</strong> soma prova ao veredito — veredito
-        é o resultado da revisão: BLOCK (reprovado), WARNING (aprovado com achados) ou VERDE (aprovado).
-      </p>
-
-      <figure>
-        <div class="diagram-shell" role="img" aria-label="As quatro ondas em sequência: pesquisa, fundação, integração e fixes, cada uma integrada por squash-merge após o gate VERDE, fechando em COMMIT-FINAL com 6 squash commits e v3.7.0.">
-          <p class="diagram-shell__hint">Ctrl/Cmd + roda para zoom · arraste para navegar · duplo clique ajusta · botão ↖ abre em tamanho cheio.</p>
-          <div class="mermaid-wrap">
-            <div class="zoom-controls">
-              <button type="button" data-action="zoom-in" title="Aproximar">+</button>
-              <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
-              <button type="button" data-action="zoom-fit" title="Ajustar à tela">&#8634;</button>
-              <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
-              <button type="button" data-action="zoom-expand" title="Abrir em tamanho cheio">&#x26F6;</button>
-              <span class="zoom-label">Carregando…</span>
-            </div>
-            <div class="mermaid-viewport">
-              <div class="mermaid mermaid-canvas"></div>
-            </div>
-          </div>
-        </div>
-        <script type="text/plain" class="diagram-source">
-flowchart TD
-    W1["Onda 1 — Pesquisa<br/>6 sub-agentes paralelos"] -->|"análise pura<br/>alimenta o desenho"| W2["Onda 2 — Fundação<br/>evolve-skill.sh + LEARNINGS.md<br/>+ decisões D1–D11"]
-    W2 -->|"gate VERDE 300 asserções<br/>revisão BLOCK → fixes"| W3["Onda 3 — Integração<br/>SKILL.md v3.7.0<br/>testes E1–E20"]
-    W3 -->|"gate VERDE 383 asserções<br/>check-install 15/15"| W4["Onda 4 — Fixes<br/>10 achados da revisão<br/>(2 ALTA)"]
-    W4 -->|"gate VERDE<br/>test-evolve E1–E27 (120 asserções)"| FIN["COMMIT-FINAL<br/>6 squash commits<br/>v3.7.0 (semver MINOR)"]
-        </script>
-        <figcaption>
-          <span class="claim">Cada onda só foi integrada por squash-merge depois do gate VERDE,</span>
-          e os números do gate cresceram com o tempo: 300, 383 e 120 asserções — fechando em
-          COMMIT-FINAL com 6 squash commits e a versão v3.7.0.
-        </figcaption>
-      </figure>
-
-      <div class="callout crit-callout">
-        <strong>Nenhuma onda entrou no repositório sem o gate:</strong> 300 asserções na Onda 2 (85 de
-        contenção, 151 de plan-approval, 64 de search), 383 na Onda 3 + check-install 15/15, e
-        test-evolve E1–E27 com 120 asserções + 3 suítes na Onda 4 — além da revisão adversarial que
-        bloqueou a Onda 2 e devolveu 10 achados na Onda 3.
-      </div>
-
-      <div class="table-scroll">
+  <section class="seg">
+    <span class="seg-num">02</span>
+    <h2>Por que um shim fino não resolveria</h2>
+    <p>
+      A correção mínima seria tratar o 78 como caso especial e deixar o resto do <code>search.sh</code>
+      no lugar. Foi descartado: para preservar o contrato existente, o shim precisaria manter o
+      <code>json_report()</code>, a tabela de tradução de flags (<code>--count</code> &rarr;
+      <code>--max-queries</code>, segundos &rarr; milissegundos), o ramo &ldquo;não instalado&rdquo; e a
+      remapeação de códigos de saída — ou seja, quase o arquivo inteiro.
+    </p>
+    <p>
+      <strong>Um shim <em>é</em> um sistema de busca.</strong> Mapeamento de flags, envelope próprio,
+      códigos de saída próprios: é exatamente o lugar onde o próximo mantenedor reintroduz um fallback,
+      e é exatamente o lugar onde o 78 foi engolido da primeira vez. Os seis scripts foram apagados, e o
+      SKILL.md passou a mandar o sub-agente chamar os binários globais direto.
+    </p>
+    <details>
+      <summary>Os seis arquivos removidos, com o que cada um fazia de errado</summary>
+      <div class="tablewrap">
         <table>
-          <thead>
-            <tr>
-              <th>Onda</th>
-              <th>O que validou</th>
-              <th class="num">Asserções</th>
-              <th>Veredito</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Arquivo</th><th class="num">Linhas</th><th>O problema</th></tr></thead>
           <tbody>
-            <tr>
-              <td><strong>2</strong> — Fundação</td>
-              <td>build/lint · contenção 85 · plan-approval 151 · search 64</td>
-              <td class="num">300</td>
-              <td><span class="badge badge--verde">VERDE</span> <span class="badge badge--block">revisão BLOCK → fixes</span></td>
-            </tr>
-            <tr>
-              <td><strong>3</strong> — Integração</td>
-              <td>383 asserções + check-install 15/15</td>
-              <td class="num">383</td>
-              <td><span class="badge badge--verde">VERDE</span> <span class="badge badge--warning">revisão WARNING · 10 achados</span></td>
-            </tr>
-            <tr>
-              <td><strong>4</strong> — Fixes</td>
-              <td>test-evolve E1–E27 = 120 asserções + 3 suítes + check-install</td>
-              <td class="num">120</td>
-              <td><span class="badge badge--verde">VERDE</span> <span class="badge badge--alta">2 achados ALTA corrigidos</span></td>
-            </tr>
+            <tr><td><code>search.sh</code></td><td class="num">691</td><td>Os 3 tiers; engolia o exit 78 na linha 398</td></tr>
+            <tr><td><code>brave-search.sh</code></td><td class="num">734</td><td>Segundo cliente Brave, sem pacing coordenado, com <code>QUERY_INTERVAL=1.1</code> e retry 429 próprio</td></tr>
+            <tr><td><code>search-parallel.sh</code></td><td class="num">432</td><td>Jitter 0-2 s por job e backoff 1/2/4 s <em>por cima</em> do limitador do surf; um job por query, sem teto</td></tr>
+            <tr><td><code>check-search-credits.sh</code></td><td class="num">728</td><td>Gastava 2 queries Brave reais por onda; sondava <code>surf-free-skill</code>, binário que a v8 deletou</td></tr>
+            <tr><td><code>check-brave-credits.sh</code></td><td class="num">439</td><td>Já órfão; cache de crédito em <code>/tmp</code></td></tr>
+            <tr><td><code>test-search.sh</code></td><td class="num">322</td><td>Era a especificação do sistema removido — o caso PAR-2 <em>exigia</em> backoff no chamador</td></tr>
           </tbody>
         </table>
       </div>
-
-      <details>
-        <summary>Os 10 achados da revisão adversarial da Onda 3 (detalhe)</summary>
-        <div class="details-body">
-          <p>Dos achados relatados nos fatos da execução, os seguintes foram registrados e corrigidos na Onda 4 — 2 deles classificados ALTA:</p>
-          <ul>
-            <li><code>add</code> aceitava o formato do template (ALTA);</li>
-            <li>o SKILL.md real precisava voltar à allowlist (decisão D8 restaurada) (ALTA);</li>
-            <li>entradas <code>superseded</code> apareciam fora do índice;</li>
-            <li><code>add</code> vazio saía com exit 0 em vez de falhar;</li>
-            <li>revalidação do contrato (<code>contract:</code>) na aplicação;</li>
-            <li>índice limitado a ≤30 entradas;</li>
-            <li>anti-poisoning aplicado por ordem de confiança;</li>
-            <li>decisão D5 realinhada.</li>
-          </ul>
-        </div>
-      </details>
-
-      <details>
-        <summary>Os 6 squash commits (detalhe)</summary>
-        <div class="details-body">
-          <p>Cada worktree da execução entrou como um commit único:</p>
-          <ul>
-            <li><code>3ff6973</code> — evolve-script (Onda 2)</li>
-            <li><code>5856487</code> — docs-base (Onda 2)</li>
-            <li><code>fdb7fb4</code> — skillmd (Onda 3)</li>
-            <li><code>f6d0198</code> — guide (Onda 3)</li>
-            <li><code>3e00011</code> — tests-docs (Onda 3)</li>
-            <li><code>0579f0f</code> — fix-evolve (Onda 4)</li>
-          </ul>
-        </div>
-      </details>
-    </div>
+    </details>
   </section>
 
-  <!-- ================= SEGMENTO 7 ================= -->
-  <section class="seg animate" style="--i:10">
-    <div class="seg-head">
-      <span class="seg-num">07</span>
-      <p class="eyebrow" style="margin:0">Primeira evolução real</p>
-    </div>
-    <h2>O mecanismo usado pela primeira vez — na própria execução que o criou</h2>
-    <p class="seg-lead">Não foi ensaio: ao fim desta execução, o mecanismo novo foi exercitado pela
-    primeira vez com os aprendizados da própria execução.</p>
-    <div class="seg-body">
-      <p>
-        Os aprendizados coletados ao longo das ondas (surpresas, correções, falhas de gate, achados de
-        revisão) foram registrados e persistidos com o próprio motor — <code>evolve-skill.sh add</code>
-        seguido de <code>apply</code> — e o resultado entrou como um commit
-        <code>evolve(learnings): …</code>. O ciclo da Figura 1 fechou no mesmo dia em que foi desenhado.
-      </p>
+  <section class="seg">
+    <span class="seg-num">03</span>
+    <h2>De-para: o que a skill era e o que ela passa a ser</h2>
+  <figure class="animate" style="--i:4">
+    <section class="diagram-shell" role="img" aria-label="Fluxograma com uma raiz comum e dois ramos por era: até a v3.9 a busca descia por Tier 0 WebSearch, Tier 1 surf, Tier 2 Brave interno e Tier 3 DuckDuckGo keyless até sempre devolver alguma resposta; a partir da v4.0 um portão surf doctor ou para a execução com 78 ou 127, ou libera surf-search-normal contra o Brave como único backend">
+      <p class="diagram-shell__hint">Ctrl/Cmd + roda para dar zoom &middot; arraste para deslocar &middot; duplo clique para reenquadrar</p>
+      <div class="mermaid-wrap">
+        <div class="zoom-controls">
+          <button type="button" data-action="zoom-in" title="Aproximar">+</button>
+          <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
+          <button type="button" data-action="zoom-fit" title="Reenquadrar">&#8634;</button>
+          <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
+          <button type="button" data-action="zoom-expand" title="Abrir em tamanho real">&#x26F6;</button>
+          <span class="zoom-label">Carregando&hellip;</span>
+        </div>
+        <div class="mermaid-viewport"><div class="mermaid mermaid-canvas"></div></div>
+      </div>
+      <script type="text/plain" class="diagram-source">
+flowchart TD
+  Q["o sub-agente precisa de<br/>uma fonte externa"]
+  Q -->|"até a v3.9 · se o harness expuser"| A2["Tier 0 · WebSearch do harness"]
+  Q -->|"até a v3.9 · senão"| A3["Tier 1 · surf"]
+  A3 -->|"se falhar"| A4["Tier 2 · cliente Brave interno"]
+  A4 -->|"se falhar"| A5["Tier 3 · DDG keyless"]
+  A5 -->|"piso que nunca falha"| A6["sempre alguma resposta"]
+  Q -->|"a partir da v4.0 · portão antes de tudo"| B2{"surf doctor"}
+  B2 -->|"78 sem chave · 127 sem pacote"| B6["PARA e pede ao usuário"]:::crit
+  B2 -->|"0 ou 1"| B3["surf-search-normal"]
+  B3 -->|"único backend, sem camada abaixo"| B4["Brave /web/search"]
+  B4 -->|"exit 0"| B5["resposta citada"]
+  classDef crit fill:%%OK_BG%%,stroke:%%OK_ST%%,color:%%OK_FG%%,stroke-width:3px
+      </script>
+    </section>
+    <figcaption><b>Figura 2 — A cadeia de quatro camadas virou um backend e um portão.</b></figcaption>
+  </figure>
+  <div class="sig animate" style="--i:4"><span class="lbl">Caminho crítico</span><p>O nó verde é a capacidade que a skill <em>ganhou</em>, não perdeu. <strong>A mudança não é ter menos provedores; é passar a existir um estado &ldquo;não posso responder&rdquo;</strong> que antes não existia — antes, o piso keyless garantia que alguma coisa sempre voltasse, e era essa garantia que escondia o problema.</p></div>
 
-      <details>
-        <summary>Passo a passo da primeira evolução real (o experiente pula)</summary>
-        <div class="details-body">
-          <ol style="padding-left:1.3em; max-width:66ch">
-            <li>A execução termina e a FASE 4 (passo 6.5) coleta os aprendizados da retrospectiva.</li>
-            <li>Cada aprendizado é filtrado pelas regras de <code>prompts/evolution-guide.md</code>.</li>
-            <li><code>evolve-skill.sh add</code> registra no LEARNINGS.md — append-only, com fonte, passando por secret_scan e anti-poisoning.</li>
-            <li><code>evolve-skill.sh apply</code> aplica as mudanças dentro da allowlist, com dry-run e decisão de merge segura.</li>
-            <li>O resultado é commitado como <code>evolve(learnings): …</code> — e a próxima execução consultará essa memória no passo 8.5.</li>
-          </ol>
-        </div>
-      </details>
-    </div>
-  </section>
-
-  <!-- ================= SEGMENTO 8 ================= -->
-  <section class="seg animate" style="--i:11">
-    <div class="seg-head">
-      <span class="seg-num">08</span>
-      <p class="eyebrow" style="margin:0">Timeline</p>
-    </div>
-    <h2>Um dia inteiro: das 20:12 ao COMMIT-FINAL</h2>
-    <p class="seg-lead">Toda a auto-evolução foi construída, validada e integrada num único dia — 2026-08-23.</p>
-    <div class="seg-body">
-      <div class="timeline">
-        <div class="tl-item">
-          <div class="tl-time">20:12</div>
-          <div class="tl-title">FASE 0</div>
-          <div class="tl-desc">Delimitação do mundo: SKILL_HOME == BASE_DIR (a skill é o repo-alvo), NO_STOP ligado, busca Tier 1 disponível (o nível mais alto do sistema de busca em camadas da skill).</div>
-        </div>
-        <div class="tl-item">
-          <div class="tl-time">Onda 1</div>
-          <div class="tl-title">Pesquisa — 6 agentes em paralelo</div>
-          <div class="tl-desc">Análise pura: memória contínua, self-improving, anti-poisoning, convenções, automação do loop, modos de falha.</div>
-        </div>
-        <div class="tl-item">
-          <div class="tl-time">Onda 2</div>
-          <div class="tl-title">Fundação + 2 revisões BLOCK + fixes</div>
-          <div class="tl-desc">Motor, memória e decisões D1–D11; a revisão adversarial bloqueou duas vezes até o gate VERDE (300 asserções).</div>
-        </div>
-        <div class="tl-item">
-          <div class="tl-time">Onda 3</div>
-          <div class="tl-title">Integração + validação VERDE</div>
-          <div class="tl-desc">SKILL.md v3.7.0 com passos 8.5 e 6.5, testes E1–E20, docs; gate VERDE (383 asserções + check-install 15/15) e revisão com 10 achados.</div>
-        </div>
-        <div class="tl-item">
-          <div class="tl-time">Onda 4</div>
-          <div class="tl-title">Fixes — 10 achados, 2 ALTA</div>
-          <div class="tl-desc">Correções na allowlist, no add, no índice e no contrato; testes E21–E27; gate VERDE (120 asserções).</div>
-        </div>
-        <div class="tl-item tl--final">
-          <div class="tl-time">Fim</div>
-          <div class="tl-title">COMMIT-FINAL</div>
-          <div class="tl-desc">6 squash commits integrados, semver 3.6.0 → 3.7.0 (MINOR), e a primeira evolução real commitada como evolve(learnings).</div>
-        </div>
+    <div class="depara">
+      <div class="was">
+        <h4>Era</h4>
+        <ul>
+          <li>4 camadas: WebSearch do harness &rarr; surf &rarr; Brave interno &rarr; DDG keyless</li>
+          <li>Verificação pré-onda gastava 2 queries Brave reais</li>
+          <li>&ldquo;Modo degradado&rdquo; era um estado válido e documentado</li>
+          <li>Chave Brave <strong>opcional</strong></li>
+          <li>Jitter e backoff próprios em três camadas diferentes</li>
+          <li>Sub-agente escolhia a ferramenta; WebSearch valia como fonte</li>
+          <li>3.346 linhas de shell de busca para manter</li>
+        </ul>
+      </div>
+      <div class="is">
+        <h4>É</h4>
+        <ul>
+          <li>1 backend: Brave, pelos binários globais do surf</li>
+          <li>Portão é <code>surf doctor</code> — offline, ~0,04 s, custo zero</li>
+          <li>Só dois estados: pesquisa disponível, ou parada</li>
+          <li>Chave Brave <strong>obrigatória</strong>; validá-la é grátis</li>
+          <li>Um único limitador, dentro do surf, entre processos</li>
+          <li>Fonte que não veio pelo surf não é citável</li>
+          <li>0 linhas — a skill não tem busca</li>
+        </ul>
       </div>
     </div>
+    <p>
+      Do lado do surf, a mudança correspondente foi no loop: ele deixou de reexecutar buscas e passou a
+      descer numa árvore.
+    </p>
+  <figure class="animate" style="--i:5">
+    <section class="diagram-shell" role="img" aria-label="Fluxograma do loop de pesquisa do surf: plano gera sementes de profundidade zero, cada onda roda até --sub-agents em paralelo, a análise transforma follow-ups em nós de uma fronteira de prioridade, e ramos sem fontes novas fecham">
+      <p class="diagram-shell__hint">Ctrl/Cmd + roda para dar zoom &middot; arraste para deslocar &middot; duplo clique para reenquadrar</p>
+      <div class="mermaid-wrap">
+        <div class="zoom-controls">
+          <button type="button" data-action="zoom-in" title="Aproximar">+</button>
+          <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
+          <button type="button" data-action="zoom-fit" title="Reenquadrar">&#8634;</button>
+          <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
+          <button type="button" data-action="zoom-expand" title="Abrir em tamanho real">&#x26F6;</button>
+          <span class="zoom-label">Carregando&hellip;</span>
+        </div>
+        <div class="mermaid-viewport"><div class="mermaid mermaid-canvas"></div></div>
+      </div>
+      <script type="text/plain" class="diagram-source">
+flowchart TD
+  P["PLAN · queries com prioridade"] -->|"sementes, profundidade 0"| W["ONDA · até --sub-agents em paralelo"]
+  W -->|"barreira: espera todas"| A["ANALYZE · o que ficou aberto"]
+  A -->|"follow-ups viram nós da árvore"| F{"fronteira de prioridade"}
+  F -->|"a próxima onda DESCE"| W
+  F -.->|"exemplo de linhagem dentro da fronteira"| D1
+  D1["nó profundidade 1"] -->|"porque o RESULTADO do pai levantou isto"| D2["nó profundidade 2 · sabe seu pai"]:::crit
+  A -->|"duas ondas sem fonte nova"| C["ramo fechado"]
+  F -->|"fronteira vazia ou saturada"| S["síntese citada"]
+  classDef crit fill:%%OK_BG%%,stroke:%%OK_ST%%,color:%%OK_FG%%,stroke-width:3px
+      </script>
+    </section>
+    <figcaption><b>Figura 3 — O aprofundamento deixou de ser &ldquo;buscar de novo&rdquo; e virou uma árvore que sabe de onde veio.</b></figcaption>
+  </figure>
+  <div class="sig animate" style="--i:5"><span class="lbl">Caminho crítico</span><p>A aresta verde é o que distingue os dois comportamentos. <strong>Uma query de profundidade 2 existe <em>porque</em> um resultado de profundidade 1 a levantou</strong> — antes, nada registrava por que uma query existia, então &ldquo;mais fundo&rdquo; e &ldquo;de novo&rdquo; eram indistinguíveis, e a única coisa que parava o loop era um contador de rodadas.</p></div>
   </section>
 
-  <!-- ================= GLOSSÁRIO (dobrado) ================= -->
-  <section class="seg animate" style="--i:12">
-    <div class="seg-head">
-      <span class="seg-num">＋</span>
-      <p class="eyebrow" style="margin:0">Referência</p>
+  <section class="seg">
+    <span class="seg-num">04</span>
+    <h2>A taxonomia de erro da Brave: o status HTTP não discrimina</h2>
+    <p>
+      A Brave responde <strong>422 tanto para uma chave inválida quanto para um parâmetro inválido</strong>.
+      A v7 classificava todo 422 como problema de autenticação — então um <code>--country zzz</code>
+      queimava a chave, rotacionava, queimava a próxima, e assim por todo o chaveiro. Queimas são
+      persistidas e só expiram na virada do mês.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th><code>error.code</code></th><th>HTTP</th><th>Significa</th><th>Queima a chave?</th></tr></thead>
+        <tbody>
+          <tr><td><code>SUBSCRIPTION_TOKEN_INVALID</code></td><td class="num">422</td><td>A chave está errada</td><td><span class="pill stop">sim</span></td></tr>
+          <tr><td><code>VALIDATION</code></td><td class="num">422</td><td>O parâmetro está errado</td><td><span class="pill go">não</span></td></tr>
+          <tr><td><code>OPTION_NOT_IN_PLAN</code></td><td class="num">400</td><td>O plano não inclui o recurso</td><td><span class="pill go">não</span></td></tr>
+          <tr><td><code>RATE_LIMITED</code></td><td class="num">429</td><td>Rápido demais neste segundo</td><td><span class="pill warn">cooldown</span></td></tr>
+        </tbody>
+      </table>
     </div>
-    <h2>Glossário (complemento)</h2>
-    <p class="seg-lead">Cada termo abaixo já foi definido no ponto em que apareceu; esta tabela é só um
-    resumo para consulta.</p>
-    <div class="seg-body">
-      <div class="table-scroll">
+    <div class="callout danger">
+      <p>
+        <strong>A armadilha que quase entrou no lugar do bug:</strong> o
+        <code>OPTION_NOT_IN_PLAN</code> também carrega <code>meta.component: "authentication"</code>
+        — com a chave perfeitamente boa. Branchear nesse campo, que era a alternativa óbvia, queimaria
+        chaves válidas na primeira vez que alguém tocasse num recurso fora do plano. Só o
+        <code>error.code</code> é seguro.
+      </p>
+    </div>
+    <details>
+      <summary>Como validar uma chave Brave de graça — e a evidência de que é grátis mesmo</summary>
+      <p>
+        Requisições que falham não são cobradas. Então a sondagem é uma requisição
+        <strong>sem <code>q</code></strong>: a chave boa e a chave ruim respondem ambas 422, e se
+        distinguem pelo <code>error.code</code> — <code>VALIDATION</code> significa que a chave foi
+        aceita e só faltou o parâmetro; <code>SUBSCRIPTION_TOKEN_INVALID</code> significa que ela foi
+        rejeitada.
+      </p>
+      <p>
+        Verificado com um A/B de 108 requisições deliberadamente falhas: o contador mensal não se moveu.
+        É isso que torna viável rodar o portão em <em>toda</em> invocação — com o veredito em cache por
+        7 dias no <code>keys.json</code>, o caminho comum nem sai da máquina.
+      </p>
+    </details>
+    <details>
+      <summary>Por que o portão é <code>surf doctor</code> e não <code>keys list</code></summary>
+      <ul>
+        <li><code>keys list</code> <strong>nunca</strong> sai 78: <code>keys</code> está em
+          <code>NO_KEYS_NEEDED</code>, então o gate é pulado. Um portão baseado nele passaria
+          exatamente no caso que deveria pegar.</li>
+        <li><code>--version</code> retorna antes do preflight — não prova nada sobre a chave.</li>
+        <li>Qualquer busca real gastaria quota para responder uma pergunta de configuração.</li>
+        <li><code>surf doctor</code> chama o gate de verdade, sai 78 sem chave válida, é offline no
+          caminho comum e mascara as chaves na saída.</li>
+      </ul>
+      <p>
+        Detalhe que vale saber: <code>surf doctor</code> sai <strong>1</strong> quando as skills
+        <em>do próprio surf</em> não estão symlinkadas em nenhum diretório de harness. Isso não afeta
+        os binários, que é tudo que a deep-orchestrator usa — por isso <strong>1 = prossiga</strong>.
+      </p>
+    </details>
+  </section>
+
+  <section class="seg">
+    <span class="seg-num">05</span>
+    <h2>O limitador que você não vê — e as suas duas chaves</h2>
+    <p>
+      A Brave conta requisições numa janela deslizante de 1 segundo, <strong>na chegada</strong>: o tempo
+      de processamento não conta, e uma requisição que falha já consumiu o slot. Não existe cabeçalho
+      <code>Retry-After</code> — o único sinal é <code>x-ratelimit-reset</code>.
+    </p>
+    <p>O que a máquina aprendeu sondando as suas duas chaves:</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Chave</th><th class="num">req/s</th><th class="num">Restante no mês</th><th>Plano</th></tr></thead>
+        <tbody>
+          <tr><td><code>keys.json #0</code></td><td class="num">50</td><td class="num">—</td><td>Search (pago)</td></tr>
+          <tr><td><code>keys.json #1</code> = <code>$BRAVE_API_KEY</code></td><td class="num">1</td><td class="num">117</td><td>legado &ldquo;Free&rdquo;</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Duas ordens de grandeza de diferença entre chaves da mesma conta. Por isso o surf <strong>aprende</strong>
+      o limite dos cabeçalhos de resposta em vez de assumir um valor, e começa conservador (1 req/s) até a
+      API dizer outra coisa.
+    </p>
+    <div class="callout">
+      <p>
+        <strong>Por que o limitador vive em disco.</strong> Os sub-agentes da deep-orchestrator são
+        processos separados do sistema operacional. Um semáforo em memória deixaria dez deles dispararem
+        N requisições cada no mesmo segundo — cada processo respeitando o próprio teto e o conjunto
+        estourando o da conta. O token bucket fica em <code>~/.cache/surf/ratelimit.json</code>,
+        compartilhado por todo processo <code>surf</code> da máquina.
+      </p>
+      <p>
+        Consequência direta: <strong>é proibido embrulhar uma chamada do surf em <code>sleep</code>,
+        jitter, backoff ou retry.</strong> Um ritmo por cima briga com o limitador e provoca justamente
+        o 429 que ele evita — que é exatamente o que o <code>search-parallel.sh</code> fazia, em três
+        camadas empilhadas.
+      </p>
+    </div>
+  </section>
+
+  <section class="seg">
+    <span class="seg-num">06</span>
+    <h2>Os dois orçamentos de paralelismo somam — porque um divide o outro</h2>
+    <p>
+      A deep-orchestrator tem <code>DO_MAX_PARALLEL</code> (default 50). O surf tem
+      <code>--sub-agents</code> (default 10). São botões diferentes sobre o <em>mesmo</em> orçamento de
+      máquina, e essa é a parte nova que morde se passar despercebida.
+    </p>
+  <figure class="animate" style="--i:6">
+    <section class="diagram-shell" role="img" aria-label="Fluxograma comparando dois caminhos: sem divisão, 50 sub-agentes com o default 10 produzem 500 buscas simultâneas e uma tempestade de 429; com a divisão max de 1 e o piso de N sobre R, a soma da onda nunca passa de N">
+      <p class="diagram-shell__hint">Ctrl/Cmd + roda para dar zoom &middot; arraste para deslocar &middot; duplo clique para reenquadrar</p>
+      <div class="mermaid-wrap">
+        <div class="zoom-controls">
+          <button type="button" data-action="zoom-in" title="Aproximar">+</button>
+          <button type="button" data-action="zoom-out" title="Afastar">&minus;</button>
+          <button type="button" data-action="zoom-fit" title="Reenquadrar">&#8634;</button>
+          <button type="button" data-action="zoom-one" title="Zoom 1:1">1:1</button>
+          <button type="button" data-action="zoom-expand" title="Abrir em tamanho real">&#x26F6;</button>
+          <span class="zoom-label">Carregando&hellip;</span>
+        </div>
+        <div class="mermaid-viewport"><div class="mermaid mermaid-canvas"></div></div>
+      </div>
+      <script type="text/plain" class="diagram-source">
+flowchart TD
+  X["onda com R sub-agentes que pesquisam"]
+  X -->|"se ninguém divide o teto"| Y["cada um usa o default 10"]
+  Y -->|"os tetos MULTIPLICAM"| Y2["50 x 10 = 500 buscas simultâneas"]
+  Y2 -->|"plano serve 1 por segundo"| Y3["tempestade de 429"]
+  X -->|"o orquestrador divide na FASE 2"| Z["cada um recebe max(1, floor(N/R))"]:::crit
+  Z -->|"os tetos SOMAM"| Z2["R x floor(N/R) menor ou igual a N"]
+  Z2 -->|"cabe no plano"| Z3["o limitador enfileira o excedente"]
+  classDef crit fill:%%OK_BG%%,stroke:%%OK_ST%%,color:%%OK_FG%%,stroke-width:3px
+      </script>
+    </section>
+    <figcaption><b>Figura 4 — Os dois tetos somam porque um é dividido pelo outro, não multiplicado.</b></figcaption>
+  </figure>
+  <div class="sig animate" style="--i:6"><span class="lbl">Caminho crítico</span><p>O nó verde é a fórmula que o SKILL.md agora exige na FASE 2. <strong>Com N=10 e uma rajada de 5, cada sub-agente recebe <code>--sub-agents=2</code> — a soma da onda é 10, nunca 50.</strong> O orquestrador também passa a limitar <code>R ≤ N</code> ao planejar, senão <code>floor(N/R)</code> colapsa em 1 e cada pesquisa vira uma query por vez.</p></div>
+
+    <p>
+      O prefixo <code>surf-sub-agents=N</code> na invocação define o teto global (1..20). O surf rejeita
+      valores fora dessa faixa com exit 2, então a skill valida antes de colar o número no prompt.
+    </p>
+  </section>
+
+  <section class="seg">
+    <span class="seg-num">07</span>
+    <h2>O que ficou impossível de propósito</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Deixou de ser possível</th><th>O que a skill faz no lugar</th></tr></thead>
+        <tbody>
+          <tr><td>Pesquisar sem chave Brave válida</td><td>Portão na FASE 0 e por onda. Com pesquisa exigida: para, pede <code>surf</code>, aguarda. Sem pesquisa exigida: registra e segue.</td></tr>
+          <tr><td>Modo degradado / &ldquo;qualidade reduzida&rdquo;</td><td>Só há dois estados. O <code>exit 1</code> do surf passa a significar &ldquo;rodou e não achou&rdquo; — registrar e seguir, nunca perguntar.</td></tr>
+          <tr><td>Ler o corpo de uma página pelo buscador</td><td>A Brave é SERP. Formular a pergunta para caber no trecho; se o fato depender do corpo, abrir com <code>Read</code>/<code>WebFetch</code> uma URL <em>que o surf devolveu</em> e marcar isso no handoff.</td></tr>
+          <tr><td>Descobrir fonte por <code>WebSearch</code></td><td>Proibido. Fonte fora do surf não entra no ledger, não recebe número de citação e não pode ser auditada.</td></tr>
+          <tr><td>Ritmo próprio (jitter, backoff, retry)</td><td>Nenhum. O limitador do surf é a única cadência.</td></tr>
+          <tr><td>Dedup entre queries de um lote + cache intra-run</td><td>UMA chamada <code>surf-search-normal</code> com brief: o LLM planeja o conjunto, a onda roda até <code>--sub-agents</code> em paralelo e o ledger dedupa canonicamente por URL.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <details>
+      <summary>As flags que morreram e o que usar no lugar</summary>
+      <div class="tablewrap">
         <table>
-          <thead>
-            <tr><th>Termo</th><th>Definição</th></tr>
-          </thead>
+          <thead><tr><th>Queria</th><th>Use</th></tr></thead>
           <tbody>
-            <tr><td><code>skill</code></td><td>instruções que um agente de IA segue para executar uma tarefa</td></tr>
-            <tr><td><code>auto-evolução</code></td><td>a skill altera as próprias skills instaladas a partir do que aprendeu em execuções passadas</td></tr>
-            <tr><td><code>LEARNINGS.md</code></td><td>arquivo da skill onde os aprendizados são registrados em formato que o motor lê</td></tr>
-            <tr><td><code>Onda</code></td><td>grupo de sub-agentes trabalhando em paralelo numa mesma fase, cada um na sua worktree</td></tr>
-            <tr><td><code>sub-agente</code></td><td>agente de IA que roda em contexto próprio, disparado pelo orquestrador</td></tr>
-            <tr><td><code>worktree</code></td><td>cópia isolada do repositório onde um sub-agente trabalha sem colidir com os outros</td></tr>
-            <tr><td><code>CLI</code></td><td>programa de linha de comando; aqui, os 6 comandos add/search/diff/apply/consolidate/status</td></tr>
-            <tr><td><code>append-only</code></td><td>o add só anexa ao arquivo, nunca reescreve o que já existe</td></tr>
-            <tr><td><code>anti-poisoning</code></td><td>guardas que impedem conteúdo não confiável de virar regra da skill</td></tr>
-            <tr><td><code>secret_scan</code></td><td>varredura que rejeita o lote inteiro se achar padrão de credencial, sem imprimir o valor</td></tr>
-            <tr><td><code>allowlist</code></td><td>lista fechada dos arquivos que o motor tem permissão de alterar</td></tr>
-            <tr><td><code>flock</code></td><td>trava de arquivo que impede duas execuções simultâneas de corromper a memória</td></tr>
-            <tr><td><code>dry-run</code></td><td>rodar o motor só mostrando o que mudaria, sem aplicar nada</td></tr>
-            <tr><td><code>superseded</code></td><td>entrada antiga marcada como superada quando uma nova a contradiz; nunca é apagada</td></tr>
-            <tr><td><code>orçamento</code></td><td>limite de tamanho da memória: ≤100 linhas ativas e arquivo ≤400</td></tr>
-            <tr><td><code>semver</code></td><td>versionamento semântico MAJOR.MINOR.PATCH; 3.6.0→3.7.0 é MINOR (capacidade nova)</td></tr>
-            <tr><td><code>gate</code></td><td>verificação obrigatória (testes/lint) que a onda precisa passar para ser integrada</td></tr>
-            <tr><td><code>asserção</code></td><td>checagem automática que falha se a condição esperada não vale</td></tr>
-            <tr><td><code>revisão adversarial</code></td><td>revisão que procura ativamente erros no diff antes de integrar</td></tr>
-            <tr><td><code>veredito</code></td><td>resultado da revisão: BLOCK (reprovado), WARNING (aprovado com achados) ou VERDE (aprovado)</td></tr>
-            <tr><td><code>squash-merge</code></td><td>integrar os commits de uma onda como um único commit</td></tr>
+            <tr><td><code>--count N</code></td><td><code>--max N</code> (1..20) ou <code>--search-mode fast|normal|slow</code> (5/10/20)</td></tr>
+            <tr><td><code>--max-evolutions N</code></td><td><code>--max-rounds N</code>, só em <code>surf-search-unlimit</code></td></tr>
+            <tr><td><code>--dev-mode</code></td><td>escreva no <code>--task</code>/<code>--goal</code> que o alvo é documentação técnica</td></tr>
+            <tr><td><code>--domain</code></td><td>tempere o brief; ou <code>--domains a.com,b.com</code> no caminho cru <code>surf-research-skill search</code></td></tr>
           </tbody>
         </table>
       </div>
+      <p>
+        Nota sobre datas, que também mudou: o surf passou a usar <code>page_age</code> (ISO-8601) e não
+        <code>age</code> (&ldquo;2 days ago&rdquo;). A string humana ia direto para um prompt que exige
+        rigor de datas; agora ela sobrevive como <code>age_text</code>, só para saída humana.
+      </p>
+    </details>
+  </section>
+
+  <section class="seg">
+    <span class="seg-num">08</span>
+    <h2>O bônus: a chave em texto puro</h2>
+    <p>
+      Ao desenhar o portão, a auditoria esbarrou num defeito do próprio surf:
+      <code>surf-research-skill keys list --json</code> imprimia <strong>todas as chaves em texto
+      puro</strong>. A listagem legível sempre mascarou; a forma JSON, não.
+    </p>
+    <p>
+      Essa assimetria pesa mais aqui do que numa CLI comum. O pacote existe para ser dirigido por
+      agentes, e saída de agente vai para transcript, arquivo de handoff e TASK_PLAN.md — que depois
+      são relidos, commitados ou colados num chat. Um <code>keys list --json</code> registrado em log
+      era um caminho completo de exfiltração, sem nenhum aviso na saída.
+    </p>
+    <p>
+      Corrigido em <strong>8.0.1</strong>: <code>--json</code> mascara por padrão e acrescenta
+      <code>key_count</code>; os campos <code>burned</code>, <code>cooldowns</code> e
+      <code>validated</code> continuam intactos, então quem lê o formato do estado não quebra. Existe
+      <code>--unsafe-show-keys</code> para optar de volta — o nome é deliberadamente desconfortável
+      dentro de um script. A regra R7 do SKILL.md agora <em>proíbe</em> o comando como diagnóstico.
+    </p>
+  </section>
+
+  <section class="seg">
+    <span class="seg-num">09</span>
+    <h2>O que está publicado</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Repositório</th><th>Versão</th><th>Onde</th><th>Suítes</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>surf-agent-skill</td>
+            <td><code>8.0.1</code></td>
+            <td>npm (<code>latest</code>) &middot; <code>main</code> &middot; tags <code>v8.0.0</code>, <code>v8.0.1</code></td>
+            <td class="num">255 asserções</td>
+          </tr>
+          <tr>
+            <td>deep-orchestrator-agent-skill</td>
+            <td><code>4.0.0</code></td>
+            <td><code>main</code> &middot; tag <code>v4.0.0</code></td>
+            <td class="num">347 asserções</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      As suítes da deep-orchestrator que não têm relação com busca continuam verdes sem alteração
+      (contenção 85, evolução 78, portão de plano 138), e a suíte nova
+      <code>scripts/test-surf-gate.sh</code> (46) substitui a <code>test-search.sh</code>: testa os
+      quatro estados do portão, a aritmética que faz os tetos somarem, e uma regressão de arquitetura
+      que falha se qualquer coisa voltar a <em>invocar</em> o sistema removido.
+    </p>
+    <p>
+      O portão foi verificado ponta a ponta nesta máquina: <code>surf doctor</code> sai
+      <strong>0</strong> normalmente e <strong>78</strong> com <code>HOME</code> isolado — ou seja, o
+      ramo de parada é alcançável, não é código morto.
+    </p>
+    <div class="callout">
+      <p>
+        <strong>Caminho de upgrade que ficou registrado, mas não implementado:</strong> a Brave tem
+        desde fevereiro de 2026 um endpoint <code>/res/v1/llm/context</code> que devolve
+        <em>conteúdo de página já extraído</em>, no mesmo plano e no mesmo preço. Ele resolveria a
+        limitação de SERP e o verbo <code>extract</code> removido. Não foi usado porque a sua chave
+        responde <code>HTTP 400 OPTION_NOT_IN_PLAN</code> — está documentado em
+        <code>references/brave-api.md</code> como o próximo passo se o plano mudar.
+      </p>
     </div>
   </section>
 
-  <!-- ================= RODAPÉ ================= -->
   <footer>
-    <p>Válido para: <strong>deep-orchestrator-agent-skill v3.7.0</strong> · execução de 2026-08-23 (run 20260823-201254-3660430).</p>
-    <p>Fonte: <code>.deep-orchestrator/run-20260823-201254-3660430/explainer/fatos.md</code> — nenhum fato, número, decisão ou veredito foi inventado; o repositório serviu apenas como contexto de nomenclatura.</p>
-    <p>Gerado pelo fluxo html-explainer-agent-skill → plannotator-visual-explainer (rota visual explainer).</p>
+    <p>
+      Decisão <strong>D23</strong> em
+      <code>docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md</code>.
+      Os registros anteriores que ela inverte (<code>RESEARCH_PLAN.md</code> rejeitando &ldquo;Brave
+      como única API&rdquo;, <code>RESEARCH_ANSWER.md</code> prescrevendo Adapter+RRF) foram
+      preservados sem edição — são datados de 2026-08-03 e a inversão é deliberada.
+    </p>
+    <p>
+      Conteúdo válido para surf-agent-skill <strong>8.0.1</strong> e deep-orchestrator-agent-skill
+      <strong>4.0.0</strong>, apurado em <strong>2026-08-29</strong>. Preços, limites de taxa e
+      recursos por plano da Brave mudaram várias vezes nos sete meses anteriores — reconfira antes
+      de depender deles.
+    </p>
   </footer>
 
 </div>
 
 <script type="module">
+
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  import elkLayouts from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk/dist/mermaid-layout-elk.esm.min.mjs';
 
   const config = {
     fitPadding: 28,
     minHeight: 360,
-    maxHeightPx: 900,
+    maxHeightPx: 960,
     maxHeightVh: 0.84,
     maxInitialZoom: 1.8,
     minZoom: 0.08,
@@ -1101,58 +926,57 @@ flowchart TD
   };
 
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
   let activeDrag = null;
+
   addEventListener('mousemove', (e) => activeDrag?.onMove(e));
-  addEventListener('mouseup', () => { activeDrag?.onEnd(); activeDrag = null; });
+  addEventListener('mouseup', () => {
+    activeDrag?.onEnd();
+    activeDrag = null;
+  });
 
-  const mqDark = matchMedia('(prefers-color-scheme: dark)');
-  const isDark = () => mqDark.matches;
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
 
-  // Paletas literais do Plannotator (theme-override) — hex, legíveis nas duas paletas.
-  function palette(dark) {
-    return dark
-      ? {
-          darkMode: true,
-          primaryColor: '#1e242e',
-          primaryTextColor: '#dadee5',
-          primaryBorderColor: '#343b45',
-          lineColor: '#9da5b2',
-          secondaryColor: '#1e242e',
-          secondaryTextColor: '#dadee5',
-          tertiaryColor: '#1e242e',
-          tertiaryTextColor: '#dadee5',
-          background: '#070b14',
-          edgeLabelBackground: '#10151d',
-          labelTextColor: '#c7ccd4'
-        }
-      : {
-          primaryColor: '#5537eb',
-          primaryTextColor: '#ffffff',
-          primaryBorderColor: '#d4d8de',
-          lineColor: '#414853',
-          secondaryColor: '#e1e5eb',
-          secondaryTextColor: '#414853',
-          tertiaryColor: '#e1e5eb',
-          tertiaryTextColor: '#414853',
-          background: '#f3f5f9',
-          edgeLabelBackground: '#5537eb',
-          labelTextColor: '#414853'
-        };
-  }
+  // Mermaid needs concrete colors, so the Plannotator tokens are resolved to hex
+  // here. Every pair below was picked for contrast in its own scheme: light fills
+  // carry near-black text, dark fills carry near-white text. `crit` is the
+  // signalled node of each figure (R4) and is substituted into the source below.
+  const PAL = isDark ? {
+    p:'#2e1065', pb:'#a78bfa', pt:'#ede9fe',
+    s:'#083344', sb:'#22d3ee', st:'#cffafe',
+    t:'#451a03', tb:'#f59e0b', tt:'#fde68a',
+    line:'#9aa0b4',
+    critBg:'#4c0519', critSt:'#fb7185', critFg:'#ffe4e6',
+    okBg:'#052e16', okSt:'#4ade80', okFg:'#dcfce7',
+    wasBg:'#1c1917', wasSt:'#78716c', wasFg:'#d6d3d1',
+    nowBg:'#0b1220', nowSt:'#4ade80', nowFg:'#dcfce7'
+  } : {
+    p:'#ede9fe', pb:'#6d28d9', pt:'#2e1065',
+    s:'#cffafe', sb:'#0e7490', st:'#083344',
+    t:'#fef3c7', tb:'#b45309', tt:'#451a03',
+    line:'#6b7280',
+    critBg:'#ffe4e6', critSt:'#be123c', critFg:'#4c0519',
+    okBg:'#dcfce7', okSt:'#15803d', okFg:'#052e16',
+    wasBg:'#f5f5f4', wasSt:'#a8a29e', wasFg:'#44403c',
+    nowBg:'#f0fdf4', nowSt:'#15803d', nowFg:'#14532d'
+  };
 
-  function initMermaid() {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'base',
-      look: 'classic',
-      themeVariables: {
-        ...palette(isDark()),
-        fontFamily: "'Inter', system-ui, sans-serif",
-        fontSize: '14px'
-      }
-    });
-  }
-  initMermaid();
+  mermaid.registerLayoutLoaders(elkLayouts);
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    look: 'classic',
+    layout: 'elk',
+    themeVariables: {
+      fontFamily: "'Inter', system-ui, sans-serif",
+      fontSize: '16px',
+      primaryColor: PAL.p, primaryBorderColor: PAL.pb, primaryTextColor: PAL.pt,
+      secondaryColor: PAL.s, secondaryBorderColor: PAL.sb, secondaryTextColor: PAL.st,
+      tertiaryColor: PAL.t, tertiaryBorderColor: PAL.tb, tertiaryTextColor: PAL.tt,
+      lineColor: PAL.line,
+      noteBkgColor: PAL.t, noteTextColor: PAL.tt, noteBorderColor: PAL.tb,
+    }
+  });
 
   const rerenderers = [];
 
@@ -1161,47 +985,92 @@ flowchart TD
     const viewport = shell.querySelector('.mermaid-viewport');
     const canvas = shell.querySelector('.mermaid-canvas');
     const source = shell.querySelector('.diagram-source');
+    if (source && source.textContent.includes('%%')) {
+      source.textContent = source.textContent
+        .replace(/%%CRIT_BG%%/g, PAL.critBg).replace(/%%CRIT_ST%%/g, PAL.critSt)
+        .replace(/%%CRIT_FG%%/g, PAL.critFg)
+        .replace(/%%OK_BG%%/g, PAL.okBg).replace(/%%OK_ST%%/g, PAL.okSt)
+        .replace(/%%OK_FG%%/g, PAL.okFg)
+        .replace(/%%WAS_BG%%/g, PAL.wasBg).replace(/%%WAS_ST%%/g, PAL.wasSt)
+        .replace(/%%WAS_FG%%/g, PAL.wasFg)
+        .replace(/%%NOW_BG%%/g, PAL.nowBg).replace(/%%NOW_ST%%/g, PAL.nowSt)
+        .replace(/%%NOW_FG%%/g, PAL.nowFg);
+    }
     const label = shell.querySelector('.zoom-label');
-    if (!wrap || !viewport || !canvas || !source || !label) return;
+
+    if (!wrap || !viewport || !canvas || !source || !label) {
+      console.error('initDiagram: missing required elements in', shell);
+      return;
+    }
 
     let zoom = 1;
     let fitMode = 'contain';
-    let panX = 0, panY = 0, svgW = 0, svgH = 0;
-    let sx = 0, sy = 0, spx = 0, spy = 0;
-    let touchDist = 0, touchCx = 0, touchCy = 0;
+    let panX = 0;
+    let panY = 0;
+    let svgW = 0;
+    let svgH = 0;
+
+    let sx = 0;
+    let sy = 0;
+    let spx = 0;
+    let spy = 0;
+
+    let touchDist = 0;
+    let touchCx = 0;
+    let touchCy = 0;
 
     function constrainPan() {
-      const vpW = viewport.clientWidth, vpH = viewport.clientHeight;
-      const rW = svgW * zoom, rH = svgH * zoom, pad = config.fitPadding;
-      panX = (rW + pad * 2 <= vpW) ? (vpW - rW) / 2 : clamp(panX, vpW - rW - pad, pad);
-      panY = (rH + pad * 2 <= vpH) ? (vpH - rH) / 2 : clamp(panY, vpH - rH - pad, pad);
+      const vpW = viewport.clientWidth;
+      const vpH = viewport.clientHeight;
+      const rW = svgW * zoom;
+      const rH = svgH * zoom;
+      const pad = config.fitPadding;
+
+      panX = (rW + pad * 2 <= vpW)
+        ? (vpW - rW) / 2
+        : clamp(panX, vpW - rW - pad, pad);
+      panY = (rH + pad * 2 <= vpH)
+        ? (vpH - rH) / 2
+        : clamp(panY, vpH - rH - pad, pad);
     }
 
     function applyTransform() {
       const svg = canvas.querySelector('svg');
       if (!svg || !svgW) return;
+
       constrainPan();
       svg.style.width = (svgW * zoom) + 'px';
       svg.style.height = (svgH * zoom) + 'px';
       canvas.style.transform = `translate(${panX}px, ${panY}px)`;
-      label.textContent = Math.round(zoom * 100) + '% — ' + fitMode;
+      label.textContent = Math.round(zoom * 100) + '% \u2014 ' + fitMode;
     }
 
     function canPan() {
-      return svgW * zoom + config.fitPadding * 2 > viewport.clientWidth
-          || svgH * zoom + config.fitPadding * 2 > viewport.clientHeight;
+      const rW = svgW * zoom;
+      const rH = svgH * zoom;
+      return rW + config.fitPadding * 2 > viewport.clientWidth
+          || rH + config.fitPadding * 2 > viewport.clientHeight;
     }
 
     function computeSmartFit() {
-      const vpW = viewport.clientWidth, vpH = viewport.clientHeight;
+      const vpW = viewport.clientWidth;
+      const vpH = viewport.clientHeight;
       const aW = Math.max(80, vpW - config.fitPadding * 2);
       const aH = Math.max(80, vpH - config.fitPadding * 2);
       const contain = Math.min(aW / svgW, aH / svgH);
-      let z = contain, mode = 'contain';
+
+      let z = contain;
+      let mode = 'contain';
       if (contain < config.readabilityFloor) {
-        const chartR = svgH / svgW, vpR = vpH / Math.max(vpW, 1);
-        z = (chartR >= vpR) ? aW / svgW : aH / svgH;
-        mode = (chartR >= vpR) ? 'width-priority' : 'height-priority';
+        const chartR = svgH / svgW;
+        const vpR = vpH / Math.max(vpW, 1);
+        if (chartR >= vpR) {
+          z = aW / svgW;
+          mode = 'width-priority';
+        } else {
+          z = aH / svgH;
+          mode = 'height-priority';
+        }
       }
       return { zoom: clamp(z, config.minZoom, config.maxInitialZoom), mode };
     }
@@ -1209,14 +1078,16 @@ flowchart TD
     function fitDiagram() {
       if (!svgW) return;
       const fit = computeSmartFit();
-      zoom = fit.zoom; fitMode = fit.mode;
+      zoom = fit.zoom;
+      fitMode = fit.mode;
       panX = (viewport.clientWidth - svgW * zoom) / 2;
       panY = (viewport.clientHeight - svgH * zoom) / 2;
       applyTransform();
     }
 
     function setOneToOne() {
-      zoom = clamp(1, config.minZoom, config.maxZoom); fitMode = '1:1';
+      zoom = clamp(1, config.minZoom, config.maxZoom);
+      fitMode = '1:1';
       panX = (viewport.clientWidth - svgW * zoom) / 2;
       panY = (viewport.clientHeight - svgH * zoom) / 2;
       applyTransform();
@@ -1227,17 +1098,35 @@ flowchart TD
       const ratio = next / zoom;
       panX = cx - ratio * (cx - panX);
       panY = cy - ratio * (cy - panY);
-      zoom = next; fitMode = 'custom';
+      zoom = next;
+      fitMode = 'custom';
       applyTransform();
     }
 
     function readSvgNaturalSize(svg) {
-      let w = 0, h = 0;
-      if (svg.viewBox?.baseVal?.width > 0) { w = svg.viewBox.baseVal.width; h = svg.viewBox.baseVal.height; }
-      if (!w) { w = parseFloat(svg.getAttribute('width')) || 0; h = parseFloat(svg.getAttribute('height')) || 0; }
-      if (!w) { const b = svg.getBBox(); w = b.width; h = b.height; }
-      if (!w) { const r = svg.getBoundingClientRect(); w = r.width || 1000; h = r.height || 700; }
-      if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      let w = 0;
+      let h = 0;
+      if (svg.viewBox?.baseVal?.width > 0) {
+        w = svg.viewBox.baseVal.width;
+        h = svg.viewBox.baseVal.height;
+      }
+      if (!w) {
+        w = parseFloat(svg.getAttribute('width')) || 0;
+        h = parseFloat(svg.getAttribute('height')) || 0;
+      }
+      if (!w) {
+        const b = svg.getBBox();
+        w = b.width;
+        h = b.height;
+      }
+      if (!w) {
+        const r = svg.getBoundingClientRect();
+        w = r.width || 1000;
+        h = r.height || 700;
+      }
+      if (!svg.getAttribute('viewBox')) {
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      }
       return { w, h };
     }
 
@@ -1253,43 +1142,65 @@ flowchart TD
     function openInNewTab() {
       const svg = canvas.querySelector('svg');
       if (!svg) return;
+
       const clone = svg.cloneNode(true);
-      clone.style.width = ''; clone.style.height = '';
-      const bg = getComputedStyle(document.documentElement).getPropertyValue('--background').trim()
-        || (isDark() ? '#070b14' : '#f3f5f9');
-      const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+      clone.style.width = '';
+      clone.style.height = '';
+
+      // Mermaid derives clusterBkg and tertiaryColor from --bg, so the export
+      // has to read it live to sit on the same ground as the diagram.
+      const bg = getComputedStyle(document.documentElement)
+        .getPropertyValue('--bg').trim() || (isDark ? '#042f2e' : '#f0fdfa');
+
+      const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Diagrama — auto-evolução v3.7.0</title><style>
+      <title>Diagram</title><style>
       body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
       background:${bg};padding:40px;box-sizing:border-box}
       svg{max-width:100%;max-height:90vh;height:auto}
       </style></head><body>${clone.outerHTML}</body></html>`;
+
       open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank');
     }
 
     async function render() {
       try {
         const code = source.textContent.trim();
-        if (!code) { label.textContent = 'Erro: fonte vazia'; return; }
+        if (!code) {
+          label.textContent = 'Error: Empty source';
+          return;
+        }
+
         const id = 'diagram-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
         const { svg } = await mermaid.render(id, code);
         const parsed = new DOMParser().parseFromString(svg, 'text/html');
         const parsedSvg = parsed.body.querySelector('svg');
-        if (!parsedSvg) { label.textContent = 'Erro: sem SVG'; return; }
+        if (!parsedSvg) {
+          label.textContent = 'Error: No SVG';
+          return;
+        }
         canvas.replaceChildren(document.adoptNode(parsedSvg));
+
         const svgNode = canvas.querySelector('svg');
-        if (!svgNode) { label.textContent = 'Erro: sem SVG'; return; }
+        if (!svgNode) {
+          label.textContent = 'Error: No SVG';
+          return;
+        }
+
         const size = readSvgNaturalSize(svgNode);
-        svgW = size.w; svgH = size.h;
+        svgW = size.w;
+        svgH = size.h;
+
         svgNode.removeAttribute('width');
         svgNode.removeAttribute('height');
         svgNode.style.maxWidth = 'none';
         svgNode.style.display = 'block';
+
         setAdaptiveHeight();
         fitDiagram();
       } catch (err) {
         console.error('Mermaid render failed:', err);
-        label.textContent = 'Erro: ' + (err.message || 'render falhou');
+        label.textContent = 'Error: ' + (err.message || 'Render failed');
       }
     }
 
@@ -1300,6 +1211,7 @@ flowchart TD
       'zoom-one': setOneToOne,
       'zoom-expand': openInNewTab
     };
+
     Object.entries(actions).forEach(([action, handler]) => {
       wrap.querySelector(`[data-action="${action}"]`)?.addEventListener('click', handler);
     });
@@ -1316,7 +1228,8 @@ flowchart TD
       }
       if (canPan()) {
         e.preventDefault();
-        panX -= e.deltaX; panY -= e.deltaY;
+        panX -= e.deltaX;
+        panY -= e.deltaY;
         applyTransform();
       }
     }, { passive: false });
@@ -1324,17 +1237,30 @@ flowchart TD
     viewport.addEventListener('mousedown', (e) => {
       if (e.target.closest('.zoom-controls') || !canPan()) return;
       wrap.classList.add('is-panning');
-      sx = e.clientX; sy = e.clientY; spx = panX; spy = panY;
+      sx = e.clientX;
+      sy = e.clientY;
+      spx = panX;
+      spy = panY;
       e.preventDefault();
+
       activeDrag = {
-        onMove: (ev) => { panX = spx + (ev.clientX - sx); panY = spy + (ev.clientY - sy); applyTransform(); },
-        onEnd: () => wrap.classList.remove('is-panning')
+        onMove: (ev) => {
+          panX = spx + (ev.clientX - sx);
+          panY = spy + (ev.clientY - sy);
+          applyTransform();
+        },
+        onEnd: () => {
+          wrap.classList.remove('is-panning');
+        }
       };
     });
 
     viewport.addEventListener('touchstart', (e) => {
       if (e.touches.length === 1) {
-        sx = e.touches[0].clientX; sy = e.touches[0].clientY; spx = panX; spy = panY;
+        sx = e.touches[0].clientX;
+        sy = e.touches[0].clientY;
+        spx = panX;
+        spy = panY;
       } else if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -1348,8 +1274,11 @@ flowchart TD
     viewport.addEventListener('touchmove', (e) => {
       if (e.touches.length === 1 && canPan()) {
         if (touchDist > 0) {
-          sx = e.touches[0].clientX; sy = e.touches[0].clientY;
-          spx = panX; spy = panY; touchDist = 0;
+          sx = e.touches[0].clientX;
+          sy = e.touches[0].clientY;
+          spx = panX;
+          spy = panY;
+          touchDist = 0;
         }
         e.preventDefault();
         panX = spx + (e.touches[0].clientX - sx);
@@ -1365,7 +1294,12 @@ flowchart TD
       }
     }, { passive: false });
 
-    new ResizeObserver(() => { if (svgW) { setAdaptiveHeight(); fitDiagram(); } }).observe(wrap);
+    new ResizeObserver(() => {
+      if (svgW) {
+        setAdaptiveHeight();
+        fitDiagram();
+      }
+    }).observe(wrap);
 
     rerenderers.push(render);
     render();
@@ -1373,12 +1307,10 @@ flowchart TD
 
   document.querySelectorAll('.diagram-shell').forEach(initDiagram);
 
-  // Re-render ao trocar o esquema de cor (Mermaid grava as cores no SVG na renderização).
-  mqDark.addEventListener('change', () => {
-    initMermaid();
-    Promise.all(rerenderers.map((r) => r()));
-  });
-</script>
+  // Mermaid bakes colors into the SVG at render time, so a page that swaps the
+  // palette at runtime must re-render every diagram to follow it.
+  window.rerenderDiagrams = () => Promise.all(rerenderers.map((render) => render()));
 
+</script>
 </body>
 </html>
