@@ -1,3 +1,10 @@
+> **Relatório histórico da v3.6.0.** O assert `f` (check-install.sh exit 0) e o
+> assert `i` referenciam scripts de busca REMOVIDOS na v4.0.0
+> (`search.sh`, `search-parallel.sh`, `check-search-credits.sh`); as
+> referências de linha do assert `i` para o SKILL.md também já haviam derivado
+> antes disso. Re-executar exige a suíte nova (`scripts/test-surf-gate.sh`).
+> Ver `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md`.
+
 # TEST REPORT — Novo fluxo de geração do EXPLAINER.html (v3.6.0)
 
 - **Sub-agente de testes:** testing subwave (onda 2) — `test-onda2-mock-explainer`

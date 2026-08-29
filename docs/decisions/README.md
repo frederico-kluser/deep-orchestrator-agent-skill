@@ -12,12 +12,12 @@ busca 3-tier do repo substitui a arquitetura D2 do research, que era Adapter +
 RRF + Tavily/Exa), e nada no repositório referenciava o material. A migração
 (F4-05, 2026-08-14) preserva o raciocínio com o status real de cada decisão.
 
-## Status por decisão (conferido em 2026-08-14)
+## Status por decisão (conferido em 2026-08-14; D2 reconferida em 2026-08-29)
 
 | Decisão | Status na v3.2 real | Observação |
 |---|---|---|
 | D1 — Router de modelos 3-tier (Qwen3-Coder → DeepSeek V4-Flash → Claude) | NÃO implementada | Sem `config/router.yaml` nem módulo de roteamento no repo; a seleção de modelo continua externa (harness do usuário). As menções a "router" no repo são o project-router de repositórios-alvo, conceito distinto |
-| D2 — Busca multi-provider (Adapter + RRF k=60 + Tavily/Exa) | SUPERADA pela v3.2 real | A v3.2 implementou a cadeia 3-tier interna (surf-agent-skill → Brave Search API → DuckDuckGo keyless) via `scripts/search.sh` + `scripts/search-parallel.sh` — arquitetura diferente, sem Tavily/Exa nem RRF, e sem provedor novo (decisão D3 do plano de melhorias) |
+| D2 — Busca multi-provider (Adapter + RRF k=60 + Tavily/Exa) | SUPERADA pela v3.2 real | A v3.2 implementou a cadeia 3-tier interna (surf-agent-skill → Brave Search API → DuckDuckGo keyless) via `scripts/search.sh` + `scripts/search-parallel.sh` — arquitetura diferente, sem Tavily/Exa nem RRF, e sem provedor novo (decisão D3 do plano de melhorias) — **SUPERADA de novo em 2026-08-29 (D23)**: a cadeia 3-tier foi REMOVIDA; a pesquisa é 100% surf-agent-skill v8 (Brave-only), e sem chave válida a execução para com exit 78. Ver `2026-08-29-surf-agent-skill-obrigatorio.md` |
 | D3 — Loop de qualidade nativo (testing subwaves assíncronas + adversarial) | IMPLEMENTADA (núcleo) | Subwaves assíncronas TESTING (`test-ondaN-*`) e VALIDATION (`val-ondaN-*`) + revisão adversarial do diff integrado, tudo no fluxo da skill; jury cross-vendor (parte v4 do plano) não |
 | D4 — Handoff híbrido schema v1 (frontmatter + markdown + trace bruto) | PARCIAL | Handoffs estruturados e separação de planos existem no fluxo; o schema v1 com frontmatter YAML parseável + trace bruto anexado não foi adotado integralmente (sem WAVE_LOG.md na skill) |
 | D5 — Plataforma de skills (SKILL.md + AGENTS.md dual) | PARCIAL | O formato SKILL.md foi adotado (este repositório é o exemplo, com frontmatter YAML e restrição de tools); o AGENTS.md dual não existe no repo |
@@ -27,11 +27,12 @@ RRF + Tavily/Exa), e nada no repositório referenciava o material. A migração
 ## Pendências do research e destino
 
 - **Pendência da linha 39 do RESEARCH_ANSWER.md (correção da Brave):**
-  aplicada em 2026-08-14 durante a migração — a Brave é **METERED**: o plano
-  gratuito (~$5/mês) foi encerrado em fev/2026 e o uso que excede a cota
-  gratuita gera cobrança real (pay-as-you-go). O README da raiz ainda traz a
-  afirmação antiga (linha 111); a correção dele está fora do escopo desta
-  migração.
+  **ENCERRADA em 2026-08-29 (D23).** A Brave deixou de ser gerida por esta
+  skill: chave, validação, metering e rate limiting passaram todos para a
+  surf-agent-skill v8. O único sinal que consumimos é o exit 78 ("não há chave
+  Brave válida"). O ponteiro para "README linha 111" já estava quebrado por
+  deriva de linha, e a afirmação que ele apontava deixou de ser desta skill.
+  Ver `2026-08-29-surf-agent-skill-obrigatorio.md`.
 - **Artefatos de execução** (EXPLAINER.html) não pertencem a este diretório —
   ver `.gitignore` da raiz (decisão F4-05).
 
