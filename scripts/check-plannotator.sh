@@ -2,7 +2,7 @@
 # =============================================================================
 # check-plannotator.sh — Verifica (e opcionalmente instala) o Plannotator
 # -----------------------------------------------------------------------------
-# Verificador pré-fase do orquestrador, análogo ao check-search-credits.sh: diz
+# Verificador pré-fase do orquestrador, análogo ao portão da surf (R7): diz
 # se a FASE 2.5 (PORTÃO DE APROVAÇÃO DO PLANO) pode rodar. NÃO abre navegador, NÃO inicia servidor
 # e NÃO escreve nada fora de $HOME/.local/bin (só quando --install é pedido).
 #

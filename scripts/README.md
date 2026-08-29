@@ -24,7 +24,7 @@ orquestrador (0 a 4), com `do-context.sh` sempre rodando primeiro.
 
 | Script | Proposito |
 |--------|-----------|
-| `check-install.sh` | Prova de que UMA INSTALACAO da skill esta COMPLETA: verifica o contrato de instalacao num diretorio (SKILL.md com `name:` correto + ferramentas executaveis `scripts/{do-context,do-wt,search,search-parallel,check-search-credits,check-plannotator,plan-approval,evolve-skill,do-prefs,evolution-survey}.sh` + `prompts/{ecc-prompts,ecc-skills,search-prompts,plan-approval-prompts}.md`). Aceita a raiz do repo OU a pasta `.claude/skills/...` (que espelha scripts/prompts por symlink). `--root <dir>` (default: a propria casa da skill), `--json`, `--quiet`. Exit 0 completo · 1 faltando itens · 2 uso. Detecta o estado "so SKILL.md, sem scripts" que faz a FASE 0 abortar com "PARE: do-context.sh nao encontrado". |
+| `check-install.sh` | Prova de que UMA INSTALACAO da skill esta COMPLETA: verifica o contrato de instalacao num diretorio (SKILL.md com `name:` correto + ferramentas executaveis `scripts/{do-context,do-wt,check-plannotator,plan-approval,evolve-skill,do-prefs,evolution-survey}.sh` + `scripts/lib/{evolve-common,plannotator-common}.sh` + `prompts/{ecc-prompts,ecc-skills,search-prompts,plan-approval-prompts,evolution-guide}.md`). Aceita a raiz do repo OU a pasta `.claude/skills/...` (que espelha scripts/prompts por symlink). `--root <dir>` (default: a propria casa da skill), `--json`, `--quiet`. Exit 0 completo · 1 faltando itens · 2 uso. Detecta o estado "so SKILL.md, sem scripts" que faz a FASE 0 abortar com "PARE: do-context.sh nao encontrado". |
 
 ## Auto-evolucao (PERGUNTA de evolucao + prefs — v3.9.0)
 
@@ -48,13 +48,31 @@ E o agente de analise. Nada e promovido ao corpo da skill automaticamente.
 
 ## Busca (search)
 
-| Script | Proposito | Tier |
-|---|---|---|
-| **`search.sh`** | Interface UNIFICADA de busca do deep-orchestrator-agent-skill. Smart wrapper com cadeia de fallback automatica em 3 tiers. Interface CLI identica ao `brave-search.sh` para backward compatibility. Este e o script que sub-agentes devem usar. Exit codes: 0 (resultados), 1 (sem resultados em TODA a cadeia ou erro de busca), 2 (configuracao/uso). | T1 -> T2 -> T3 |
-| **`search-parallel.sh`** | Buscas em PARALELO para LOTES (decisao D3): `--batch <arquivo>` (uma query por linha) ou queries posicionais multiplas; uma chamada `search.sh` por query em background (sem teto de quantidade), jitter de disparo 0-2s por job, backoff exponencial com jitter (1s/2s/4s) em HTTP 429, cache intra-run de queries identicas, e relatorio agregado DEDUPLICADO por URL (query -> tier -> URLs). Exit codes: 0 (>=1 query com resultado), 1 (todas falharam/vazias), 2 (uso). NUNCA chame search.sh em loop — use este script. | PARALELO |
-| `brave-search.sh` | Wrapper da Brave Search API. Exibe a funcao `search_brave_api()` como funcao sourceable (usada como Tier 2 do `search.sh`). Ainda funciona standalone com interface similar ao surf-search-normal (--task, --goal, --insights, --deliverable, --brief-file). Suporta evolucao de queries com deduplicacao por URL. | T2 |
-| `check-search-credits.sh` | Verificador multi-tier pre-onda. Verifica surf-agent-skill (Tier 1, so AVAILABLE com keys.json do surf presente e nao-vazio — senao DEGRADED), Brave API (Tier 2) e DuckDuckGo keyless (Tier 3). Substitui `check-brave-credits.sh`. Exit codes: 0 (Tier 1 ou 2 ok), 1 (apenas Tier 3), 2 (nada disponivel ou deps ausentes). Opcoes: --fail-fast, --json. | -- |
-| ~~`check-brave-credits.sh`~~ | **(DEPRECATED)** Verificador antigo exclusivo da Brave Search API. Na resposta REAL da Brave o header X-Credit-Remaining nao existe (verificado 14/08/2026) — os creditos vem do 2o valor de X-RateLimit-Remaining (par "por segundo, por mes"; 2o valor = quota mensal). Suporta deteccao de assinatura ativa e cache de 10 min. Use `check-search-credits.sh`. | -- |
+**Nao existe.** Removido na v4.0.0 (decisao D23).
+
+`search.sh`, `search-parallel.sh`, `brave-search.sh`, `check-search-credits.sh`
+e `check-brave-credits.sh` foram APAGADOS -- 3.346 linhas de sistema de busca
+proprio. A pesquisa web e 100% **surf-agent-skill v8**, pelos binarios globais:
+
+| Binario | Quando |
+|---|---|
+| `surf-search-normal "<pergunta>" --sub-agents=N` | uma onda; o caminho padrao |
+| `surf-search-unlimit "<pergunta>" --sub-agents=N --max-depth 3` | pergunta aberta que precisa descer |
+| `surf-research-skill search-parallel "q1" "q2" --sub-agents=N --json` | lote de perguntas cruas, sem sintese |
+| `surf doctor` | O PORTAO. Exit 0/1 = prossiga, 78 = sem chave Brave valida, 127 = pacote ausente |
+
+Brave e o unico backend: nao ha Tavily, Parallel, Wikipedia, DuckDuckGo,
+provedor de reserva nem tier sem chave. Nao existe modo degradado -- ou ha
+chave valida e a pesquisa funciona, ou a execucao para.
+
+E PROIBIDO envolver o surf em `sleep`, jitter, backoff ou retry: ele ja ritma
+cada requisicao pelo limite real do plano Brave, num token bucket
+CROSS-PROCESS compartilhado por todos os processos surf da maquina. Um ritmo
+por cima briga com o limitador e provoca o 429 que ele evita.
+
+Ver `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md` e a regra R7
+do SKILL.md.
+
 
 ## Ferramentas (geracao)
 
@@ -68,7 +86,7 @@ E o agente de analise. Nada e promovido ao corpo da skill automaticamente.
 |---|---|
 | `test-contencao.sh` | Testes de aceitacao do MODO CONTIDO (A1..A20 + A22/A23/A25/A26/A27/A28/A29/A30/A31 + A32/A33/A34, 85 assercoes — plano v3.3.0 + F4-06/F4-07). Cria fixtures (repo principal + worktree irma + worktree de terceiro) e verifica invariantes: deteccao de MODE, fronteira BASE_DIR, isolamento de worktrees, protecao contra operacoes em branches de terceiros. A23: merge com CONFLITO -> resolucao na filha -> re-merge automatico (F4-07.2). A27: lab com espaco e acento no nome (ponta a ponta). A28/A29: exits 6/7/9 da FASE 0 (indice sujo, aspa simples no branch, symref corrompido, path com newline, colisao de PREFIXO do namespace). A30: flock — dois marks paralelos sem lost update. A31: kind=validation ciclo completo. A33: falha tardia de gate de snapshot (undo da 1a filha com HEAD avancado — revert exato, 2a intacta, ref de undo arquivada, re-merge restaura) — cobre o A21 do plano. A34: gate-pending bloqueia o fim de onda (sweep sai != 0 ate mark MERGED). A32 cobre o A24 do plano (wave-files apos 2 squashes). Portavel: resolve o path da skill dinamicamente e limpa os labs em /tmp via trap. |
 | `test-plan-approval.sh` | Testes de aceitacao do PORTAO DE APROVACAO DO PLANO (G1..G9 + P1..P28 + DC1..DC3, 133 assercoes — 3 falhas de ambiente macOS conhecidas: timeout(1) ausente). Tudo mockado num PATH temporario: um `plannotator` FAKE fiel ao contrato real (usage em `annotate` sem argumento, `{"decision":"approved"|"dismissed"|"annotated"}` em uma linha, exit SEMPRE 0) e um `curl` FAKE que finge o instalador. SEM rede, SEM navegador, SEM instalar nada. Cobre: resolucao do binario (PATH, ~/.local/bin, DO_PLANNOTATOR_BIN), sonda de capacidade rejeitando binario velho, instalacao com --minimal --non-interactive, recusa de sobrescrever instalacao existente (G9), os seis exit codes de `round`, argv exato, imutabilidade do snapshot, deriva de titulo, orcamento de revisoes, PLANNOTATOR_SHARE=disabled por default, prioridade de deteccao de harness, round-trip de feedback com aspas/newline/acento/backslash, ruido antes do JSON, `annotated` com feedback vazio degradando para `dismissed`, contencao de escrita, idempotencia via `approved`, ausencia de jq E python3, e os DO_PLAN_* no ENV_FILE. |
-| `test-search.sh` | Testes de aceitacao da cadeia de busca (T1..T12 + PAR-1..3, 64 assercoes — F3-05/F3-06). Tudo mockado em PATH temporario (bins fake), SEM rede: T1 argv do Tier 1 (--budget-ms, sem --timeout/--dev-mode); T2 saida parcial + falha do Tier 1 nao polui o stdout; T3 envelope --json unificado (Tier 1 normalizado); T4 --max-evolutions no Tier 2 (loop com mock, credits = 2o valor de X-RateLimit-Remaining); T5 deps ausentes -> exit 2; T6 cadeia vazia -> exit 1; T7 HTTP 403 do DDG = REACHABLE; T8 cache + --fail-fast do check-brave-credits; T9 query com '*' nao expande glob; T10 >1 posicional e '--'; T11 --timeout sem valor; T12 trap RETURN nao corrompe exit code; PAR-1 20 queries paralelas (tempo ~1-2 jobs, dedup por URL); PAR-2 backoff 429; PAR-3 cache intra-run de queries identicas. Portavel e isolado (dir proprio por caso, lab limpo via trap). |
+| `test-surf-gate.sh` | Testes do PORTAO DA SURF e do orcamento `--sub-agents` (G1..G8, 46 assercoes). Substitui o `test-search.sh`, que testava o sistema de busca removido. Tudo mockado em PATH temporario, SEM rede, SEM quota, SEM chave: G1 surf ausente -> SURF_GATE=127; G2 `surf doctor` saindo 78, distinto de 1 e 2; G3 exit 1 (skills do surf nao symlinkadas) = prossiga; G4 portao verde; G5 aritmetica `max(1, floor(N/R))` e a prova de que a soma da onda nunca passa de N; G6 `--sub-agents` fora de 1..20 -> exit 2; G7 regressao de arquitetura (nenhuma referencia viva aos scripts removidos, a DDG, a `surf-free-skill` ou as flags que nao existem); G8 o SKILL.md ainda declara o contrato que a suite testa. |
 
 ---
 
@@ -114,81 +132,54 @@ ramifique pelo exit code do Plannotator: e o `plan-approval.sh` que traduz a
 decisao para exit codes distintos. `--gate` e obrigatorio: sem ele a UI nao
 mostra o botao Approve e o usuario fisicamente nao consegue aprovar.
 
-## Fluxo de busca (search flow)
+## Fluxo de busca
 
 ```
-search.sh (interface unica recomendada)
+sub-agente
   |
-  +-- [Tier 1] surf-agent-skill (surf-search-normal / surf-free-skill)
-  |     AI-powered multi-provider. Melhor qualidade.
-  |     Se falhar ou indisponivel, cai para Tier 2.
-  |
-  +-- [Tier 2] Brave Search API (via search_brave_api() sourced de brave-search.sh)
-  |     API direta com chave de assinatura. Qualidade boa.
-  |     Se falhar ou sem creditos, cai para Tier 3.
-  |
-  +-- [Tier 3] DuckDuckGo Instant Answer API (keyless)
-        Fallback sem chave. Conectividade garantida enquanto houver rede,
-        mas COBERTURA LIMITADA: e Instant Answer, nao busca full-text —
-        queries genericas costumam voltar HTTP 202 com corpo vazio
-        (nesse caso o search.sh sai com exit 1 e relatorio vazio).
+  +-- surf-search-normal / surf-search-unlimit / surf-research-skill
+        |
+        +-- Brave /web/search  <- o unico backend. Nao ha tier abaixo.
+              |
+              +-- exit 0   respondeu
+              +-- exit 1   rodou e nao achou nada (registre o vazio, siga)
+              +-- exit 2   o comando esta errado (corrija)
+              +-- exit 78  sem chave Brave valida -> PARA (e configuracao)
+              +-- exit 143 o harness matou por timeout
 ```
 
-### Tier 0 — pesquisa nativa do harness (Claude Code)
+O orquestrador roda o PORTAO antes de cada onda:
 
-Quando o harness que hospeda a skill expoe ferramentas de busca NATIVAS
-(Claude Code: `WebSearch`/`WebFetch`), sub-agentes podem usa-las DIRETAMENTE —
-sem chave e sem script. O `search.sh` (Tier 1 -> 2 -> 3) continua sendo a
-interface unificada e o fallback deterministico para harnesses sem ferramenta
-nativa (pi, jcode, opencode). O Tier 0 NAO entra no `check-search-credits.sh`:
-a verificacao pre-onda cobre a cadeia propria (Tiers 1-3).
-
-## Fluxo paralelo (search-parallel.sh)
-
-```
-search-parallel.sh --batch <arquivo> | <query1> <query2> ...
-  |
-  |-- dedup intra-run por hash da query (queries identicas = 1 job real)
-  |-- 1 job em background POR QUERY (sem teto; cada job grava em arquivo proprio
-  |     sob um dir temporario mktemp -d)
-  |      job: jitter de disparo 0-2s (PARALLEL_JITTER_MAX)
-  |           -> search.sh --json <query>  (fallback 3-tier interno)
-  |           -> HTTP 429 no stderr? backoff exponencial 1s/2s/4s + jitter 0-1s
-  |-- wait
-  |-- agregacao: queries[] (query -> provider -> URLs) + results[] DEDUP por URL
-  |     (com a lista de queries que trouxeram cada URL) + failures[]
-  |-- exit 0 = >=1 query com resultado | 1 = todas falharam/vazias | 2 = uso
+```bash
+. '<ENV_FILE>'
+if command -v surf-search-normal >/dev/null 2>&1; then
+  surf doctor >/dev/null 2>&1; echo "SURF_GATE=$?"
+else
+  echo "SURF_GATE=127"
+fi
 ```
 
-## Verificacao pre-onda (check-search-credits.sh)
+`surf doctor` e o portao certo porque `keys list` nunca sai 78 (o gate e
+pulado para ele) e `--version` retorna antes do preflight. Ele e offline no
+caminho comum (~0,04 s; o veredito do surf fica em cache por 7 dias) e mascara
+as chaves. **Nunca** use `surf-research-skill keys list --json` como
+diagnostico.
 
-```
-check-search-credits.sh
-  |
-  +-- [Tier 1] surf-agent-skill disponivel?  -> exit 0 (pesquisa completa)
-  |     (AVAILABLE so com ~/.config/surf/keys.json presente e nao-vazio;
-  |      sem keys -> DEGRADED)
-  +-- [Tier 2] Brave API funcional?    -> exit 0 (pesquisa completa)
-  +-- [Tier 3] DDG keyless acessivel?  -> exit 1 (pesquisa limitada)
-  +-- NADA disponivel                  -> exit 2 (erro critico)
-```
+### Orcamento de simultaneidade: os dois tetos SOMAM
 
-## Migracao: brave-search.sh -> search.sh
+Seja `N` o teto global do surf (`surf-sub-agents=N` na invocacao, default 10,
+faixa 1..20) e `R` a quantidade de sub-agentes da onda que pesquisam. Cada um
+recebe `--sub-agents=max(1, floor(N / R))`, de modo que a soma da onda
+(`R x floor(N/R)`) nunca passa de `N`.
 
-- `brave-search.sh` **CONTINUA FUNCIONANDO** standalone -- nao foi removido
-- `search.sh` e o substituto com **MAIS provedores** e **fallback automatico**
-- Sub-agentes devem usar `search.sh` como interface unica de busca
-- `check-brave-credits.sh` -> substituido por `check-search-credits.sh`
-- A interface CLI do `search.sh` e identica a do `brave-search.sh` (--task, --goal, --insights, --deliverable, --brief-file, --count, --max-evolutions), garantindo backward compatibility para scripts e sub-agentes existentes
+Se multiplicassem, uma onda cheia seria `DO_MAX_PARALLEL x 10 = 500` buscas
+simultaneas contra um plano Brave que pode servir uma por segundo.
 
----
+### Ferramentas nativas do harness (WebSearch/WebFetch)
 
-## Roadmap
+**Nao sao caminho de pesquisa.** Fonte que nao veio pelo surf nao pode ser
+citada em handoff nem em deliverable. Uso legitimo, unico: abrir com
+`Read`/`WebFetch` uma URL **que o surf ja devolveu** -- e a unica forma de ler
+o corpo de uma pagina, ja que a Brave devolve titulo, URL e trecho, e os verbos
+`extract`/`crawl`/`map` foram removidos no surf v8.
 
-- **Evolucao candidata do Tier 2 — Brave LLM Context endpoint:** a doc oficial
-  da Brave recomenda o endpoint LLM Context (resposta token-eficiente para
-  maquinas/agentes, ~$5/1K) no lugar do Web Search para uso por agentes.
-  Candidato a evoluir o Tier 2 da cadeia (`brave-search.sh` /
-  `search_brave_api()`): continua sendo Brave — compativel com a decisao D3
-  (nenhum provedor novo entra na cadeia). FORA do escopo atual — registro
-  para nao esquecer.

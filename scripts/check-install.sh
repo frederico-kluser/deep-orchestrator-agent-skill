@@ -6,7 +6,7 @@
 # ($SKILL_HOME) é o diretório que CONTÉM SKILL.md e precisa carregar:
 #   • scripts/   — as ferramentas executáveis do ciclo de orquestração
 #                  (do-context.sh é o mínimo para a FASE 0 não abortar);
-#   • prompts/   — os templates de prompt (ECC, busca, portão).
+#   • prompts/   — os templates (ECC, formulação de query, portão).
 # Uma instalação incompleta (ex.: só o SKILL.md, sem scripts/) faz a FASE 0
 # abortar com "PARE: do-context.sh nao encontrado". Este script detecta esse
 # estado ANTES de qualquer execução.
@@ -43,7 +43,7 @@ for a in "$@"; do
     --root) ROOT="__NEXT__" ;;
     --json) JSON=1 ;;
     --quiet) QUIET=1 ;;
-    -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)
       if [ "$ROOT" = "__NEXT__" ]; then ROOT="$a"; else
         printf 'check-install.sh: opção desconhecida: %s\n' "$a" >&2; exit 2
@@ -92,9 +92,6 @@ fi
 # --- 2. Ferramentas executáveis (o mínimo para FASE 0..4) ---------------------
 check "scripts/ do-context.sh"        "$ROOT/scripts/do-context.sh" x
 check "scripts/ do-wt.sh"             "$ROOT/scripts/do-wt.sh" x
-check "scripts/ search.sh"            "$ROOT/scripts/search.sh" x
-check "scripts/ search-parallel.sh"   "$ROOT/scripts/search-parallel.sh" x
-check "scripts/ check-search-credits.sh" "$ROOT/scripts/check-search-credits.sh" x
 check "scripts/ check-plannotator.sh" "$ROOT/scripts/check-plannotator.sh" x
 check "scripts/ plan-approval.sh"     "$ROOT/scripts/plan-approval.sh" x
 check "scripts/ evolve-skill.sh"      "$ROOT/scripts/evolve-skill.sh" x
