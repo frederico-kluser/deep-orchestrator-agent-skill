@@ -102,7 +102,7 @@ elas; ignorá-las é responder metade do feedback.
 | No feedback | O que significa | O que fazer |
 |---|---|---|
 | `[🚫 Out of scope]` | "isso não é parte da tarefa" | **REMOVER** a sub-tarefa do plano — não reduzir, tirar. E remover a worktree batizada para ela. |
-| `[🔍 Verify this]` | "você assumiu isso" | Voltar ao código (`Read`/`Grep`) ou pesquisar (`search.sh`) e trocar a premissa por fato **antes** de reescrever. |
+| `[🔍 Verify this]` | "você assumiu isso" | Voltar ao código (`Read`/`Grep`) ou pesquisar (`surf-search-normal "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL"`) e trocar a premissa por fato **antes** de reescrever. Se sair 78 (sem chave Brave válida), MANTENHA a premissa e marque-a **NÃO VERIFICADA**, dizendo por quê. |
 | `[👍 Looks good]` | aprovação parcial | Não mexer nesse trecho. Mudá-lo mesmo assim custa uma rodada. |
 | `Remove this` | bloco a apagar | Apagar o trecho citado. |
 | `General feedback` | comentário global | Costuma ser sobre abordagem, não sobre um item — pode implicar redesenhar as ondas. |
@@ -140,7 +140,10 @@ Faça, nesta ordem:
 1. Liste cada item do feedback e o que ele exige. Itens com caminho de imagem
    (Reference Images / Attached images): leia a imagem com Read antes.
 2. Para cada [🔍 Verify this]: investigue de verdade (Read/Grep no repositório,
-   ou $SKILL_HOME/scripts/search.sh) e substitua a premissa por fato.
+   ou `surf-search-normal "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL"`)
+   e substitua a premissa por fato. Exit 78 = sem chave Brave válida: mantenha
+   a premissa marcada **NÃO VERIFICADA** e diga por quê — não troque de
+   ferramenta.
 3. Para cada [🚫 Out of scope] e cada "Remove this": REMOVA do plano. Se a
    sub-tarefa removida tinha worktree batizada, tire-a também.
 4. Refaça a decomposição da FASE 2 com o feedback como restrição de PRIMEIRA

@@ -1,6 +1,6 @@
 # ECC Skills — Portados para deep-orchestrator-agent-skill
 
-Skills portadas do **ECC — Everything Claude Code** (https://github.com/affaan-m/ECC, MIT; 281 skills, 67 agents, 94 commands) e adaptadas ao deep-orchestrator-agent-skill: orquestrador multi-agente com worktrees isoladas, ondas topológicas, squash-merge com gate, revisão adversarial em contexto fresco, TASK_PLAN.md com handoffs entre ondas, e sub-agentes que usam project-router + search.sh ({{SKILL_HOME}}/scripts/search.sh).
+Skills portadas do **ECC — Everything Claude Code** (https://github.com/affaan-m/ECC, MIT; 281 skills, 67 agents, 94 commands) e adaptadas ao deep-orchestrator-agent-skill: orquestrador multi-agente com worktrees isoladas, ondas topológicas, squash-merge com gate, revisão adversarial em contexto fresco, TASK_PLAN.md com handoffs entre ondas, e sub-agentes que usam project-router + a surf-agent-skill v8 (binários globais surf-search-normal / surf-search-unlimit / surf-research-skill) como ÚNICO canal de pesquisa web.
 
 Cada skill abaixo segue o formato de definição do ECC (frontmatter YAML + workflow em passos) e referencia os templates de prompt de `ecc-prompts.md`. "No ECC, skills são a superfície primária de workflow" — carregadas sob demanda, não sempre ativas; os comandos slash são só conveniência, a skill é a unidade durável.
 
@@ -155,7 +155,7 @@ metadata:
 ## Skill 4: Research Deep-Dive
 
 ### Nome e descrição
-**research-deep-dive** — Workflow "pesquisa antes de codar" (search-first do ECC): verifica o que já existe (repo, registries de pacotes, MCPs, skills, GitHub) antes de escrever código novo, com matriz de decisão Adotar / Estender / Compor / Construir e ciclos iterativos de busca. No deep-orchestrator-agent-skill, usa {{SKILL_HOME}}/scripts/search.sh para a busca externa (interface unificada 3-tier) e alimenta o plano de ondas seguintes.
+**research-deep-dive** — Workflow "pesquisa antes de codar" (search-first do ECC): verifica o que já existe (repo, registries de pacotes, MCPs, skills, GitHub) antes de escrever código novo, com matriz de decisão Adotar / Estender / Compor / Construir e ciclos iterativos de busca. No deep-orchestrator-agent-skill, usa `surf-search-normal` para a busca externa (Brave-only; não há tier de reserva) e alimenta o plano de ondas seguintes.
 
 ### Frontmatter YAML
 
@@ -165,7 +165,7 @@ name: research-deep-dive
 description: >-
   Pesquisa-before-coding: verifica repo, registries de pacotes, MCPs, skills e
   GitHub ANTES de escrever código. Matriz de decisão Adotar/Estender/Compor/
-  Construir com scoring. Usa {{SKILL_HOME}}/scripts/search.sh para busca externa.
+  Construir com scoring. Usa `surf-search-normal` para busca externa.
 when_to_use: >-
   Antes de qualquer sub-tarefa que vá adicionar funcionalidade nova, dependência,
   integração ou utilidade — e na fase PLAN do orquestrador quando houver dúvida
@@ -179,7 +179,7 @@ triggers:
   - "comparar opções"
   - "melhores práticas"
 metadata:
-  origin: ECC (search-first + deep-research + iterative-retrieval) + deep-orchestrator-agent-skill ({{SKILL_HOME}}/scripts/search.sh)
+  origin: ECC (search-first + deep-research + iterative-retrieval) + deep-orchestrator-agent-skill (surf-agent-skill v8)
 ---
 ```
 
@@ -188,7 +188,7 @@ metadata:
 1. **Preflight de canais (honesto)** — verifique quais canais de busca existem: busca no repo (`rg`/`rg --files`), registry de pacotes (npm/pip/gerenciador do projeto), GitHub CLI (`gh auth status`), MCPs configurados, skills locais. Se um canal não está disponível, DIGA — nunca reporte "nada encontrado" por canal ausente.
 2. **Análise da necessidade** — defina a funcionalidade necessária, restrições de linguagem/framework, e o critério de "match bom".
 3. **Modo rápido (ordem de decisão)** — (0) já existe no repo? → (1) problema comum? busque no registry → (2) existe MCP? → (3) existe skill local? → (4) existe implementação OSS mantida no GitHub? Só então escreva código novo.
-4. **Modo completo** — para funcionalidade não trivial: dispare {{SKILL_HOME}}/scripts/search.sh (ou {{SKILL_HOME}}/scripts/search-parallel.sh para um lote de queries) com prompt estruturado: "Pesquise ferramentas existentes para: [DESCRIÇÃO]", linguagem/framework, restrições; canais: registries, MCPs, skills, GitHub; retorno: comparação estruturada com recomendação. Para formular/evoluir queries (estratégias, métricas, Query Evolver), consulte {{SKILL_HOME}}/prompts/search-prompts.md (somente leitura).
+4. **Modo completo** — para funcionalidade não trivial: dispare `surf-search-normal "<pergunta>" --task ... --goal ... --deliverable ... --sub-agents={{SURF_SUB_AGENTS}}` (ou `surf-research-skill search-parallel "q1" "q2" ... --sub-agents={{SURF_SUB_AGENTS}} --json` UMA vez, para um lote de perguntas cruas independentes) com prompt estruturado: "Pesquise ferramentas existentes para: [DESCRIÇÃO]", linguagem/framework, restrições; canais: registries, MCPs, skills, GitHub; retorno: comparação estruturada com recomendação. Para formular/evoluir queries (estratégias, métricas, Query Evolver), consulte {{SKILL_HOME}}/prompts/search-prompts.md (somente leitura).
 5. **Avaliar candidatos** — pontue por: funcionalidade, manutenção, comunidade, docs, licença, dependências.
 6. **Decidir pela matriz**:
 

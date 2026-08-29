@@ -1,13 +1,28 @@
 # Search Prompts — Otimizados para Desenvolvimento de Software
 
-> Contrato de prompts de busca do deep-orchestrator-agent-skill para tarefas de
-> desenvolvimento de software. Define COMO as buscas são formuladas,
-> refinadas (question evolution) e avaliadas. A interface PRIMÁRIA de
-> execução é `{{SKILL_HOME}}/scripts/search.sh` (fallback automático em
-> 3 tiers: surf-agent-skill → Brave Search API → DuckDuckGo keyless); o
-> `brave-search.sh` é a implementação do Tier 2 (API Brave, parsing,
-> flags CLI). Este documento é a camada de estratégia; o search.sh é a
-> camada de execução.
+> Contrato de **FORMULAÇÃO de query** do deep-orchestrator-agent-skill. Define
+> COMO as buscas são formuladas, refinadas e avaliadas — nunca como são
+> executadas.
+>
+> **A execução é 100% surf-agent-skill v8, e nada mais.** Esta skill não tem
+> sistema de busca: `search.sh`, `search-parallel.sh`, `brave-search.sh`,
+> `check-search-credits.sh` e `check-brave-credits.sh` foram REMOVIDOS na
+> v4.0.0 (decisão D23). O backend é **Brave Search e só ele** — não há Tavily,
+> Parallel, Wikipedia, DuckDuckGo, provedor de reserva nem tier sem chave.
+>
+> Binários: `surf-search-normal` (uma onda) · `surf-search-unlimit` (várias) ·
+> `surf-research-skill search|search-parallel` (cru, sem síntese).
+> `--sub-agents=N` (1..20) é o ÚNICO orçamento de simultaneidade, e vem
+> NEGOCIADO pelo orquestrador — é proibido aumentá-lo, e é proibido envolver a
+> chamada em `sleep`, jitter, backoff ou retry: o surf já ritma cada requisição
+> pelo limite real do plano Brave, num token bucket compartilhado por todos os
+> processos surf da máquina.
+>
+> Códigos de saída: **0** funcionou · **1** rodou e não achou (registre o vazio
+> e siga; NUNCA troque de ferramenta) · **2** o comando está errado (corrija) ·
+> **78** não há chave Brave válida — é CONFIGURAÇÃO, retentar é inútil e não há
+> de onde mais buscar · **143** o harness matou a chamada por timeout (refaça
+> com `surf-search-normal`).
 
 ## Filosofia de Busca para Dev
 
@@ -25,8 +40,8 @@ Diferente de busca genérica, busca para desenvolvimento precisa de:
 - **Consciência de frescor** (tecnologia de 2022 pode já estar obsoleta) — em
   software, obsoleto se mede em anos, às vezes meses (ecossistemas JS e de LLMs)
 
-Princípio extra, herdado do sistema de busca 3-tier do deep-orchestrator-agent-skill
-(`search.sh --insights`): **estado o que julgo saber e busco o que o
+Princípio extra, herdado do brief do surf (`--insights` de
+`surf-search-normal`/`surf-search-unlimit`): **estado o que julgo saber e busco o que o
 FALSIFICARIA.** Uma busca que só confirma o que o agente já acredita não é
 pesquisa; é viés. Toda rodada de evolução deve incluir pelo menos uma query de
 falsificação quando existirem crenças prévias.
@@ -222,7 +237,8 @@ Princípios:
    falha; buscar cada critério separado funciona.
 3. **Convergência é alcançada, não presumida.** O loop só para por critério
    explícito (seção 2.3) ou esgotamento do orçamento de evoluções
-   (`--max-evolutions` no search.sh).
+   (o loop é do surf: `--max-rounds N` em `surf-search-unlimit`, default 6,
+   teto 50; `surf-search-normal` é UMA onda por design).
 4. **Não redescobrir.** Ângulos já explorados ficam registrados (seção 5 —
    Handoff) para que as evoluções vão mais fundo em vez de re-buscar o mesmo
    fato; caminhos sem resultado viram "explorado, sem achado", nunca
@@ -382,8 +398,10 @@ mais de broadening (mais resultados para avaliar) do que de narrowing
    confiança ≥ Média (avaliadas na seção 2.4).
 2. **Rendimentos decrescentes:** 2 evoluções consecutivas não produziram
    ângulo novo (query evoluída devolveu URLs já vistos).
-3. **Orçamento esgotado:** número de evoluções atingiu `--max-evolutions`
-   do search.sh. Convergência forçada: relatar qualidade parcial.
+3. **Orçamento esgotado:** em `surf-search-unlimit`, as ondas atingiram
+   `--max-rounds`; em `surf-search-normal` o critério é sempre "1 onda", e o
+   budget de tempo resolvido pelo próprio surf pode encerrá-la antes.
+   Convergência forçada: relatar qualidade parcial.
 4. **Saturação:** novas buscas retornam apenas duplicatas deduplicáveis.
 
 ### 2.4 Métricas de Qualidade de Resultado
@@ -504,9 +522,11 @@ convergiu, retorne `"converged": true`, `"evolved_query": null` e
 ## 3. Prompts de Busca por Domínio
 
 Termos, fontes e armadilhas específicos por área. O domínio é escolhido
-pelo sub-agente ao formular as queries — o search.sh NÃO tem a flag
-`--domain` (ver seção 4). O domínio tempera o plano de queries e a
-avaliação de qualidade (ex.: Freshness pesa mais em ML/AI que em security).
+pelo sub-agente ao formular as queries — `surf-search-normal` e
+`surf-search-unlimit` não têm flag de domínio (ver seção 4). O domínio tempera
+o BRIEF (`--task`/`--goal`/`--insights`/`--deliverable`) que o LLM do surf usa
+para planejar as queries, e a avaliação de qualidade (ex.: Freshness pesa mais
+em ML/AI que em security).
 
 ### 3.1 Frontend (React, Vue, Svelte, etc.)
 
@@ -621,75 +641,115 @@ avaliação de qualidade (ex.: Freshness pesa mais em ML/AI que em security).
 
 ---
 
-## 4. Integração com search.sh
+## 4. Integração com o surf (v8)
 
-> **Nota de precedência:** a interface PRIMÁRIA é `search.sh`
-> ({{SKILL_HOME}}/scripts/search.sh) — a fonte da verdade para flags e
-> comportamento; `brave-search.sh` é a implementação do Tier 2 (API Brave,
-> parsing, flags CLI) e só deve ser chamado diretamente em testes isolados
-> do tier. Este documento é a camada de estratégia (COMO formular e
-> avaliar buscas); o search.sh é a camada de execução (fallback 3-tier:
-> surf-agent-skill → Brave → DDG keyless). Se houver divergência entre este
-> documento e o search.sh, o script vence — este documento deve ser
-> atualizado na onda de skill-update.
+> **Precedência:** este documento é a camada de ESTRATÉGIA (como formular e
+> avaliar). A execução é do surf, e o surf vence qualquer divergência: se o
+> `--help` de um binário contradisser esta seção, o binário está certo e este
+> documento deve ser corrigido na onda de skill-update.
 
-O script **não** implementa os templates, estratégias e diagnósticos deste
-documento internamente. A relação real é a seguinte:
+**Não existe verificação pré-onda de crédito.** O portão é `surf doctor` e é
+responsabilidade do ORQUESTRADOR (R7), não sua. Você recebe o veredito já
+resolvido em `{{SURF_STATUS}}`.
 
-- **`--dev-mode`** NÃO ativa os templates da seção 1. Ele apenas adiciona
-  keywords de desenvolvimento ("documentation example", "API reference",
-  "best practice 2025 2026", "github", "tutorial") aos sufixos usados na
-  evolução de queries quando os resultados são bons (feedback "good").
-- **A evolução de perguntas do script (loop de `--max-evolutions`) é um
-  algoritmo heurístico simples**, não o Query Evolver (2.5) nem as
-  estratégias da seção 2 — não há LLM no loop. A cada rodada o script
-  classifica os resultados (`empty` / `few` / `lowq` / `good`) e reescreve
-  a query mecanicamente:
-  - `empty` (zero resultados) → corta a query nas 3 primeiras palavras.
-    ATENÇÃO (fallback 3-tier): resultado vazio NÃO é prova de inexistência —
-    o tier que respondeu pode ter degradado (ex.: apenas Tier 3 DDG, que é
-    Instant Answer, não full-text). Registre o tier efetivo no handoff e,
-    se um tier melhor estava indisponível, não declare "nada encontrado"
-    como fato;
-  - `few` (menos da metade do `--count`) → remove a última palavra;
-  - `lowq` (maioria sem descrição) → adiciona "best practice";
-  - `good` → adiciona um sufixo rotativo ("guide", "tutorial", "example",
-    "overview"; com `--dev-mode`, os sufixos de dev listados acima).
-  O Query Evolver (2.5) e as estratégias da seção 2 continuam valendo como
-  referência para sub-agentes que evoluem queries MANUALMENTE (fora do
-  loop do script) e para avaliar os resultados que o script retorna — não
-  como descrição do loop interno do script.
-- **Os domínios (seção 3) NÃO são ativados por flag** — o script não tem a
-  flag `--domain` (o conjunto real de flags está na seção de Ajuda do
-  script: `--task`, `--goal`, `--insights`, `--deliverable`, `--brief-file`,
-  `--count`, `--freshness`, `--country`, `--search-lang`, `--offset`,
-  `--result-filter`, `--max-evolutions`, `--dev-mode`, `--timeout`,
-  `--json`). A seção 3 é referência para o sub-agente formular as queries
-  do domínio manualmente (termos, fontes e armadilhas) antes de chamar o
-  script.
-- **O handoff de pesquisa (seção 5) NÃO é a saída do script.** O script tem
-  formato próprio: em modo texto, `# Search:` + Task/Goal/Insights/
-  Deliverable + rastro de evolução das queries + resultados + `## Sources`
-  + rodapé com provider/créditos/rate limit; em modo `--json`, um objeto
-  com `query_original`, `query_evolution[]`,
-  `results[{title,url,description,published,source}]`, `total_results`,
-  `credits_remaining` e `diagnostics{evolutions, total_queries,
-  unique_results, duration_ms}`. A seção 5 é o template de resposta que o
-  sub-agente DEVE produzir no handoff ao orquestrador DEPOIS de usar o
-  script — o sub-agente consolida a saída do script no formato da seção 5.
+### 4.1 Os três caminhos
 
-Interface de uso (confirmada no script): `search.sh [OPTS]
-"<query>"` com as flags listadas acima (no Tier 2, o search.sh repassa as
-flags ao brave-search.sh — a implementação do tier). Não existe
-`--domain`.
+```bash
+# Uma pergunta que fecha numa rajada — o caminho padrão.
+surf-search-normal "<pergunta>" \
+  --task "<o que você está construindo>" \
+  --goal "<o que precisa saber>" \
+  --insights "<o que você já acredita — vai ser VERIFICADO, não assumido>" \
+  --deliverable "<formato exato da resposta>" \
+  --sub-agents={{SURF_SUB_AGENTS}}
 
----
+# Pergunta genuinamente aberta, que precisa DESCER em várias ondas.
+surf-search-unlimit "<pergunta>" --sub-agents={{SURF_SUB_AGENTS}} --max-depth 3
+
+# Lote de perguntas CRUAS e independentes, sem síntese. UMA vez, nunca em laço.
+surf-research-skill search-parallel "q1" "q2" "q3" \
+  --sub-agents={{SURF_SUB_AGENTS}} --json
+```
+
+O brief é o que transforma "me fale sobre X" numa resposta utilizável:
+`--insights` em particular é tratado como HIPÓTESE A FALSIFICAR, que é
+exatamente o princípio declarado na Filosofia de Busca acima.
+
+### 4.2 `--sub-agents` é o único botão, e ele vem negociado
+
+`--sub-agents=N` (1..20; fora disso o surf sai **2**) é ao mesmo tempo a
+largura da onda e a largura do pool de workers do surf — os dois nunca
+multiplicam. O orquestrador já dividiu o teto global entre os sub-agentes desta
+onda e colou o resultado em `{{SURF_SUB_AGENTS}}`.
+
+- **É PROIBIDO aumentá-lo.**
+- **É PROIBIDO** envolver a chamada em `sleep`, jitter, backoff ou retry. O
+  surf aprende o requests-per-second real do plano Brave nos headers da
+  resposta e o aplica num token bucket CROSS-PROCESS, compartilhado por todos
+  os processos surf da máquina. Um ritmo seu por cima briga com o limitador e
+  provoca justamente o 429 que ele evita.
+- Se o surf avisar que `--sub-agents` excede o que o plano serve, isso é
+  informação, não erro: a onda roda mesmo assim, enfileirada.
+
+### 4.3 O que o surf faz internamente (e você não precisa refazer)
+
+A "evolução de perguntas" das seções 2 e 2.5 deste documento agora acontece
+DENTRO do surf, e melhor: o LLM planeja um conjunto de queries priorizadas, e
+os follow-ups entram numa **fronteira de prioridade** como nós de árvore que
+sabem seu pai e sua profundidade (`--max-depth`). Ramos saturados fecham
+sozinhos; queries duplicadas são rejeitadas e REGISTRADAS. O ledger deduplica
+as fontes canonicamente por URL.
+
+As seções 2 e 3 continuam valendo para o que é SEU: escolher o ângulo, os
+termos do domínio e as fontes de que desconfiar — ou seja, escrever o brief.
+
+### 4.4 Flags que não existem
+
+`--count`, `--max-evolutions`, `--dev-mode` e `--domain` **não existem em
+binário nenhum do surf**. Equivalentes:
+
+| Queria | Use |
+|---|---|
+| `--count N` | `--max N` (1..20) ou `--search-mode fast\|normal\|slow` (5/10/20) |
+| `--max-evolutions N` | `--max-rounds N` (só em `surf-search-unlimit`) |
+| `--dev-mode` | escreva no `--task`/`--goal` que o alvo é documentação técnica |
+| `--domain` | tempere o brief; a seção 3 é o insumo |
+
+`--freshness`, `--country`, `--search-lang`, `--offset`, `--result-filter` e
+`--timeout` **existem**, mas só em `surf-research-skill search` — o caminho
+cru, sem síntese. Não existem em `surf-search-normal`/`surf-search-unlimit`.
+
+### 4.5 Verbos removidos na v8 (saem 2)
+
+`extract` · `crawl` · `map` · `research` · `research-start` · `research-poll` ·
+`usage`.
+
+A Brave `/web/search` devolve **título, URL e trecho — nunca o corpo da
+página**. Para LER uma página, abra com `Read`/`WebFetch` do seu harness uma
+URL **que o surf devolveu** e diga isso no handoff. Usar WebSearch (ou qualquer
+outro buscador) para DESCOBRIR fontes é proibido: fonte que não veio pelo surf
+não é citável.
+
+### 4.6 Da saída do surf para o handoff (seção 5)
+
+`--json` devolve `plan`, `ledger`, `sources` e `diagnostics`;
+`--ledger` acrescenta a tabela de cobertura por query (com profundidade e nó
+pai) e a lista de candidatos que a fronteira recusou, com o motivo. Use
+`sources` para a seção "Resultados consolidados" e `ledger`/`plan` para
+"Ângulos explorados sem resultado" e "Lacunas restantes".
 
 ## 5. Handoff de Pesquisa (formato)
 
 Quando um sub-agente conclui uma busca, ele entrega:
 
 ```markdown
+## Proveniência (OBRIGATÓRIO)
+- Ferramenta: surf-search-normal | surf-search-unlimit | surf-research-skill search-parallel
+- Exit code: 0 | 1 | 2 | 78 | 143
+- --sub-agents usado: [o valor colado pelo orquestrador — nunca aumentado]
+- Toda URL abaixo veio do surf. Página aberta FORA do surf (Read/WebFetch),
+  se houver: [qual URL, e que ela foi devolvida pelo surf antes]
+
 ## Query original
 [query inicial]
 
