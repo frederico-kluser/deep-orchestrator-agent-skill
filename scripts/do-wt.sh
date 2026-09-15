@@ -35,6 +35,14 @@
 #                                        sai != 0 (o fim de onda não fecha com gate de
 #                                        snapshot pendente, F3-01); LISTA filhas
 #                                        REVERTED (undo aplicado — decida o destino)
+#   do-wt.sh purge                        COMMIT-FINAL: garantia FINAL — NADA desta
+#                                        execução sobrevive. Fecha TODAS as linhas do
+#                                        owned.tsv (inclusive ACTIVE/BLOCKED/ORPHANED/
+#                                        gate-pending/REVERTED): remove a worktree e
+#                                        arquiva o branch em refs/do-archive/$RUN_ID/
+#                                        ANTES de apagá-lo (nada se perde). Nunca toca
+#                                        no branch da raiz-de-mundo nem em alvos fora
+#                                        do owned.tsv
 #   do-wt.sh verify                       prova de contenção (roda a cada onda)
 #   do-wt.sh stage-delta                  estagia SÓ o que é nosso (COMMIT-FINAL)
 #   do-wt.sh clean-ignored-delta          remove SÓ ignorados pós-FASE 0 (COMMIT-FINAL)
@@ -648,6 +656,60 @@ cmd_mark() { # <nome> <STATUS> — validação (F4-07.7): nome existe e status �
   echo "OK  $name -> $st"
 }
 
+cmd_purge() { # COMMIT-FINAL: garantia final — NADA desta execução sobrevive.
+  # Diferente do sweep (que só fecha o integrado e PRESERVA ACTIVE/BLOCKED/
+  # ORPHANED/gate-pending para diagnóstico durante a onda), o purge fecha TODAS
+  # as linhas do owned.tsv: remove a worktree (--artifacts como fallback para
+  # daemon vivo/artefato de build) e arquiva o branch em refs/do-archive/$RUN_ID/
+  # ANTES de apagá-lo. Nada é perdido: o arquivamento SEMPRE precede a
+  # destruição, e um fracasso de remoção PRESERVA o branch junto da worktree.
+  # Alvos vêm EXCLUSIVAMENTE do owned.tsv (nunca de git worktree list /
+  # branch --list — R8d).
+  local rc=0 name br wt
+  while IFS=$'\t' read -r _run _kind name br wt _base _pre _post _st; do
+    [ -n "$name" ] || continue
+    [ "$br" = "$BASE_BRANCH" ] \
+      && { err "PURGE: RECUSADO tocar o branch da raiz-de-mundo ($br)"; rc=1; continue; }
+    case "$br" in "$BRANCH_NS"/*) : ;; *)
+      err "PURGE: RECUSADO — $br fora do namespace desta execução"; rc=1; continue ;; esac
+    # Worktree: remove (fallback --artifacts para daemon vivo/artefato de build).
+    local wt_ok=0
+    if [ -n "$wt" ] && [ -e "$wt" ]; then
+      cmd_remove "$name" >/dev/null 2>&1 \
+        || cmd_remove "$name" --artifacts >/dev/null 2>&1 \
+        || wt_ok=1
+    fi
+    if [ "$wt_ok" = 1 ]; then
+      err "PURGE: FALHA ao remover a worktree de $name ($wt) — branch PRESERVADO junto;"
+      err "  registre no relatório e resolva por nome (remove/drop-branch)."
+      rc=1; continue
+    fi
+    # Branch: arquiva ANTES de apagar (recuperável mesmo após gc).
+    if [ -n "$br" ] && gwt show-ref --verify --quiet "refs/heads/$br"; then
+      gwt update-ref "refs/do-archive/$RUN_ID/$name" "$(gwt rev-parse "$br")" \
+        || { err "PURGE: FALHA ao arquivar $br — branch preservado"; rc=1; continue; }
+      gwt branch -D "$br" >/dev/null \
+        || { err "PURGE: FALHA ao apagar $br"; rc=1; continue; }
+      echo "PURGE: $name — branch $br apagado (arquivado em refs/do-archive/$RUN_ID/$name)"
+    fi
+    row_set "$name" 9 REMOVED 2>/dev/null || true
+  done < <(tail -n +2 "$OWNED")
+  # Refs remanescentes sob o namespace e FORA do owned.tsv não são nossas:
+  # apenas relatamos (outra sessão). Nunca derivamos alvo de varredura (R8d).
+  if gwt for-each-ref --format='%(refname:short)' "refs/heads/$BRANCH_NS/" | grep -q .; then
+    echo "PURGE: AVISO — ainda há refs sob $BRANCH_NS/ fora do owned.tsv (outra sessão?): NÃO tocadas"
+  fi
+  local left
+  left=$(awk -F'\t' 'NR>1 && $9!="REMOVED" {c++} END{print c+0}' "$OWNED")
+  if [ "$left" = 0 ]; then
+    echo "PURGE OK — nenhuma worktree/branch de sub-agente desta execução sobrou"
+  else
+    echo "PURGE: $left linha(s) do owned.tsv não fechada(s) — resolva por nome e rode o purge de novo"
+    rc=1
+  fi
+  return $rc
+}
+
 # =============================================================================
 case "${1:-}" in
   new)          shift; cmd_new "$@" ;;
@@ -656,6 +718,7 @@ case "${1:-}" in
   remove)       shift; cmd_remove "$@" ;;
   drop-branch)  shift; cmd_drop_branch "$@" ;;
   sweep)        shift; cmd_sweep "$@" ;;
+  purge)        shift; cmd_purge "$@" ;;
   verify)       shift; cmd_verify "$@" ;;
   stage-delta)  shift; cmd_stage_delta "$@" ;;
   clean-ignored-delta) shift; cmd_clean_ignored_delta "$@" ;;

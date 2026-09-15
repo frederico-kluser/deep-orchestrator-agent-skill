@@ -6,7 +6,11 @@ description: >-
   onda), cria worktrees
   isoladas e NOMEADAS, revisa adversarialmente, integra por squash-merge um a
   um com gate (build/test/lint) em snapshot, limpa worktree + branch + commits
-  ao fim de cada onda e commita. Subwaves de TESTE e VALIDAÇÃO rodam junto da
+  ao fim de cada onda e commita; no fim da execução o PURGE remove TODAS as
+  worktrees/branches de sub-agentes (inclusive test/validation e
+  BLOCKED/ORPHANED — branch arquivado antes). Com wt=<nome>, o fim é APENAS
+  commit + push no branch do próprio wt (do/wt/<nome>) — NUNCA merge de volta
+  para o branch de origem. Subwaves de TESTE e VALIDAÇÃO rodam junto da
   onda seguinte. Pesquisa web SÓ pela surf-agent-skill v8 (Brave-only;
   sem chave válida a execução PARA com exit 78). MODO CONTIDO:
   dentro de uma git worktree vinculada, trata ESSA worktree como RAIZ-DE-MUNDO
@@ -37,7 +41,7 @@ when_to_use: >-
   Quando o usuário quer uma tarefa resolvida do início ao fim sem interrupções,
   especialmente tarefas complexas que se beneficiam de decomposição em ondas
   paralelas. NUNCA invoque para tarefas triviais de um passo só.
-argument-hint: "[plan=on|off] [max-parallel=N] [wt=<nome>] [no-stop] [no-evolve] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); max-parallel=N é o cap de concorrência (env DO_MAX_PARALLEL; default 50 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto); wt=<nome> cria/entra uma worktree irmã verdadeira do projeto (PROJECT_NAME.worktrees/<nome>) e faz TODO o trabalho DENTRO dela — o checkout principal é preservado; o nome é deduplicado contra o que já existir dentro da pasta irmã; no-stop remove o teto de 10 ondas por execução (env DO_NO_STOP; default 0 — com no-stop a execução dura quantas ondas forem necessárias até a convergência, mantida a válvula anti-loop de 2 REPLANs estagnados); no-evolve desliga a PERGUNTA DE EVOLUÇÃO pós-execução E o agente que analisa o histórico (env DO_EVOLUTION_SURVEY=0; default 1 — sem a flag a pergunta SEMPRE aparece ao fim, mesmo com gatilhos de autonomia)
+argument-hint: "[plan=on|off] [max-parallel=N] [wt=<nome>] [no-stop] [no-evolve] <descrição da tarefa>"   # prefixos opcionais: plan=on|off liga/desliga o PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5; default OFF, inferido dos gatilhos); max-parallel=N é o cap de concorrência (env DO_MAX_PARALLEL; default 50 — features, subwaves, revisores e REVISOR DE PLANO cabem no mesmo teto); wt=<nome> cria/entra uma worktree irmã verdadeira do projeto (PROJECT_NAME.worktrees/<nome>) e faz TODO o trabalho DENTRO dela — o checkout principal é preservado; o nome é deduplicado contra o que já existir dentro da pasta irmã; o fim da execução com wt= é APENAS commit + push no branch do próprio wt (do/wt/<nome>) — NUNCA merge de volta para o branch de origem (integração é decisão do usuário); no-stop remove o teto de 10 ondas por execução (env DO_NO_STOP; default 0 — com no-stop a execução dura quantas ondas forem necessárias até a convergência, mantida a válvula anti-loop de 2 REPLANs estagnados); no-evolve desliga a PERGUNTA DE EVOLUÇÃO pós-execução E o agente que analisa o histórico (env DO_EVOLUTION_SURVEY=0; default 1 — sem a flag a pergunta SEMPRE aparece ao fim, mesmo com gatilhos de autonomia)
 disable-model-invocation: false
 user-invocable: true
 disallowed-tools:
@@ -227,7 +231,13 @@ metadata:
         kind=validation (val-ondaN-*), que sobrevivem por UMA onda por
         construção — rodam em background durante a onda seguinte e são
         fechadas no passo 3.5 dela (ou no COMMIT-FINAL). NUNCA limpe antes do gate verde — até lá, a branch é
-        seu backup para investigação e re-merge.</body>
+        seu backup para investigação e re-merge.
+        ESSAS DUAS EXCEÇÕES VALEM SÓ DURANTE A EXECUÇÃO. No COMMIT-FINAL (FASE 4,
+        passo 6) NADA sobrevive: o <cmd>do-wt.sh purge</cmd> fecha TODAS as linhas
+        do owned.tsv — inclusive kind=test, kind=validation, BLOCKED e ORPHANED —
+        removendo cada worktree e arquivando cada branch em refs/do-archive/$RUN_ID/
+        ANTES de apagá-lo. Zero worktrees e zero branches de sub-agente desta
+        execução no fim — SEMPRE, sem exceção.</body>
     </rule>
     <rule id="R7" severity="FATAL">
       <title>Pesquisa é EXCLUSIVAMENTE surf-agent-skill v8 — dependência dura, verificada ANTES de qualquer onda</title>
@@ -346,7 +356,17 @@ metadata:
         Único vestígio compartilhado ACEITO: o registro administrativo das
         filhas em COMMON_DIR/worktrees/, que o próprio git cria e é inevitável.
         Se MODE=normal, BASE_DIR é o repositório principal e as MESMAS
-        invariantes valem, com CHILD_ROOT em &lt;pai&gt;/&lt;repo&gt;-worktrees/.</body>
+        invariantes valem, com CHILD_ROOT em &lt;pai&gt;/&lt;repo&gt;-worktrees/.
+        (j) WT-ROOT TERMINA NA WORKTREE — NUNCA VOLTA AO BRANCH DE ORIGEM: com
+        DO_WT_ROOT=1 (prefixo <code>wt=</code>), o fim da execução (COMMIT-FINAL,
+        FASE 4) é APENAS commit + push em $BASE_BRANCH — o branch PRÓPRIO da
+        worktree irmã (<code>do/wt/&lt;nome&gt;</code>). É PROIBIDO:
+        mergear, fast-forward, rebaser ou abrir PR do branch do wt de volta para
+        o branch DE ORIGEM de onde a worktree nasceu (tipicamente main/master);
+        pushar qualquer branch que não seja $BASE_BRANCH; e limpar a worktree
+        wt-root no fim (ela é PERSISTENTE e não consta do owned.tsv — só as
+        filhas de CHILD_ROOT morrem). O usuário integra o branch do wt quando
+        QUISER; essa é decisão DELE, nunca do orquestrador.</body>
     </rule>
     <rule id="R9" severity="FATAL">
       <title>Dependências: dentro da worktree, congeladas, nunca globais</title>
@@ -506,7 +526,13 @@ metadata:
           irmã <code>.worktrees/</code> JÁ EXISTE, entramos nela em vez de recriar.
           O wt-root é PERSISTENTE: sobrevive entre execuções (o branch
           <code>do/wt/&lt;nome&gt;</code> é reusado), ao contrário das filhas
-          efêmeras de CHILD_ROOT.</step>
+          efêmeras de CHILD_ROOT.
+          <strong>REGRA DE FIM (R8j):</strong> com wt=, o COMMIT-FINAL termina
+          em commit + push no branch do PRÓPRIO wt (<code>do/wt/&lt;nome&gt;</code>)
+          — NUNCA mergeia esse branch de volta para o branch de origem
+          (main/master) nem pusha outro branch — e as worktrees-filhas de
+          sub-agentes são TODAS removidas pelo purge (R6); a worktree wt-root
+          em si permanece para a próxima execução.</step>
         <step order="0.5"><strong>RESOLVA O PORTÃO DE APROVAÇÃO DO PLANO
           (R10):</strong> decida AQUI, uma única vez, se a FASE 2.5 vai rodar, e
           exporte <code>DO_PLAN_APPROVAL=1</code> ou <code>0</code> ANTES de
@@ -1650,17 +1676,35 @@ O <code>load</code> imprime as prefs do PROJETO (project-config.md — preferên
           <cmd>. '&lt;ENV_FILE&gt;'; if gwt remote &gt;/dev/null 2&gt;&amp;1; then gwt push -u origin "$BASE_BRANCH" 2&gt;&amp;1 || echo "AVISO: push falhou — registre no relatório e siga (nunca bloqueia)"; else echo "AVISO: sem remote configurado — push pulado"; fi</cmd>
           O push NUNCA bloqueia e NUNCA aborta a execução: sem remote, sem
           upstream, rede fora ou servidor recusando → registre no relatório e
-          siga. Em MODO CONTIDO (wt-root), o push sobe o branch
+          siga. Em MODO CONTIDO com wt-root (DO_WT_ROOT=1), o push sobe o branch
           <code>$BASE_BRANCH</code> (ex.: do/wt/&lt;nome&gt;) para o origin —
           é o que o usuário pediu ao dizer "commit e push"; o registro no
-          relatório indica o que foi empurrado.</step>
-        <step order="6"><strong>CHECAGEM DE LIMPEZA (rede de segurança):</strong>
-          as worktrees já deveriam ter morrido nas ondas (R6).
-          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_WT" sweep; "$DO_WT" verify</cmd> — com
-          <code>;</code>, nunca <code>&amp;&amp;</code>. Qualquer linha do
-          owned.tsv ainda pendente é bug de processo — resolva por nome. Linhas
-          BLOCKED/ORPHANED: documente o diff no relatório final; o branch delas
-          fica preservado em refs/do-archive/$RUN_ID/ para inspeção.
+          relatório indica o que foi empurrado.
+          <strong>REGRA ABSOLUTA (R8j):</strong> com wt=, o fim é APENAS
+          commit + push no branch do wt. É PROIBIDO mergear o branch do wt
+          (<code>do/wt/&lt;nome&gt;</code>) de volta para o branch de ORIGEM de
+          onde a worktree nasceu (main/master ou o que for), fazer
+          fast-forward/rebase nele, abrir PR ou pushar qualquer outro branch —
+          a integração do wt no branch principal é decisão EXCLUSIVA do
+          usuário, feita por ele quando quiser.</step>
+        <step order="6"><strong>PURGE FINAL — ZERO WORKTREES SOBREVIVEM
+          (R6/R8):</strong> no fim da execução NÃO existe exceção: TODAS as
+          worktrees e branches de sub-agentes DESTA execução morrem AQUI —
+          inclusive as kind=test/kind=validation que sobreviveram por uma onda,
+          os snapshots int-ondaN-* que sobraram e as linhas BLOCKED/ORPHANED
+          mantidas para diagnóstico durante o run.
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_WT" purge; "$DO_WT" verify</cmd> — com
+          <code>;</code>, nunca <code>&amp;&amp;</code>. O purge fecha TODAS as
+          linhas do owned.tsv (remove a worktree com fallback --artifacts e
+          arquiva o branch em refs/do-archive/$RUN_ID/ ANTES de apagá-lo — nada
+          se perde) e sai != 0 se algo ficar para trás: nesse caso resolva a
+          linha por nome (remove/drop-branch) e rode o purge de novo até
+          "PURGE OK". Branches arquivados continuam inspecionáveis em
+          refs/do-archive/$RUN_ID/ para o relatório final (BLOCKED/ORPHANED:
+          documente o diff lá).
+          ÚNICA worktree que sobrevive à execução inteira: a irmã do wt-root
+          (<code>&lt;repo&gt;.worktrees/&lt;nome&gt;</code>, DO_WT_ROOT=1) — ela
+          NÃO consta do owned.tsv, é PERSISTENTE e NUNCA é purgada (R8j).
           Worktrees e branches que NÃO estão no owned.tsv são de outras sessões:
           mencione-os como "pré-existentes, não tocados" e siga. É PROIBIDO
           <cmd>git worktree prune</cmd> e <cmd>worktree remove -f -f</cmd></step>
@@ -2422,9 +2466,11 @@ promovem. NUNCA invente evidência: cada proposta cita o que a originou.
 - Worktrees pré-existentes de terceiros: [N] — NÃO tocadas
 
 ## Limpeza
-[Confirmação: todas as worktrees e branches DESTA execução removidos
-(lista nominal do owned.tsv). Branches arquivados em refs/do-archive/$RUN_ID/.
-Exceções (BLOCKED/ORPHANED) e o que foi feito com elas.]
+[Confirmação do "PURGE OK": TODAS as worktrees e branches de sub-agentes DESTA
+execução removidos — inclusive kind=test/validation e BLOCKED/ORPHANED (lista
+nominal do owned.tsv). Branches arquivados em refs/do-archive/$RUN_ID/ antes de
+cada remoção. Nenhuma exceção além da worktree wt-root persistente (quando
+dois pontos DO_WT_ROOT=1), que não consta do owned.tsv e sobrevive por design.]
 
 ## Dependências instaladas
 [Por sub-agente: gerenciador, pacotes, versões, lockfile alterado. Ou "Nenhuma".]
@@ -2475,8 +2521,10 @@ de execução. Degradação (fallback mínimo pelo orquestrador, exceção R1-c)
         ORPHANED ou BLOCKED — é por design.
         Na 3ª falha: registre no handoff como BLOQUEIO,
         <cmd>"$DO_WT" mark &lt;nome&gt; BLOCKED</cmd>, mantenha a worktree para
-        diagnóstico (única exceção de R6), e prossiga com as outras sub-tarefas
-        da onda. A onda NÃO para por um bloqueio.</action>
+        diagnóstico durante o run (única exceção de R6 — e SÓ até o
+        COMMIT-FINAL, onde o purge a fecha como todas as outras, com o branch
+        arquivado em refs/do-archive/$RUN_ID/), e prossiga com as outras
+        sub-tarefas da onda. A onda NÃO para por um bloqueio.</action>
     </case>
     <case id="gate-red">
       <symptom>Gate ficou VERMELHO após squash-merge</symptom>
@@ -2813,6 +2861,14 @@ de execução. Degradação (fallback mínimo pelo orquestrador, exceção R1-c)
     Testing subwaves (test-ondaN-*) e validation subwaves (val-ondaN-*) rodam
     em BACKGROUND e são integradas na PRÓXIMA onda (passo 3.5) ou no
     COMMIT-FINAL. Elas NUNCA bloqueiam o disparo das ondas de feature.
+    E lembre-se: NO FIM da execução NADA de sub-agente sobrevive — o passo 6 do
+    COMMIT-FINAL roda `do-wt.sh purge`, que fecha TODAS as linhas do owned.tsv
+    (worktrees kind=test/validation, snapshots int-ondaN-*, BLOCKED/ORPHANED),
+    arquivando cada branch em refs/do-archive/$RUN_ID/ antes de apagá-lo. E com
+    a flag wt= o fim é APENAS commit + push no branch do PRÓPRIO wt
+    (do/wt/<nome>): NUNCA mergeie esse branch de volta para o branch de origem
+    (main/master), NUNCA push outro branch, NUNCA purge a worktree wt-root —
+    ela é persistente e a integração final é decisão do usuário.
     Sem busca = sem sub-agentes quando a tarefa exige pesquisa (R7); sem
     pesquisa exigida, a execução prossegue sem busca, com registro.
     E lembre-se: ao fim de CADA execução, o passo EVOLUÇÃO PÓS-EXECUÇÃO (FASE 4,
