@@ -92,6 +92,7 @@ fi
 # --- 2. Ferramentas executáveis (o mínimo para FASE 0..4) ---------------------
 check "scripts/ do-context.sh"        "$ROOT/scripts/do-context.sh" x
 check "scripts/ do-wt.sh"             "$ROOT/scripts/do-wt.sh" x
+check "scripts/ surf-gate.sh"         "$ROOT/scripts/surf-gate.sh" x
 check "scripts/ check-plannotator.sh" "$ROOT/scripts/check-plannotator.sh" x
 check "scripts/ plan-approval.sh"     "$ROOT/scripts/plan-approval.sh" x
 check "scripts/ evolve-skill.sh"      "$ROOT/scripts/evolve-skill.sh" x

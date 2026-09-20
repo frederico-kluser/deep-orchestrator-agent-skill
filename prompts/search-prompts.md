@@ -18,11 +18,14 @@
 > pelo limite real do plano Brave, num token bucket compartilhado por todos os
 > processos surf da máquina.
 >
-> Códigos de saída: **0** funcionou · **1** rodou e não achou (registre o vazio
-> e siga; NUNCA troque de ferramenta) · **2** o comando está errado (corrija) ·
-> **78** não há chave Brave válida — é CONFIGURAÇÃO, retentar é inútil e não há
-> de onde mais buscar · **143** o harness matou a chamada por timeout (refaça
-> com `surf-search-normal`).
+> Códigos de saída: **0** funcionou · **1** terminou com 0 fontes — são DUAS
+> causas OPOSTAS que só o `surf-gate.sh classify` separa (seção 4): `EMPTY`,
+> rodou e não achou (registre o vazio e siga; NUNCA troque de ferramenta), ou
+> `FAILED_QUOTA`/`FAILED_OTHER`, a pesquisa NÃO funcionou (cota, 429, billing,
+> todas as chaves falharam) — aí PARE e reporte · **2** o comando está errado
+> (corrija) · **78** não há chave Brave válida — é CONFIGURAÇÃO, retentar é
+> inútil e não há de onde mais buscar: PARE e reporte · **143** o harness
+> matou a chamada por timeout (refaça com `surf-search-normal`).
 
 ## Filosofia de Busca para Dev
 
@@ -648,9 +651,19 @@ em ML/AI que em security).
 > `--help` de um binário contradisser esta seção, o binário está certo e este
 > documento deve ser corrigido na onda de skill-update.
 
-**Não existe verificação pré-onda de crédito.** O portão é `surf doctor` e é
-responsabilidade do ORQUESTRADOR (R7), não sua. Você recebe o veredito já
-resolvido em `{{SURF_STATUS}}`.
+**Não existe verificação pré-onda de crédito.** O portão é o script
+`"$DO_SURF_GATE"` (`scripts/surf-gate.sh`, fail-closed) e é responsabilidade
+do ORQUESTRADOR (R7), não sua. Você recebe o veredito já resolvido em
+`{{SURF_STATUS}}` — se ele começa com "NÃO PESQUISE —" (ou se
+`{{SURF_SUB_AGENTS}}` veio como "0 — não pesquise"), não chame binário surf
+nenhum. O portão é grátis e só prova que existe chave VÁLIDA: ele **não
+enxerga cota**. Cota esgotada, 429 e billing só aparecem na hora da busca, e
+como exit **1** — por isso a detecção é reativa e passa por VOCÊ: classifique
+toda chamada (4.1) e reporte o `SEARCH_STATUS` (seção 5). A única verificação
+de crédito que existe é a sonda `"$DO_SURF_GATE" resume --probe` — UMA busca
+real, 1 crédito — e ela é do ORQUESTRADOR, só na retomada do protocolo
+PESQUISA-FALHOU, depois que o usuário disse que ajustou a chave ou a cota.
+Você nunca a roda.
 
 ### 4.1 Os três caminhos
 
@@ -674,6 +687,34 @@ surf-research-skill search-parallel "q1" "q2" "q3" \
 O brief é o que transforma "me fale sobre X" numa resposta utilizável:
 `--insights` em particular é tratado como HIPÓTESE A FALSIFICAR, que é
 exatamente o princípio declarado na Filosofia de Busca acima.
+
+**Toda chamada é CLASSIFICADA** (regra 2 do template do sub-agente, bloco COMO
+RODAR): stdout e stderr vão para arquivo dentro da sua worktree e o veredito
+sai na MESMA chamada Bash — o exit code sozinho engana, porque cota esgotada,
+429 e billing saem **1**, igual a "não achei":
+
+```bash
+S="{{WORKTREE_PATH}}/.deep-orchestrator/surf"; mkdir -p "$S"
+surf-search-normal "<pergunta>" <flags> >"$S/q1.out" 2>"$S/q1.err"; rc=$?
+echo "EXIT=$rc"
+"{{SKILL_HOME}}/scripts/surf-gate.sh" classify "$rc" "$S/q1.out" "$S/q1.err"
+```
+
+| Classe | O que é | O que você faz |
+|---|---|---|
+| `OK` | exit 0, houve fontes | Cite as URLs que o surf devolveu. |
+| `EMPTY` | exit 1: a busca FUNCIONOU e veio vazia | Reformule UMA vez (mais ampla); se continuar vazio, registre "não encontrado", marque o fato NÃO VERIFICADO (motivo "busca vazia") e siga. |
+| `FAILED_QUOTA` | exit 1: 429, cota mensal esgotada, billing | **PESQUISA FALHOU** — pare de pesquisar, NÃO use WebSearch no lugar, termine só o que não depende do fato, commite o wip e reporte. |
+| `FAILED_OTHER` | exit 1: todas as chaves falharam sem 429, sem provedor, timeout do agente | idem `FAILED_QUOTA`. |
+| `BLOCKED_78` | exit 78: sem chave Brave válida (ausente, queimada, em cooldown, inválida, inalcançável) | idem `FAILED_QUOTA`. Retentar é inútil. |
+| `USAGE_2` | exit 2: comando errado | Corrija o comando. Não vira status. |
+| `KILLED_143` | exit 143: o harness matou por timeout | Refaça com `surf-search-normal`. Não vira status. |
+
+Em PESQUISA FALHOU você NÃO inventa o fato para "completar" a tarefa: chave e
+cota são ambiente do USUÁRIO, quem fala com ele é o orquestrador (protocolo
+PESQUISA-FALHOU), e você será re-disparado NA MESMA worktree quando a pesquisa
+voltar. `.deep-orchestrator/` da worktree é rascunho seu — nunca entra no
+commit.
 
 ### 4.2 `--sub-agents` é o único botão, e ele vem negociado
 
@@ -740,43 +781,66 @@ pai) e a lista de candidatos que a fronteira recusou, com o motivo. Use
 
 ## 5. Handoff de Pesquisa (formato)
 
-Quando um sub-agente conclui uma busca, ele entrega:
+O formato do handoff é UM só: o do template do sub-agente (`SKILL.md`, FORMATO
+DE RESPOSTA). Ele ABRE com a seção `## SEARCH_STATUS` — é lá que mora o
+estado da pesquisa, não num bloco à parte. O orquestrador extrai a linha
+`SEARCH_STATUS:` de CADA handoff antes de revisar ou integrar (FASE 3, passo
+4.5 — TRIAGEM DE PESQUISA); handoff sem ela, numa sub-tarefa que exigia
+pesquisa, é tratado como pesquisa que FALHOU.
 
 ```markdown
-## Proveniência (OBRIGATÓRIO)
+## SEARCH_STATUS
+SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78
+- Comandos surf rodados, com o exit code e o veredito do classify de cada um
+  [ou "nenhum"]
+- Linha de erro do surf, VERBATIM — nunca uma chave [só em FAILED_* / BLOCKED_78]
+- Fatos NÃO VERIFICADOS [lista, com o motivo: busca vazia | pesquisa falhou |
+  NÃO PESQUISE — ou "nenhum"]
+```
+
+A linha traz EXATAMENTE UM valor, e ele é o veredito do
+`surf-gate.sh classify` (4.1), nunca o exit code cru. Não pesquisou =
+`NOT_NEEDED`. Várias chamadas = reporte o PIOR resultado: `BLOCKED_78` >
+`FAILED_QUOTA` > `FAILED_OTHER` > `EMPTY` > `OK`. `USAGE_2` e `KILLED_143`
+você mesmo corrige — não são status.
+
+Quando a sub-tarefa É uma pesquisa, o corpo da busca entra DENTRO de
+`## O que fiz`, neste formato (as demais seções do handoff seguem o template):
+
+```markdown
+### Proveniência
 - Ferramenta: surf-search-normal | surf-search-unlimit | surf-research-skill search-parallel
-- Exit code: 0 | 1 | 2 | 78 | 143
 - --sub-agents usado: [o valor colado pelo orquestrador — nunca aumentado]
 - Toda URL abaixo veio do surf. Página aberta FORA do surf (Read/WebFetch),
   se houver: [qual URL, e que ela foi devolvida pelo surf antes]
 
-## Query original
+### Query original
 [query inicial]
 
-## Evoluções aplicadas
+### Evoluções aplicadas
 1. [query evoluída 1] — Narrowing: adicionado "TypeScript 5.6"
 2. [query evoluída 2] — Lateral: explorado "alternatives to X"
 
-## Resultados consolidados
+### Resultados consolidados
 [resultados, deduplicados por URL, ranqueados por relevância]
 
-## Qualidade da busca
+### Qualidade da busca
 - Precision: Alta
 - Diversity: 4 domínios
 - Freshness: 80% de 2025-2026
 - Authority: 60% fontes primárias
 
-## Confiança
+### Confiança
 [Alta/Média/Baixa] — justificativa
 ```
 
 Campos adicionais recomendados quando o loop não convergiu:
 
 ```markdown
-## Lacunas restantes
+### Lacunas restantes
 - [pergunta aberta que justificaria uma nova onda de evolução]
 
-## Ângulos explorados sem resultado
+### Ângulos explorados sem resultado
 - [caminho tentado e falho — marcado para NÃO ser re-buscado
   (UNFILLABLE: motivo)]
 ```
