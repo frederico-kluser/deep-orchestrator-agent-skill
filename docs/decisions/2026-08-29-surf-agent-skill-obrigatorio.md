@@ -3,6 +3,7 @@
 **Data:** 2026-08-29
 **Status:** VIGENTE
 **Supersede:** D3, invariante I5 e item F3-05 do `PLANO-MELHORIAS.xml`
+**Revisto por:** D27 (2026-09-20, `2026-09-20-limpeza-por-tarefa-pergunta-pesquisa-flags.md`) — o portão deixou de ser `surf doctor` com "1 = prossiga": é `scripts/surf-gate.sh`, fail-closed (0 | 78 | 127), e pesquisa exigida que falha vira pergunta ao usuário. As seções abaixo sobre o portão ficam como registro histórico.
 
 ---
 
@@ -91,9 +92,23 @@ mantenedor reintroduz um fallback.
   `search-parallel.sh`. Substituto: **uma** chamada `surf-search-normal` com
   brief — o LLM planeja o conjunto de queries, a onda roda até `--sub-agents`
   delas em paralelo, e o ledger do surf dedupa canonicamente por URL.
-- **O cache de 10 minutos do `check-brave-credits.sh`.** Substituído pelo
-  cache de 7 dias da validação do próprio surf, que além de mais longo é
-  gratuito (a sondagem de chave do surf não é cobrada).
+- **O cache de 10 minutos do `check-brave-credits.sh`.** Não tem substituto
+  para CRÉDITO. O que existe é o cache de 7 dias da validação do próprio
+  surf, que é gratuito (a sondagem de chave do surf não é cobrada) e cobre só
+  a VALIDADE da chave.
+  > **Correção de 2026-09-20 (D27; achado SURF-01 da auditoria).** A redação
+  > original dizia "Substituído pelo cache de 7 dias da validação do próprio
+  > surf, que além de mais longo é gratuito". Estava errada: a validação NÃO
+  > enxerga cota. Para cota esgotada a sonda de chave devolve
+  > `valid:true, throttled:true` (`surf-agent-skill@8.0.1`,
+  > `src/lib/providers/brave.mjs:775-776`), então o portão grátis
+  > (`surf doctor`, medido na auditoria) sai 0 com o crédito zerado; e
+  > cota/429/402 saem do surf com exit **1** (0 fontes), não 78. A detecção
+  > passou a ser REATIVA — `SEARCH_STATUS` no handoff +
+  > `scripts/surf-gate.sh classify` — e a única sonda que enxerga cota é
+  > `surf-gate.sh resume --probe` (UMA busca real, 1 crédito), usada só na
+  > retomada do protocolo PESQUISA-FALHOU. Ver
+  > `2026-09-20-limpeza-por-tarefa-pergunta-pesquisa-flags.md` (D27).
 
 ## O portão, e por que é `surf doctor`
 

@@ -52,6 +52,48 @@ para `.deep-orchestrator-preferences/` (projeto e skill) e o
 PERGUNTA EM TEXTO no terminal, nunca mais um site (D18), gramática `N:XY`
 com a opção escolhida virando a ação salva (D19), flag `no-evolve` pulando a
 pergunta e o pós-processamento (D20), posição depois de TUDO (commit + push +
-relatório) com continuação na FASE 0 passo 0.4 (D21), e prefixo `mp=N` →
-`max-parallel=N` (D22). O portão de aprovação do plano (FASE 2.5) continua no
-Plannotator.
+relatório) com continuação na FASE 0 passo 0.4 (D21; desde a v4.1.0 é o
+passo 0 — ESTADOS PENDENTES, D31), e prefixo `mp=N` → `max-parallel=N` (D22).
+O portão de aprovação do plano (FASE 2.5) continua no Plannotator.
+
+## Decisões da v4.0.0 (2026-08-29)
+
+`2026-08-29-surf-agent-skill-obrigatorio.md` registra D23: a pesquisa web sai
+desta skill — a surf-agent-skill v8 (Brave-only) vira dependência dura, os
+seis scripts de busca internos foram removidos e sem chave Brave válida a
+execução para (exit 78). Dois pontos desse registro foram revistos na v4.1.0
+(D27): o portão deixou de ser `surf doctor` com "1 = prossiga" (fail-open) e
+virou `scripts/surf-gate.sh` (fail-closed); e a afirmação de que o cache de
+validação substituía a sonda de crédito foi corrigida, com nota datada, no
+próprio arquivo.
+
+## Decisões da v4.1.0 (2026-09-20)
+
+`2026-09-20-limpeza-por-tarefa-pergunta-pesquisa-flags.md` registra D24–D31,
+resposta à auditoria de 2026-09-20 (7 lentes, achados reproduzidos em lab):
+registro RETROATIVO da R8j do commit `fe3a1c2` — `wt=` termina em commit +
+push, nunca merge de volta, `purge` como rede final — mais a reentrada do
+`wt=<nome>` (D24); limpeza POR TAREFA no instante do gate verde, feita pelo
+script (`integrate` → `gate` → `finish`; `close` para o que não integra), com
+ledger `owned.tsv` de 11 colunas, `ledger`/`checklist` e lock sem `flock(1)`
+(D25); portão inter-onda `sweep && assert-clean --wave <N+1>`, `new` que
+recusa onda com sobra (rc 6), merge que não suja a raiz nem marca MERGED um
+squash vazio, e `purge` que nunca esconde o que não foi integrado (rc 3 +
+seção "Não integrado" obrigatória; título "Tarefa concluída PARCIALMENTE")
+(D26); protocolo PESQUISA-FALHOU — pergunta em TEXTO, INCONDICIONAL (vence
+autonomia, `no-stop` e `plan=off`), `SEARCH_STATUS` no handoff,
+`SEARCH_REQUIRED` no plano, `scripts/surf-gate.sh` fail-closed com
+`classify`/`pause`/`resume --probe`, porque cota/429/402 saem exit 1 e não 78
+(D27); flag `no-test` — não criar ≠ não rodar (D28); flag `only-e2e` e o eixo
+`DO_TEST_MODE=full|none|e2e`, com cobertura por JORNADA (D29); flag
+`do-question` — o orquestrador PODE perguntar, e a pergunta da chave Brave
+não depende dela (D30); e os estruturais — `--flags='<TOKENS>'` com ZONA DE
+PREFIXO e o `do-context.sh` como único validador, `description` ≤ 1024, FASE
+0 reordenada, alvo macOS / bash 3.2.57 (D31). Fatiar o `SKILL.md` em arquivos
+de referência ficou registrado como trabalho futuro.
+
+**Namespace:** os registros datados formam UMA série contínua — D1–D11
+(`2026-08-23-auto-evolucao.md`), D12–D17, D18–D22, D23, D24–D31. Ela NÃO é a
+série D1–D7 da tabela acima (research de 2026-08-03) nem a D1–D4 do
+`PLANO-MELHORIAS.xml`: ao citar um D abaixo de 12, diga de qual documento (o
+D23 já faz isso para os "dois D3").
