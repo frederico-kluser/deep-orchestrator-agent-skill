@@ -57,6 +57,14 @@ BRANCH_NS, squash-merge, subwave. Quem aprova não opera a máquina.>
 
 ## Riscos e premissas
 - <premissa que você assumiu e que, se falsa, muda o plano>
+- <premissa externa que ficou sem pesquisa: marque **NÃO VERIFICADA** e o
+  motivo — "busca vazia" ou "usuário autorizou seguir sem busca">
+
+## Política de testes        <!-- conforme $DO_TEST_MODE (FASE 2, passo 4.5) -->
+<full: "testes escritos ao fim de cada onda" · none: "Testes: DESLIGADOS por
+no-test — nenhum teste novo; a suíte existente roda a cada integração" · e2e:
+"só testes end-to-end" + o mapa jornada → onda em que fecha → o que ela prova.
+Quem aprova precisa VER que a flag pegou.>
 
 ## Como verificar que funcionou
 - <comando ou observação concreta>
@@ -102,7 +110,7 @@ elas; ignorá-las é responder metade do feedback.
 | No feedback | O que significa | O que fazer |
 |---|---|---|
 | `[🚫 Out of scope]` | "isso não é parte da tarefa" | **REMOVER** a sub-tarefa do plano — não reduzir, tirar. E remover a worktree batizada para ela. |
-| `[🔍 Verify this]` | "você assumiu isso" | Voltar ao código (`Read`/`Grep`) ou pesquisar (`surf-search-normal "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL"`) e trocar a premissa por fato **antes** de reescrever. Se sair 78 (sem chave Brave válida), MANTENHA a premissa e marque-a **NÃO VERIFICADA**, dizendo por quê. |
+| `[🔍 Verify this]` | "você assumiu isso" | Voltar ao código (`Read`/`Grep`) ou pesquisar — com o comando da seção 2.1, que CLASSIFICA o resultado — e trocar a premissa por fato **antes** de reescrever. `EMPTY` (a busca funcionou e veio vazia): premissa **NÃO VERIFICADA**, motivo "busca vazia", sem pergunta. `BLOCKED_78` (exit 78), `FAILED_QUOTA`, `FAILED_OTHER` ou binário ausente (127): execute o protocolo PESQUISA-FALHOU — NUNCA marque NÃO VERIFICADA por conta própria. |
 | `[👍 Looks good]` | aprovação parcial | Não mexer nesse trecho. Mudá-lo mesmo assim custa uma rodada. |
 | `Remove this` | bloco a apagar | Apagar o trecho citado. |
 | `General feedback` | comentário global | Costuma ser sobre abordagem, não sobre um item — pode implicar redesenhar as ondas. |
@@ -111,6 +119,32 @@ elas; ignorá-las é responder metade do feedback.
 **Discordar é permitido; ignorar não.** Um item que você acha errado ainda
 precisa aparecer no plano novo, com a razão explícita. Silêncio, para quem
 aprova, lê-se como item ignorado — e vira mais uma rodada.
+
+### 2.1 A busca do `[🔍 Verify this]` (mesma regra da FASE 2.5, passo 5)
+
+É o ÚNICO ponto do fluxo em que o ORQUESTRADOR roda uma busca surf ele mesmo
+(fora a sonda `resume --probe` do protocolo PESQUISA-FALHOU). Aqui ele está
+sozinho, R=1, então fica com o teto inteiro de `--sub-agents`. O exit code cru
+engana — cota esgotada, 429 e billing saem **1**, igual a "não achei" —, por
+isso a saída vai para arquivo e é CLASSIFICADA na mesma chamada Bash:
+
+```bash
+. '<ENV_FILE>'; surf-search-normal "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL" --sub-agents="${DO_SURF_SUB_AGENTS:-10}" > "$DO_STATE/verify.out" 2> "$DO_STATE/verify.err"; rc=$?; "$DO_SURF_GATE" classify "$rc" "$DO_STATE/verify.out" "$DO_STATE/verify.err"
+```
+
+| Classe impressa | O que fazer |
+|---|---|
+| `OK` | Ler `$DO_STATE/verify.out` e trocar a premissa por FATO com URL. |
+| `EMPTY` (exit 1: a busca FUNCIONOU e veio vazia) | Manter a premissa marcada **NÃO VERIFICADA**, motivo "busca vazia". SEM pergunta. |
+| `BLOCKED_78` (exit 78) · `FAILED_QUOTA` · `FAILED_OTHER` (inclui o exit 127 do binário ausente) | O usuário PEDIU a verificação, logo a pesquisa é EXIGIDA: executar o protocolo **PESQUISA-FALHOU** (`SKILL.md`, logo após a R7; onda = 0; sub-tarefas bloqueadas = `"[Verify this] <premissa>"`) e NÃO abrir outro Plannotator antes da resposta. |
+| `USAGE_2` | O comando montado está errado: corrigir e rodar de novo. |
+| `KILLED_143` | Estourou o timeout do Bash: refazer com timeout maior. |
+
+**NUNCA marque NÃO VERIFICADA por conta própria num 78/127/cota.** Chave, cota
+e instalação são ambiente do USUÁRIO: só a opção [3] da pergunta do protocolo
+autoriza seguir sem a busca — e aí o motivo registrado é "usuário autorizou
+seguir sem busca". Na retomada com `RESUME=OK`, refaça ESTA busca e continue
+a regeneração do plano. Nunca troque de ferramenta.
 
 ---
 
@@ -139,16 +173,27 @@ TAREFA ORIGINAL:
 Faça, nesta ordem:
 1. Liste cada item do feedback e o que ele exige. Itens com caminho de imagem
    (Reference Images / Attached images): leia a imagem com Read antes.
-2. Para cada [🔍 Verify this]: investigue de verdade (Read/Grep no repositório,
-   ou `surf-search-normal "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL"`)
-   e substitua a premissa por fato. Exit 78 = sem chave Brave válida: mantenha
-   a premissa marcada **NÃO VERIFICADA** e diga por quê — não troque de
-   ferramenta.
+2. Para cada [🔍 Verify this]: investigue de verdade (Read/Grep no repositório;
+   se o código não responde, a busca CLASSIFICADA da FASE 2.5, passo 5:
+   `. '<ENV_FILE>'; surf-search-normal "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL" --sub-agents="${DO_SURF_SUB_AGENTS:-10}" > "$DO_STATE/verify.out" 2> "$DO_STATE/verify.err"; rc=$?; "$DO_SURF_GATE" classify "$rc" "$DO_STATE/verify.out" "$DO_STATE/verify.err"`)
+   e substitua a premissa por fato. Aja pela CLASSE impressa: OK = fato com
+   URL. EMPTY (a busca funcionou e veio vazia) = mantenha a premissa marcada
+   **NÃO VERIFICADA**, motivo "busca vazia" — sem pergunta. BLOCKED_78 (exit
+   78), FAILED_QUOTA ou FAILED_OTHER (inclui o 127 do binário ausente) = a
+   verificação foi PEDIDA pelo usuário, logo a pesquisa é EXIGIDA: execute o
+   protocolo PESQUISA-FALHOU e NÃO abra outro Plannotator antes da resposta.
+   NUNCA marque NÃO VERIFICADA por conta própria num 78/127/cota — só a opção
+   [3] do usuário autoriza. Não troque de ferramenta.
 3. Para cada [🚫 Out of scope] e cada "Remove this": REMOVA do plano. Se a
    sub-tarefa removida tinha worktree batizada, tire-a também.
 4. Refaça a decomposição da FASE 2 com o feedback como restrição de PRIMEIRA
    classe: ondas, mapa de propriedade de arquivo, batismo (R6) e prompts todos
-   derivam do plano NOVO.
+   derivam do plano NOVO. Preencha SEARCH_REQUIRED=sim|não para cada
+   sub-tarefa nova; se nasceu alguma com "sim", repita o PORTÃO PÓS-PLANO
+   (FASE 2, passo 9) antes da próxima rodada. A decomposição nova segue a
+   POLÍTICA DE TESTES de $DO_TEST_MODE (FASE 2, passo 4.5): em `none` não
+   nasce sub-tarefa cujo entregável seja teste; em `e2e` recalcule o MAPA DE
+   JORNADAS.
 5. Reescreva $PLAN_FILE (TASK_PLAN.md) e $PLAN_DOC, mantendo o TÍTULO
    IDÊNTICO e abrindo o corpo com "## O que mudou nesta revisão", que responde
    item a item ao feedback.
@@ -162,7 +207,10 @@ explícita. Não deixe nenhum item sem resposta visível.
 ## 4. Prompt: REVISOR DE PLANO subordinado ao plano aprovado
 
 Delta a colar no prompt do REVISOR DE PLANO (FASE 3, passo 5) quando
-`$DO_PLAN_APPROVAL=1`.
+`$DO_PLAN_APPROVAL=1`. `{{TEST_MODE}}` = o valor de `$DO_TEST_MODE` lido do
+ENV_FILE (`full` | `none` | `e2e`) — o revisor RECEBE o modo de teste para não
+propor o que a flag desligou (o bloco MODO DE TESTE vale também sem portão:
+a FASE 3, passo 5, manda colar a mesma proibição quando o modo é `none`).
 
 ```
 RESTRIÇÃO — ESTE PLANO FOI APROVADO PELO USUÁRIO:
@@ -170,6 +218,17 @@ RESTRIÇÃO — ESTE PLANO FOI APROVADO PELO USUÁRIO:
 
 FEEDBACK ACUMULADO NAS RODADAS DE APROVAÇÃO:
 {{FEEDBACK_ACUMULADO}}
+
+MODO DE TESTE DESTA EXECUÇÃO: {{TEST_MODE}}
+- none (no-test): é PROIBIDO propor sub-tarefa cujo entregável seja teste. A
+  Testing Subwave está DESLIGADA de propósito; ausência de testes novos NÃO é
+  lacuna do plano. (O gate continua rodando a suíte EXISTENTE.)
+- e2e (only-e2e): NÃO proponha sub-tarefa de teste unit/integration. Os testes
+  e2e nascem na Testing Subwave, por JORNADA; se a sua proposta muda a onda em
+  que uma jornada FECHA, diga qual jornada e para qual onda.
+- full: nada muda.
+Em QUALQUER modo você NUNCA propõe subwaves (testing/validation): o
+orquestrador as gera sozinho.
 
 Classifique CADA proposta sua em exatamente uma categoria:
 

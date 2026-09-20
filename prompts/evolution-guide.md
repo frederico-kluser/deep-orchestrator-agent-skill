@@ -78,7 +78,7 @@ migra, o contexto project é descartado da proposta global.
    `project-config.md`.
 5. **NUNCA BLOQUEIA** — falha do agente, da pergunta ou de escrita em prefs é
    registrada no relatório e a execução termina normal (D9/D17); a pergunta
-   não respondida é resolvida na próxima mensagem (FASE 0, passo 0.4) ou vira
+   não respondida é resolvida na próxima mensagem (FASE 0, passo 0 — ESTADOS PENDENTES) ou vira
    dismiss (tudo pendente).
 
 **Formato de candidato** (o `do-prefs.sh` valida enums + campos obrigatórios +

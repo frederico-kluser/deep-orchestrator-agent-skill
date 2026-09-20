@@ -6,7 +6,7 @@
 # terminal, feita DEPOIS de TUDO (commit, push, relatório — v3.9.0). O
 # orquestrador roda `ask`, imprime o bloco da pergunta na mensagem final e
 # ENCERRA o turno; o usuário responde com códigos na próxima mensagem; o
-# orquestrador (FASE 0, passo 0.4 — continuação) roda `answer` + `apply`.
+# orquestrador (FASE 0, passo 0 — ESTADOS PENDENTES) roda `answer` + `apply`.
 #
 # Uso (com o ENV_FILE da FASE 0 sourceado, ou via --env <arquivo>):
 #   evolution-survey.sh ask                  monta a pergunta → pendente.md + stdout
@@ -94,7 +94,9 @@ cmd_ask() {
   local -a blocks=()
   read_candidates "$PROPOSALS"
   local n=0
-  for b in "${CANDIDATES[@]}"; do
+  # bash 3.2 + set -u: "${CANDIDATES[@]}" vazio dá "unbound variable" — o guard
+  # ${CANDIDATES[@]+...} expande para NADA quando não há candidato (S2).
+  for b in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
     parse_fields "$b"
     [ -n "$B_KEY" ] || { err "evolution-survey.sh: proposta sem 'key:' ignorada no ask"; continue; }
     [ -n "$B_OBS" ] || { err "evolution-survey.sh: proposta $B_KEY sem 'observacao' ignorada no ask"; continue; }
@@ -154,7 +156,7 @@ cmd_answer() {
   local -a keys=()
   read_candidates "$PROPOSALS"
   local b
-  for b in "${CANDIDATES[@]}"; do
+  for b in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
     parse_fields "$b"
     [ -n "$B_KEY" ] && keys+=("$B_KEY")
   done
@@ -377,7 +379,7 @@ PYEOF
   local bi=0 bkey bscope save scope opcao line
   if [ -f "$proposals" ]; then
     read_candidates "$proposals"
-    for b in "${CANDIDATES[@]}"; do
+    for b in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
       bi=$((bi + 1))
       parse_fields "$b"
       bkey="$B_KEY"

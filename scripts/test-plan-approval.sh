@@ -310,7 +310,9 @@ for case_spec in "p1 approved 0" "p2 annotated 10" "p3 dismissed 11" "p5 fail 13
   printf '%s\n' "$action" > "$CASE/fake-script"
   plan_doc "$CASE/PLANO.md" "Plano de teste"
   "$GATE" round "$CASE/PLANO.md" >/dev/null 2>&1; rc=$?
-  chk "${name^^} $action → exit $want" "$rc" "$want"
+  # ${name^^} é bash 4+: no bash 3.2 do macOS dá "bad substitution" e ABORTA o
+  # laço inteiro — as 5 asserções P1..P6 sumiam sem contar como FAIL.
+  chk "$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]') $action → exit $want" "$rc" "$want"
 done
 
 newcase p2b
@@ -352,7 +354,7 @@ snap="$PLAN_APPROVAL_DIR/rev-001.md"
 has "P8 snapshot copiou o conteúdo" "$(cat "$snap")" "linha original"
 echo "mudou depois" >> "$CASE/PLANO.md"
 hasnt "P8 snapshot não segue o arquivo vivo" "$(cat "$snap")" "mudou depois"
-printf 'tentativa\n' >> "$snap" 2>/dev/null || true
+{ printf 'tentativa\n' >> "$snap"; } 2>/dev/null || true
 hasnt "P8 snapshot é somente leitura" "$(cat "$snap")" "tentativa"
 
 echo "=== P9/P10/P11: revisões, trail e imutabilidade do título ==="
@@ -534,6 +536,10 @@ plan_doc "$CASE/PLANO.md" "Plano"
 # timeout estilo BSD: NÃO conhece --foreground nem -k. Um `runner` montado às
 # cegas com essas flags morreria com erro de uso e o rc!=0 seria lido como
 # "o Plannotator falhou" — exit 13 num caso em que o usuário APROVOU.
+# O minpath symlinka o timeout(1) REAL quando ele existe (coreutils do Homebrew
+# no macOS): sem o rm, o `cat >` escreveria ATRAVÉS do symlink — "Permission
+# denied" no binário do sistema, e o caso passava com o timeout GNU de verdade.
+rm -f "$CASE/min/timeout"
 cat > "$CASE/min/timeout" <<'TOEOF'
 #!/usr/bin/env bash
 case "$1" in
@@ -606,7 +612,7 @@ export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER
 mkdir -p "$CASE/repo" && cd "$CASE/repo" && git init -q . \
   && echo x > a.txt && git add -A && git commit -qm init
 envf=$("$SKILL/scripts/do-context.sh" --quiet 2>&1 | tail -1)
-pval() { sed -n "s/.*$1='\([^']*\)'.*/\1/p" "$2"; }
+pval() { sed -n "s/^$1='\([^']*\)'.*/\1/p" "$2"; }   # ancorado: MODE não pode casar com DO_TEST_MODE
 chk "DC1 DO_PLAN_APPROVAL default 0" "$(pval DO_PLAN_APPROVAL "$envf")" "0"
 chk "DC1 DO_PLAN_MAX_REVISIONS default" "$(pval DO_PLAN_MAX_REVISIONS "$envf")" "5"
 chk "DC1 DO_PLAN_TIMEOUT default" "$(pval DO_PLAN_TIMEOUT "$envf")" "3600"
@@ -692,7 +698,7 @@ export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER
 mkdir -p "$CASE/repo" && cd "$CASE/repo" && git init -q . \
   && echo x > a.txt && git add -A && git commit -qm init
 envf=$("$SKILL/scripts/do-context.sh" --quiet 2>&1 | tail -1)
-pval() { sed -n "s/.*$1='\([^']*\)'.*/\1/p" "$2"; }
+pval() { sed -n "s/^$1='\([^']*\)'.*/\1/p" "$2"; }   # ancorado: MODE não pode casar com DO_TEST_MODE
 st=$(pval DO_STATE "$envf")
 chk "DC4 portão desligado por default" "$(pval DO_PLAN_APPROVAL "$envf")" "0"
 chk "DC4 FASE 0 NÃO cria o diretório do portão" \
@@ -708,8 +714,9 @@ chk "DC4 nenhum arquivo TASK_PLAN.md prematuro" \
 # R7 (P4) — o DO_REUSE não pode inverter a decisão do portão em silêncio.
 env_on=$(DO_PLAN_APPROVAL=1 "$SKILL/scripts/do-context.sh" --quiet 2>&1 | tail -1)
 chk "R7 run com portão ON" "$(pval DO_PLAN_APPROVAL "$env_on")" "1"
-# deixa uma sub-tarefa pendente para que o reuso seja tentado
-printf 'r\tfeature\tx\tb\tp\ts\t-\t-\tACTIVE\n' >> "$(dirname "$env_on")/owned.tsv"
+# deixa uma sub-tarefa pendente para que o reuso seja tentado (ledger de 11
+# colunas — v4.1.0: status é a coluna 9, seguida de parent e outcome)
+printf 'r\tfeature\tx\tb\tp\ts\t-\t-\tACTIVE\t-\t-\n' >> "$(dirname "$env_on")/owned.tsv"
 out=$("$SKILL/scripts/do-context.sh" 2>&1)          # invocação SEM portão
 env_off=$(printf '%s' "$out" | tail -1)
 chk "R7 invocação SEM portão não reusa o env com portão" \
@@ -720,8 +727,14 @@ has "R7 divergência é anunciada como DO_STALE" "$out" "inverteria a decisão d
 # O laço de reuso varre run-*/env em ordem alfabética = cronológica, então o
 # env_on (mais antigo) venceria e casaria legitimamente. Encerramos a run dele
 # para que a única pendente seja a SEM portão.
-sed -i 's/\tACTIVE$/\tREMOVED/' "$(dirname "$env_on")/owned.tsv"
-printf 'r\tfeature\ty\tb\tp\ts\t-\t-\tACTIVE\n' >> "$(dirname "$env_off")/owned.tsv"
+# Portável (macOS): `sed -i` sem sufixo é GNU e o sed do BSD não conhece `\t`;
+# e o status NÃO é mais a última coluna — awk na coluna 9 + arquivo temporário.
+_own_on="$(dirname "$env_on")/owned.tsv"
+awk -F'\t' 'BEGIN{OFS="\t"} NR>1 && $9=="ACTIVE" {$9="REMOVED"} {print}' "$_own_on" > "$_own_on.tmp" \
+  && mv "$_own_on.tmp" "$_own_on"
+chk "R7 a run com portão foi encerrada (coluna 9 = REMOVED, 11 colunas preservadas)" \
+  "$(awk -F'\t' 'NR>1 {print $9 ":" NF}' "$_own_on")" "REMOVED:11"
+printf 'r\tfeature\ty\tb\tp\ts\t-\t-\tACTIVE\t-\t-\n' >> "$(dirname "$env_off")/owned.tsv"
 out2=$(DO_PLAN_APPROVAL=1 "$SKILL/scripts/do-context.sh" 2>&1)
 has "R7 inverso (plan=on sobre env sem portão) também é DO_STALE" "$out2" "inverteria a decisão do portão"
 # env legado (anterior à v3.4.0, sem a chave) também não pode ser reusado

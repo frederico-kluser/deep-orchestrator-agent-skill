@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Testes de aceitação do motor de EVOLUÇÃO v3.8.0 — F1..F13, S1..S10, E1..E6
+# Testes de aceitação do motor de EVOLUÇÃO v3.8.0 — F1..F14, S1..S10, E1..E6
 #
 # Cada caso roda ISOLADO num repo fake da skill (git init + SKILL.md com
 # identidade + scripts/do-prefs.sh, scripts/evolution-survey.sh,
@@ -22,6 +22,8 @@
 #   F11: identidade errada do SKILL.md → exit 3 (add-global)
 #   F12: add com entrada vazia → exit 0, 'nada a adicionar', nada escrito (D9)
 #   F13: aspas ao redor de title/observacao/acao são removidas no armazenamento
+#   F14: bash 3.2 + set -u — do-prefs.sh sem subcomando (sozinho ou só com
+#        --project) → uso (exit 2), NUNCA 'unbound variable' (array vazio)
 #   S1:  ask com propostas → exit 0; pendente.md gravado; bloco numerado com
 #        opções a/b/c e a linha "1 = fix local · 2 = fix global"
 #   S2:  ask sem propostas → marca SEM-PROPOSTAS e exit 0
@@ -182,7 +184,7 @@ nopath_sem() {
 }
 
 # =============================================================================
-echo "=== F1..F13: do-prefs.sh ==="
+echo "=== F1..F14: do-prefs.sh ==="
 # =============================================================================
 
 newcase f1; write_skill
@@ -274,6 +276,13 @@ out=$("$DO_PREFS" add-project "$CASE/vazio.md" --project "$PROJ" 2>&1); rc=$?
 chk "F12 entrada vazia → exit 0" "$rc" "0"
 chk "F12 'nada a adicionar'" "$(printf '%s' "$out" | grep -c 'nada a adicionar')" "1"
 chk "F12 nada escrito" "$([ -f "$PROJ_PREFS/learnings.md" ] && echo 1 || echo 0)" "0"
+
+newcase f14; write_skill; proj_fixture p
+out=$("$DO_PREFS" --project "$PROJ" 2>&1); rc=$?
+chk "F14 só --project (sem subcomando) → uso, exit 2" "$rc" "2"
+chk "F14 sem 'unbound variable' (array vazio sob set -u)" "$(printf '%s' "$out" | grep -c 'unbound variable')" "0"
+out=$("$DO_PREFS" 2>&1); rc=$?
+chk "F14 sem argumento nenhum → uso, exit 2" "$rc" "2"
 
 # =============================================================================
 echo "=== S1..S10: evolution-survey.sh (pergunta em texto — v3.9.0) ==="

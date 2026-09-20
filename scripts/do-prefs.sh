@@ -132,7 +132,9 @@ while [ $# -gt 0 ]; do
     *) local_args+=("$1"); shift ;;
   esac
 done
-set -- "${local_args[@]}"
+# bash 3.2 + set -u: "${local_args[@]}" vazio (nenhum argumento, ou só
+# --project) dá "unbound variable" — o guard expande para NADA nesse caso.
+set -- ${local_args[@]+"${local_args[@]}"}
 if [ -n "$PROJECT_ROOT_ARG" ]; then
   PROJECT_ROOT="$(cd "$PROJECT_ROOT_ARG" && pwd -P 2>/dev/null || true)"
   [ -n "$PROJECT_ROOT" ] && [ -d "$PROJECT_ROOT" ] \
