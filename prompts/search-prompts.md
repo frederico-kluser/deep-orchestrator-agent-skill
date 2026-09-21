@@ -4,7 +4,7 @@
 > COMO as buscas são formuladas, refinadas e avaliadas — nunca como são
 > executadas.
 >
-> **A execução é 100% surf-agent-skill v8, e nada mais.** Esta skill não tem
+> **A execução é 100% surf-agent-skill v9+, e nada mais.** Esta skill não tem
 > sistema de busca: `search.sh`, `search-parallel.sh`, `brave-search.sh`,
 > `check-search-credits.sh` e `check-brave-credits.sh` foram REMOVIDOS na
 > v4.0.0 (decisão D23). O backend é **Brave Search e só ele** — não há Tavily,

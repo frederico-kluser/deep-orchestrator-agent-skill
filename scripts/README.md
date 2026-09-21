@@ -91,7 +91,7 @@ E o agente de analise. Nada e promovido ao corpo da skill automaticamente.
 
 `search.sh`, `search-parallel.sh`, `brave-search.sh`, `check-search-credits.sh`
 e `check-brave-credits.sh` foram APAGADOS -- 3.346 linhas de sistema de busca
-proprio. A pesquisa web e 100% **surf-agent-skill v8**, pelos binarios globais:
+proprio. A pesquisa web e 100% **surf-agent-skill v9+**, pelos binarios globais:
 
 | Binario | Quando |
 |---|---|

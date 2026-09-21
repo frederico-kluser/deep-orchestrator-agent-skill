@@ -220,11 +220,11 @@ O [ECC — Everything Claude Code](https://github.com/affaan-m/ECC) (MIT) é um 
 
 Princípio transversal herdado: **entrada NÃO confiável** — planos, diffs e repos clonados são lidos como texto não confiável; comandos embutidos só rodam após sanitização contra whitelist (test, lint, typecheck, coverage).
 
-### Pesquisa — surf-agent-skill v8 (dependência dura)
+### Pesquisa — surf-agent-skill v9+ (dependência dura)
 
 **Esta skill não tem sistema de busca.** Desde a v4.0.0 (decisão D23), toda
 pesquisa web passa pelos binários globais da
-[surf-agent-skill v8](https://www.npmjs.com/package/surf-agent-skill), e por
+[surf-agent-skill v9+](https://www.npmjs.com/package/surf-agent-skill), e por
 mais nada. Não há tabela de tiers porque não há cadeia: há um backend.
 
 ```bash
@@ -424,7 +424,7 @@ no macOS (bash 3.2.57, BSD sed/wc, sem `flock`): `for t in scripts/test-*.sh; do
 - Claude Code (CLI)
 - Git
 - **Node.js ≥ 18 + npm** — para instalar a surf-agent-skill
-- **surf-agent-skill v8** — **OBRIGATÓRIA** sempre que a tarefa exigir pesquisa: `npm i -g surf-agent-skill`, depois `surf` para adicionar a chave. Sem ela, o orquestrador **pausa e pergunta** (nunca instala sozinho: `npm -g` é vedado pela regra R9)
+- **surf-agent-skill v9+** — **OBRIGATÓRIA** sempre que a tarefa exigir pesquisa (a v9 é a primeira que traz o verbo `surf-research-skill gate`, em que o portão desta skill se apoia): `npm i -g surf-agent-skill`, depois `surf` para adicionar a chave. Sem ela, o orquestrador **pausa e pergunta** (nunca instala sozinho: `npm -g` é vedado pela regra R9)
 - **Chave Brave Search** — **OBRIGATÓRIA** (https://api-dashboard.search.brave.com). Não há tier sem chave: sem ela todo comando `surf` sai **78**, e o orquestrador pausa e pede a você que troque/ajuste a chave — ou que autorize seguir sem pesquisa (protocolo PESQUISA-FALHOU). Validá-la é **grátis** e o surf faz isso sozinho a cada invocação (veredito em cache por 7 dias). Uma **segunda** chave não é redundância — cada uma carrega o próprio orçamento de requisições por segundo, então duas dobram o paralelismo real
 - **Chave OpenRouter** — *recomendada* (`surf-research-skill ai-setup`): sem ela o surf ainda faz buscas reais, mas devolve evidência crua em vez de síntese
 - `curl` (instalação automática do Plannotator, em `check-plannotator.sh`) e `jq` **ou** `python3` (leitura do envelope JSON em `plan-approval.sh` e `evolution-survey.sh`). Os scripts de busca que os usavam foram removidos na v4.0.0
@@ -620,7 +620,7 @@ condensado (304k → 215k caracteres) após a revisão adversarial da rodada fin
 **4.0.0** — **fim do sistema de busca interno.** `search.sh`,
 `search-parallel.sh`, `check-search-credits.sh`, `brave-search.sh`,
 `check-brave-credits.sh` e `test-search.sh` REMOVIDOS (3.346 linhas). A
-pesquisa é 100% **surf-agent-skill v8** — dependência obrigatória
+pesquisa é 100% **surf-agent-skill v9+** — dependência obrigatória
 (`npm i -g surf-agent-skill`), Brave como único backend, sem tier sem chave e
 sem provedor de reserva. **`exit 78` = configuração** (sem chave Brave válida):
 o orquestrador PARA, informa e aguarda; retentar não conserta. Portão passa a

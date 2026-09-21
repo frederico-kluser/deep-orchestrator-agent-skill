@@ -2,7 +2,7 @@
 # =============================================================================
 # surf-gate.sh — PORTÃO DA SURF (R7) e protocolo PESQUISA-FALHOU, determinísticos
 # -----------------------------------------------------------------------------
-# A pesquisa web do deep-orchestrator é EXCLUSIVAMENTE a surf-agent-skill v8
+# A pesquisa web do deep-orchestrator é EXCLUSIVAMENTE a surf-agent-skill v9+
 # (Brave-only, sem fallback). Este script é o ÚNICO lugar que interpreta o
 # estado dela — o SKILL.md só lê as linhas `CHAVE=valor` que saem daqui.
 # NUNCA gasta crédito de busca, salvo `resume --probe` (1 crédito, explícito).
@@ -88,7 +88,7 @@ run_gate() {
   done
   if [ -n "$missing" ]; then
     G_RC=127; G_CODE="NotInstalled"
-    G_MSG="surf-agent-skill v8 não está instalada (faltam no PATH:$missing).
+    G_MSG="surf-agent-skill v9+ não está instalada (faltam no PATH:$missing).
 Fix: npm i -g surf-agent-skill   (o orquestrador NUNCA instala sozinho — R9)"
     return 0
   fi
