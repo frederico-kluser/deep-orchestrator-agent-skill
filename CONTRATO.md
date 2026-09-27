@@ -183,5 +183,16 @@ de qualquer extração — os testes G12/B01 resolvem o conteúdo através dela)
 
 ```
 .claude/skills/deep-orchestrator-agent-skill/SKILL.md   # router (sempre)
-# references/*.md  e  prompts/*.md  entram aqui à medida do split v4.2.0
+references/research-protocol.md   # R7 + PESQUISA-FALHOU + casos surf (SEARCH_REQUIRED / SURF_GATE != 0)
+prompts/subagent-prompt.md        # template feature/fix/prep (dispatch)
+prompts/adversarial-review.md     # revisor adversarial (FASE 3 passo 6)
+prompts/test-agent.md             # agente de testes (sem no-test)
+prompts/validation-agent.md       # validador (3 modos)
+prompts/explainer-agent.md        # explicador (FASE 4 passo 4)
+prompts/evolution-agent.md        # evolução (sem no-evolve)
+# references/*.md restantes entram aqui à medida do split v4.2.0
 ```
+
+NOTA: os módulos `prompts/ecc-*.md`, `prompts/search-prompts.md`,
+`prompts/plan-approval-prompts.md` e `prompts/evolution-guide.md` são
+contratos SEPARADOS (fora do corpo da skill) — não entram nesta lista.

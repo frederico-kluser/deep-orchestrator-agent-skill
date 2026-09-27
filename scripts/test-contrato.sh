@@ -17,6 +17,12 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 SKILL_MD="$ROOT/.claude/skills/deep-orchestrator-agent-skill/SKILL.md"
 CONTRATO="$ROOT/CONTRATO.md"
+SKILL_ALL="$ROOT/.test-contrato-all.$$"
+trap 'rm -f "$SKILL_ALL"' EXIT
+: > "$SKILL_ALL"
+awk '/^## 6\./{s=1} s&&/^```/{f++; next} s&&f==1&&!/^#/&&NF{print}' "$CONTRATO" 2>/dev/null \
+  | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//' \
+  | while IFS= read -r m; do [ -f "$ROOT/$m" ] && cat "$ROOT/$m"; done >> "$SKILL_ALL"
 DO_CTX="$ROOT/scripts/do-context.sh"
 DO_WT="$ROOT/scripts/do-wt.sh"
 GATE_SH="$ROOT/scripts/surf-gate.sh"
@@ -32,7 +38,7 @@ chk() { if [ "$2" = "$3" ]; then PASS=$((PASS+1)); printf '  \033[32m✓\033[0m 
 has3() { # $1=literal $2=dono-funcional $3=descrição
   local lit="$1" owner="$2" desc="$3" miss=""
   grep -qF -- "$lit" "$owner"      || miss="$miss dono"
-  grep -qF -- "$lit" "$SKILL_MD"   || miss="$miss skill"
+  grep -qF -- "$lit" "$SKILL_ALL"   || miss="$miss skill"
   grep -qF -- "$lit" "$CONTRATO"   || miss="$miss contrato"
   ok "$desc (dono × skill × CONTRATO.md)" "$([ -z "$miss" ]; echo $?)"
   [ -n "$miss" ] && printf '    ausente em:%s\n' "$miss"
@@ -57,18 +63,18 @@ has3 'Outros: remover chave morta' "$GATE_SH" "adendo manutenção"
 section "CT3 — linha SEARCH_STATUS (contrato de handoff)"
 SS='SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78'
 ok "SEARCH_STATUS idêntica em SKILL.md, prompts/search-prompts.md e CONTRATO.md" \
-   "$(grep -qF -- "$SS" "$SKILL_MD" && grep -qF -- "$SS" "$ROOT/prompts/search-prompts.md" && grep -qF -- "$SS" "$CONTRATO"; echo $?)"
+   "$(grep -qF -- "$SS" "$SKILL_ALL" && grep -qF -- "$SS" "$ROOT/prompts/search-prompts.md" && grep -qF -- "$SS" "$CONTRATO"; echo $?)"
 
 section "CT4 — literais de interface (byte-a-byte)"
 for lit in 'PURGE_RC' '## Não integrado' 'Tarefa concluída PARCIALMENTE' 'MERGED-PARTIAL' 'checklist final' '--boundary='; do
-  ok "SKILL.md/módulos citam '$lit'" "$(grep -qF -- "$lit" "$SKILL_MD"; echo $?)"
+  ok "SKILL.md/módulos citam '$lit'" "$(grep -qF -- "$lit" "$SKILL_ALL"; echo $?)"
   ok "CONTRATO.md documenta '$lit'" "$(grep -qF -- "$lit" "$CONTRATO"; echo $?)"
 done
 ok "dono funcional: 'MERGED-PARTIAL' no do-wt.sh (outcome)" "$(grep -qF 'MERGED-PARTIAL' "$DO_WT"; echo $?)"
 ok "dono funcional: '--boundary=' no do-context.sh" "$(grep -qF -- '--boundary=' "$DO_CTX"; echo $?)"
 
 section "CT5 — sequências de passos congeladas (ordem de ficheiro, sem sort)"
-steps3="$(awk '/<phase id="3"/{p=1} p && /<\/phase>/{p=0} p' "$SKILL_MD" \
+steps3="$(awk '/<phase id="3"/{p=1} p && /<\/phase>/{p=0} p' "$SKILL_ALL" \
           | sed -nE 's/.*<step order="([0-9]+(\.[0-9]+)?)".*/\1/p' | tr '\n' ' ')"
 chk "FASE 3: 13 <step order> em ordem canónica" "$steps3" "0 1 2 3 3.5 4 4.5 5 6 7 8 9 10 "
 f4="$(bash "$DO_WT" checklist final 2>/dev/null \

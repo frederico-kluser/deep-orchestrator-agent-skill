@@ -50,6 +50,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILL_MD="$ROOT/.claude/skills/deep-orchestrator-agent-skill/SKILL.md"
 GATE_SH="$ROOT/scripts/surf-gate.sh"
+# v4.2.0: o conteúdo da skill vive em VÁRIOS módulos (split progressive
+# disclosure). SKILL_ALL = router + módulos da lista canónica (CONTRATO.md §6);
+# é ele que os checks de CONTEÚDO greppam. Frontmatter/YAML/XML/tamanho
+# continuam a apontar ao SKILL_MD (router).
+CONTRATO="$ROOT/CONTRATO.md"
+SKILL_ALL="$ROOT/.test-skill-all.$$"
+trap 'rm -f "$SKILL_ALL"' EXIT
+: > "$SKILL_ALL"
+awk '/^## 6\./{s=1} s&&/^```/{f++; next} s&&f==1&&!/^#/&&NF{print}' "$CONTRATO" 2>/dev/null \
+  | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//' \
+  | while IFS= read -r m; do [ -f "$ROOT/$m" ] && cat "$ROOT/$m"; done >> "$SKILL_ALL"
+
 # PATH mínimo dos casos: coreutils do sistema e MAIS NADA. Os binários surf
 # reais vivem fora daqui (~/.local/bin, prefixo do npm -g) — nenhum caso os vê.
 SAFE_PATH="/usr/bin:/bin"
@@ -202,7 +214,7 @@ v=$(budget 10 12); total=$(( 12 * v ))
 ok "N=10 R=12 estoura (${total} > 10) — por isso o SKILL.md exige R ≤ N" \
    "$([ "$total" -gt 10 ]; echo $?)"
 ok "o SKILL.md declara a restrição R ≤ N" \
-   "$(grep -q 'limite <code>R ≤ N</code>' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'limite <code>R ≤ N</code>' "$SKILL_ALL"; echo $?)"
 
 section "G6 — --sub-agents fora de 1..20 sai 2 (a skill valida ANTES de colar)"
 newcase
@@ -239,7 +251,7 @@ for pat in 'scripts/search\.sh' 'scripts/search-parallel\.sh' \
            'SKILL_HOME}}/scripts/search' 'SEARCH_TIER' \
            'api\.search\.brave\.com' 'api\.duckduckgo\.com' \
            'surf-free-skill'; do
-  hits="$(grep -rIn -- "$pat" "$ROOT/scripts" "$ROOT/prompts" "$SKILL_MD" 2>/dev/null \
+  hits="$(grep -rIn -- "$pat" "$ROOT/scripts" "$ROOT/prompts" "$SKILL_ALL" 2>/dev/null \
           | grep -v 'test-surf-gate\.sh' | wc -l | tr -d ' ')"
   chk "nada invoca '$pat'" "$hits" "0"
 done
@@ -255,34 +267,34 @@ ok "o D23 registra o que foi removido" \
 
 section "G8 — o SKILL.md ainda declara o contrato que esta suíte testa"
 ok "o portão do SKILL.md é o script (\"\$DO_SURF_GATE\" = scripts/surf-gate.sh)" \
-   "$(grep -q 'DO_SURF_GATE' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'DO_SURF_GATE' "$SKILL_ALL"; echo $?)"
 ok "o portão fail-open antigo ('surf doctor >/dev/null; echo SURF_GATE=\$?') saiu" \
-   "$(! grep -q 'surf doctor &gt;/dev/null 2&gt;&amp;1; echo "SURF_GATE=' "$SKILL_MD"; echo $?)"
+   "$(! grep -q 'surf doctor &gt;/dev/null 2&gt;&amp;1; echo "SURF_GATE=' "$SKILL_ALL"; echo $?)"
 ok "existe o protocolo PESQUISA-FALHOU (pergunta incondicional da chave Brave)" \
-   "$(grep -q 'PESQUISA-FALHOU' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'PESQUISA-FALHOU' "$SKILL_ALL"; echo $?)"
 ok "o handoff do sub-agente declara SEARCH_STATUS" \
-   "$(grep -q 'SEARCH_STATUS' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'SEARCH_STATUS' "$SKILL_ALL"; echo $?)"
 ok "R7 documenta o exit 78 como configuração" \
-   "$(grep -q '78 — não há chave Brave válida' "$SKILL_MD"; echo $?)"
+   "$(grep -q '78 — não há chave Brave válida' "$SKILL_ALL"; echo $?)"
 ok "R7 proíbe jitter/backoff em volta do surf" \
-   "$(grep -q 'NUNCA envolva uma chamada surf em sleep, jitter, backoff' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'NUNCA envolva uma chamada surf em sleep, jitter, backoff' "$SKILL_ALL"; echo $?)"
 ok "R7 proíbe WebSearch/WebFetch para DESCOBRIR fontes" \
-   "$(grep -q 'para DESCOBRIR fontes' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'para DESCOBRIR fontes' "$SKILL_ALL"; echo $?)"
 ok "R7 proíbe 'keys list --json' (imprimia as chaves em texto puro)" \
-   "$(grep -q 'keys list --json' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'keys list --json' "$SKILL_ALL"; echo $?)"
 ok "o template de sub-agente usa {{SURF_SUB_AGENTS}}" \
-   "$(grep -q -- '--sub-agents={{SURF_SUB_AGENTS}}' "$SKILL_MD"; echo $?)"
+   "$(grep -q -- '--sub-agents={{SURF_SUB_AGENTS}}' "$SKILL_ALL"; echo $?)"
 ok "FASE 0 tem o passo 6 (dependência obrigatória)" \
-   "$(grep -q 'DEPENDÊNCIA OBRIGATÓRIA — SURF-AGENT-SKILL v8' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'DEPENDÊNCIA OBRIGATÓRIA — SURF-AGENT-SKILL v8' "$SKILL_ALL"; echo $?)"
 ok "existem os dois casos de degradação novos" \
-   "$(grep -q 'case id="surf-ausente"' "$SKILL_MD" && grep -q 'case id="brave-key-invalida"' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'case id="surf-ausente"' "$SKILL_ALL" && grep -q 'case id="brave-key-invalida"' "$SKILL_ALL"; echo $?)"
 # Rodada final (DESIGN-2, SG-1): a escolha [3] é ESTADO do script, e o SKILL.md
 # tem de mandar gravá-la e obedecê-la. (As duas grafias: o XML pode escapar as
 # aspas. grep direto no ARQUIVO — `sed | grep -q` sob pipefail dá 141/SIGPIPE.)
 ok "[DESIGN-2] SKILL.md obedece a linha 'SURF_MODE=no-search' do portão" \
-   "$(grep -qF 'SURF_MODE=no-search' "$SKILL_MD"; echo $?)"
+   "$(grep -qF 'SURF_MODE=no-search' "$SKILL_ALL"; echo $?)"
 ok "[DESIGN-2] SKILL.md grava a escolha [3] com '\"\$DO_SURF_GATE\" choose'" \
-   "$(grep -qF -e '"$DO_SURF_GATE" choose' -e '&quot;$DO_SURF_GATE&quot; choose' "$SKILL_MD"; echo $?)"
+   "$(grep -qF -e '"$DO_SURF_GATE" choose' -e '&quot;$DO_SURF_GATE&quot; choose' "$SKILL_ALL"; echo $?)"
 
 section "G9 — classify: cota/429/402 sai exit 1 no surf, quem distingue é o texto"
 newcase
@@ -677,41 +689,41 @@ out="$(DO_STATE="$CASE/state" RUN_ID="run-g12" gate pause 1 "onda1-x" "g12")"
 miss=0
 while IFS= read -r line; do
   [ -n "$line" ] || continue
-  grep -qF -- "$line" "$SKILL_MD" || { miss=$((miss+1)); printf '    (ausente no SKILL.md) %s\n' "$line"; }
+  grep -qF -- "$line" "$SKILL_ALL" || { miss=$((miss+1)); printf '    (ausente no SKILL.md) %s\n' "$line"; }
 done <<EOF
 $(printf '%s\n' "$out" | grep -E '^  \[[1-4]\] |^===== PESQUISA-FALHOU|^Rode os comandos no SEU terminal|^Outros: remover chave morta')
 EOF
 chk "o texto FIXO da pergunta (título, [1]-[4], adendos) do 'pause' está LITERAL no protocolo do SKILL.md" "$miss" "0"
 SS='SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78'
 ok "a linha SEARCH_STATUS do handoff é a MESMA no SKILL.md e em prompts/search-prompts.md" \
-   "$(grep -qF -- "$SS" "$SKILL_MD" && grep -qF -- "$SS" "$ROOT/prompts/search-prompts.md"; echo $?)"
+   "$(grep -qF -- "$SS" "$SKILL_ALL" && grep -qF -- "$SS" "$ROOT/prompts/search-prompts.md"; echo $?)"
 ok "o template de sub-agente classifica com scripts/surf-gate.sh classify" \
-   "$(grep -qF 'surf-gate.sh" classify' "$SKILL_MD"; echo $?)"
+   "$(grep -qF 'surf-gate.sh" classify' "$SKILL_ALL"; echo $?)"
 ok "prompts: [Verify this] com 78/127/cota vai ao protocolo (nunca 'MANTENHA a premissa' por conta própria)" \
    "$(grep -q 'PESQUISA-FALHOU' "$ROOT/prompts/plan-approval-prompts.md" && ! grep -qF 'MANTENHA a premissa' "$ROOT/prompts/plan-approval-prompts.md"; echo $?)"
 ok "SKILL.md: os pontos de decisão da pesquisa existem (SEARCH_REQUIRED, PORTÃO PÓS-PLANO, TRIAGEM DE PESQUISA, resume --probe)" \
-   "$(grep -q 'SEARCH_REQUIRED' "$SKILL_MD" && grep -q 'PORTÃO PÓS-PLANO' "$SKILL_MD" && grep -q 'TRIAGEM DE PESQUISA' "$SKILL_MD" && grep -qF 'resume --probe' "$SKILL_MD"; echo $?)"
+   "$(grep -q 'SEARCH_REQUIRED' "$SKILL_ALL" && grep -q 'PORTÃO PÓS-PLANO' "$SKILL_ALL" && grep -q 'TRIAGEM DE PESQUISA' "$SKILL_ALL" && grep -qF 'resume --probe' "$SKILL_ALL"; echo $?)"
 ok "SKILL.md: frases do desenho antigo saíram ('PESQUISA IMPOSSÍVEL', 'se sair 78, mantenha a premissa')" \
-   "$(! grep -qF 'PESQUISA IMPOSSÍVEL' "$SKILL_MD" && ! grep -qF 'se sair 78, mantenha a premissa' "$SKILL_MD"; echo $?)"
+   "$(! grep -qF 'PESQUISA IMPOSSÍVEL' "$SKILL_ALL" && ! grep -qF 'se sair 78, mantenha a premissa' "$SKILL_ALL"; echo $?)"
 ok "SKILL.md: FASE 0 entrega as flags ao script (--flags='<TOKENS>') e nunca manda exportar variável" \
-   "$(grep -qF -- "--flags='&lt;TOKENS&gt;'" "$SKILL_MD" && grep -q 'ESTADOS PENDENTES' "$SKILL_MD" && ! grep -qw 'exporte' "$SKILL_MD"; echo $?)"
+   "$(grep -qF -- "--flags='&lt;TOKENS&gt;'" "$SKILL_ALL" && grep -q 'ESTADOS PENDENTES' "$SKILL_ALL" && ! grep -qw 'exporte' "$SKILL_ALL"; echo $?)"
 ok "SKILL.md: limpeza por tarefa pelo script (integrate/gate, assert-clean --wave <N+1>, PURGE_RC, 'Não integrado')" \
-   "$(grep -qF '"$DO_WT" integrate' "$SKILL_MD" && grep -qF 'assert-clean --wave &lt;N+1&gt;' "$SKILL_MD" \
-      && grep -q 'PURGE_RC' "$SKILL_MD" && grep -qF '## Não integrado' "$SKILL_MD" \
-      && grep -qF 'Tarefa concluída PARCIALMENTE' "$SKILL_MD"; echo $?)"
+   "$(grep -qF '"$DO_WT" integrate' "$SKILL_ALL" && grep -qF 'assert-clean --wave &lt;N+1&gt;' "$SKILL_ALL" \
+      && grep -q 'PURGE_RC' "$SKILL_ALL" && grep -qF '## Não integrado' "$SKILL_ALL" \
+      && grep -qF 'Tarefa concluída PARCIALMENTE' "$SKILL_ALL"; echo $?)"
 ok "SKILL.md: o passo 7/8 antigos saíram ('mark <nome> gate-pending', 'sweep; verify' sem assert-clean)" \
-   "$(! grep -qF 'mark &lt;nome&gt; gate-pending' "$SKILL_MD" && ! grep -qF '"$DO_WT" sweep; "$DO_WT" verify' "$SKILL_MD"; echo $?)"
+   "$(! grep -qF 'mark &lt;nome&gt; gate-pending' "$SKILL_ALL" && ! grep -qF '"$DO_WT" sweep; "$DO_WT" verify' "$SKILL_ALL"; echo $?)"
 ok "SKILL.md: flags de teste chegam aos templates ({{TEST_POLICY}}, e2e-runner-unavailable; 'TDD Workflow' saiu)" \
-   "$(grep -qF '{{TEST_POLICY}}' "$SKILL_MD" && grep -qF 'case id="e2e-runner-unavailable"' "$SKILL_MD" && ! grep -qF 'TDD Workflow' "$SKILL_MD"; echo $?)"
+   "$(grep -qF '{{TEST_POLICY}}' "$SKILL_ALL" && grep -qF 'case id="e2e-runner-unavailable"' "$SKILL_ALL" && ! grep -qF 'TDD Workflow' "$SKILL_ALL"; echo $?)"
 # Todo subcomando citado como "$DO_WT" <sub> / "$DO_SURF_GATE" <sub> existe no dispatch.
 unk=""
-for sub in $(sed -e 's/&quot;/"/g' "$SKILL_MD" "$ROOT/README.md" "$ROOT/scripts/README.md" \
+for sub in $(sed -e 's/&quot;/"/g' "$SKILL_ALL" "$ROOT/README.md" "$ROOT/scripts/README.md" \
              | grep -oE '"\$DO_WT" [a-z][a-z-]*' | awk '{print $2}' | sort -u); do
   grep -qE "^  $sub\)" "$ROOT/scripts/do-wt.sh" || unk="$unk $sub"
 done
 chk "todo '\"\$DO_WT\" <sub>' de SKILL.md/README/scripts README existe no dispatch do do-wt.sh" "$unk" ""
 unk=""
-for sub in $(grep -ohE '"\$DO_SURF_GATE" [a-z][a-z-]*' "$SKILL_MD" "$ROOT/README.md" "$ROOT/scripts/README.md" "$ROOT"/prompts/*.md \
+for sub in $(grep -ohE '"\$DO_SURF_GATE" [a-z][a-z-]*' "$SKILL_ALL" "$ROOT/README.md" "$ROOT/scripts/README.md" "$ROOT"/prompts/*.md \
              | awk '{print $2}' | sort -u); do
   grep -qE "^  $sub\)" "$GATE_SH" || unk="$unk $sub"
 done
@@ -746,7 +758,7 @@ fi
 # SKILL.md tem de citar (do-context.sh --boundary=, do-wt.sh MERGED-PARTIAL e
 # `checklist final`).
 for lit in "--boundary=" "MERGED-PARTIAL" "checklist final"; do
-  ok "[DESIGN-2] SKILL.md cita o literal '$lit'" "$(grep -qF -- "$lit" "$SKILL_MD"; echo $?)"
+  ok "[DESIGN-2] SKILL.md cita o literal '$lit'" "$(grep -qF -- "$lit" "$SKILL_ALL"; echo $?)"
 done
 if command -v python3 >/dev/null 2>&1; then
   # ORÇAMENTO: a condensação (DESIGN-2 parte C) mira <= 215.000; o teto duro é 220.000.
@@ -757,7 +769,7 @@ else
 fi
 # B01: os números de passo do CARTÃO ("$DO_WT" checklist) são os MESMOS dos
 # <step order> da FASE 3 — re-ancorar pelo cartão não pode trocar "passo 7".
-steps3="$(awk '/<phase id="3"/{p=1} p && /<\/phase>/{p=0} p' "$SKILL_MD" \
+steps3="$(awk '/<phase id="3"/{p=1} p && /<\/phase>/{p=0} p' "$SKILL_ALL" \
           | sed -nE 's/.*<step order="([0-9]+(\.[0-9]+)?)".*/\1/p')"
 cardnums() { # lê o cartão no stdin → números de passo (linha que COMEÇA com "N." / "N.N")
   sed -nE 's/^ {0,2}([0-9]+(\.[0-9]+)?)\.?[[:space:]].*/\1/p' | sort -t. -k1,1n -k2,2n -u
