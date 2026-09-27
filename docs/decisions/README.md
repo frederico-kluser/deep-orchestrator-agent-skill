@@ -17,7 +17,7 @@ RRF + Tavily/Exa), e nada no repositório referenciava o material. A migração
 | Decisão | Status na v3.2 real | Observação |
 |---|---|---|
 | D1 — Router de modelos 3-tier (Qwen3-Coder → DeepSeek V4-Flash → Claude) | NÃO implementada | Sem `config/router.yaml` nem módulo de roteamento no repo; a seleção de modelo continua externa (harness do usuário). As menções a "router" no repo são o project-router de repositórios-alvo, conceito distinto |
-| D2 — Busca multi-provider (Adapter + RRF k=60 + Tavily/Exa) | SUPERADA pela v3.2 real | A v3.2 implementou a cadeia 3-tier interna (o fornecedor de pesquisa removido → o provedor de busca removido Search API → DuckDuckGo keyless) via `scripts/search.sh` + `scripts/search-parallel.sh` — arquitetura diferente, sem Tavily/Exa nem RRF, e sem provedor novo (decisão D3 do plano de melhorias) — **SUPERADA de novo em 2026-08-29 (D23)**: a cadeia 3-tier foi REMOVIDA; a pesquisa é 100% o fornecedor de pesquisa removido v8 (o provedor de busca removido-only), e sem chave válida a execução para com exit 78. Ver `2026-08-29-o fornecedor de pesquisa removido-obrigatorio.md` |
+| D2 — Busca multi-provider (Adapter + RRF k=60 + Tavily/Exa) | SUPERADA pela v3.2 real | A v3.2 implementou a cadeia 3-tier interna (o fornecedor de pesquisa removido → o provedor de busca removido Search API → DuckDuckGo keyless) via `scripts/search.sh` + `scripts/search-parallel.sh` — arquitetura diferente, sem Tavily/Exa nem RRF, e sem provedor novo (decisão D3 do plano de melhorias) — **SUPERADA de novo em 2026-08-29 (D23)**: a cadeia 3-tier foi REMOVIDA; a pesquisa é 100% o fornecedor de pesquisa removido v8 (o provedor de busca removido-only), e sem chave válida a execução para com exit 78. Ver `2026-08-29-pesquisa-obrigatoria.md` |
 | D3 — Loop de qualidade nativo (testing subwaves assíncronas + adversarial) | IMPLEMENTADA (núcleo) | Subwaves assíncronas TESTING (`test-ondaN-*`) e VALIDATION (`val-ondaN-*`) + revisão adversarial do diff integrado, tudo no fluxo da skill; jury cross-vendor (parte v4 do plano) não |
 | D4 — Handoff híbrido schema v1 (frontmatter + markdown + trace bruto) | PARCIAL | Handoffs estruturados e separação de planos existem no fluxo; o schema v1 com frontmatter YAML parseável + trace bruto anexado não foi adotado integralmente (sem WAVE_LOG.md na skill) |
 | D5 — Plataforma de skills (SKILL.md + AGENTS.md dual) | PARCIAL | O formato SKILL.md foi adotado (este repositório é o exemplo, com frontmatter YAML e restrição de tools); o AGENTS.md dual não existe no repo |
@@ -32,7 +32,7 @@ RRF + Tavily/Exa), e nada no repositório referenciava o material. A migração
   o fornecedor de pesquisa removido v8. O único sinal que consumimos é o exit 78 ("não há chave
   o provedor de busca removido válida"). O ponteiro para "README linha 111" já estava quebrado por
   deriva de linha, e a afirmação que ele apontava deixou de ser desta skill.
-  Ver `2026-08-29-o fornecedor de pesquisa removido-obrigatorio.md`.
+  Ver `2026-08-29-pesquisa-obrigatoria.md`.
 - **Artefatos de execução** (EXPLAINER.html) não pertencem a este diretório —
   ver `.gitignore` da raiz (decisão F4-05).
 
@@ -58,7 +58,7 @@ O portão de aprovação do plano (FASE 2.5) continua no Plannotator.
 
 ## Decisões da v4.0.0 (2026-08-29)
 
-`2026-08-29-o fornecedor de pesquisa removido-obrigatorio.md` registra D23: a pesquisa web sai
+`2026-08-29-pesquisa-obrigatoria.md` registra D23: a pesquisa web sai
 desta skill — a o fornecedor de pesquisa removido v8 (o provedor de busca removido-only) vira dependência dura, os
 seis scripts de busca internos foram removidos e sem chave o provedor de busca removido válida a
 execução para (exit 78). Dois pontos desse registro foram revistos na v4.1.0
