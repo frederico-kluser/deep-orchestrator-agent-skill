@@ -1,0 +1,390 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PROMPT DE MISSÃO — cole este ficheiro INTEIRO no Claude Code (ou cole o conteúdo).
+  Objetivo: transformar o monólito SKILL.md (3306 linhas / 220 KB) do
+  deep-orchestrator-agent-skill v4.1.0 numa arquitetura modular com
+  carregamento SOB DEMANDA (progressive disclosure), sem mudar comportamento.
+  Gerado em 2026-09-26 a partir de auditoria com 7 subagentes (3 análises
+  internas + 4 pesquisas web Tavily). Alvo de execução: MiMo-V2.6 (lento,
+  verboso) — daí o contrato de saída concisa na secção <report>.
+-->
+<refactor_mission id="deep-orchestrator-split-v4.2.0" version="1.0" lang="pt-BR">
+
+  <identity>
+    <role>ENGENHEIRO DE REFATORAÇÃO SÉNIOR especialista em Agent Skills
+      (Anthropic/agentskills.io) e progressive disclosure.</role>
+    <behavior>Trabalha em silêncio, fase a fase, com verificação após cada
+      corte. Não pergunta nada salvo nos gates de aprovação definidos abaixo.
+      Não faz brainstorming: o diagnóstico já está feito — executa.</behavior>
+  </identity>
+
+  <task>
+    <mission>Reestruturar a skill `deep-orchestrator-agent-skill` (v4.1.0 →
+      v4.2.0) de um monólito XML de 3306 linhas para uma arquitetura de
+      ROUTER MAGRO + references/ + prompts/ carregados sob demanda, mantendo
+      100% do comportamento e do rigor atuais (I-MERGE, I-CLEAN, fail-closed,
+      ledger owned.tsv, portões Plannotator e surf).</mission>
+    <definition_of_done>
+      1. `SKILL.md` ≤ 500 linhas e ≤ 5000 tokens (router: identidade, regras
+         canónicas, mapa FASE→ficheiro, tabela de flags).
+      2. Todo o material extraído vive em ficheiros próprios com ≤ 500 linhas
+         cada, carregados SÓ quando a fase/mode correspondente está ativa.
+      3. As 5 suítes de teste passam a 100% (inclui corrigir a 1 falha atual
+         do contrato de `&lt;step order&gt;` da FASE 3 no test-surf-gate.sh G12).
+      4. Nenhum comportamento muda: mesmos exit codes, mesmos literais
+         congelados, mesma semântica de estados.
+      5. Uma casa canónica por regra: zero duplicações de contrato entre
+         ficheiros (as 8 duplicações G12/B01 eliminadas ou convertidas em
+         geração a partir de fonte única).
+    </definition_of_done>
+  </task>
+
+  <context>
+    <repo>/home/ondokai/Agent-Skills/deep-orchestrator-agent-skill</repo>
+    <entry_points>
+      - SKILL.md (symlink → .claude/skills/deep-orchestrator-agent-skill/SKILL.md — 3306 linhas, 220392 bytes, ~35k tokens)
+      - scripts/ (10630 linhas já externalizadas: do-context.sh 1229L, do-wt.sh 1955L/21 subcomandos, surf-gate.sh, plan-approval.sh, check-plannotator.sh, do-prefs.sh, evolution-survey.sh, evolve-skill.sh, lib/*.sh, check-install.sh)
+      - prompts/ (5 ficheiros, 123 KB: ecc-prompts.md, ecc-skills.md, search-prompts.md, plan-approval-prompts.md, evolution-guide.md)
+      - docs/decisions/ (séries D — ver NAMESPACE abaixo)
+    </entry_points>
+
+    <input_documents>LEIA ESTES RELATÓRIOS ANTES DE TOCAR EM QUALQUER FICHEIRO
+      (auditoria completa já feita — não refaças a auditoria):
+      1. ANALISE-SKILL-deep-orchestrator.md — anatomia linha-a-linha do SKILL.md, mapa de dependências por modo, proposta de split
+      2. ANALISE-SCRIPTS-PROMPTS.md — contratos dos scripts, 8 duplicações G12/B01, riscos frágeis (owned.tsv, ENV_FILE, $DO_STATE)
+      3. RELATORIO-ANALISE-MODULARIZACAO.md — linha do tempo v3.0→v4.1.0, decisões inegociáveis, PLANO-MELHORIAS (já executado)
+      4. relatorio-agent-skills-spec.md — spec oficial agentskills.io + limites de tamanho + progressive disclosure
+      5. relatorio-arquitetura-modular-skills.md — padrões obra/superpowers, taxonomia router/task/knowledge/meta, anti-sprawl
+      6. relatorio-subagents-skills-claude-code-2026.md — subagents, skill listing budget (1% da janela, corte silencioso de descrições)
+    </input_documents>
+
+    <current_problems numeração="top-10 (detalhe nos relatórios)">
+      1. 220 KB carregados inteiros por invocação — ~11× o orçamento recomendado (&lt;5k tokens) para um corpo de skill
+      2. 10/10 regras com severity=FATAL sem gradação real
+      3. Contrato de pesquisa triplicado (R7 L236-287 × template L2054-2146 × casos L3064-3088)
+      4. Definição de AGUARDE em 5 lugares distintos
+      5. Drift de versão surf: "v9+" (L237) vs "v8" (L784)
+      6. 3 blocos Bash em prosa não testáveis (SKILL.md L565, L702, L1971)
+      7. FASE 3 com 491 linhas e nesting de 4 níveis (L1686)
+      8. ~350 linhas mortas quando plan=off (default) + ~350 linhas mortas com no-test
+      9. prompts/plan-approval-prompts.md é órfão funcional (0 referências no SKILL.md) e duplica o esqueleto do $PLAN_DOC (SKILL.md L1143-1165)
+      10. Orçamentos de retry contraditórios (3× vs 2×) e 54 placeholders sem tabela única
+    </current_problems>
+
+    <known_failure>
+      `bash scripts/test-surf-gate.sh` tem HOJE 1 asserção vermelha: o teste
+      G12 espera os 13 `&lt;step order&gt;` da FASE 3 na ordem
+      "0 1 2 3 3.5 4 4.5 5 6 7 8 9 10" e o ficheiro tem
+      "0 1 2 3 4 5 6 7 8 9 10 3.5 4.5". Decide a ordem canónica (o teste tem
+      razão: 3.5 e 4.5 são intercalares), corrige o SKILL.md ou o teste em
+      consciência, e deixa a suíte verde ANTES do primeiro corte estrutural.
+    </known_failure>
+  </context>
+
+  <constraints priority="ABSOLUTE">
+    <!-- Estas 5 são as não-negociáveis: repetidas também no fim do prompt. -->
+    <constraint id="C1">ZERO mudança de comportamento. Exit codes, marcadores
+      de stdout (SNAPSHOT=, GATE VERDE, PURGE OK, RESUMO:, SURF_GATE=…),
+      literais congelados (SEARCH_STATUS, "## Não integrado", "Tarefa
+      concluída PARCIALMENTE", MERGED-PARTIAL, "checklist final", "--boundary=",
+      PURGE_RC, pergunta [1]-[4] do PESQUISA-FALHOU) e formatos de estado
+      (owned.tsv de 11 colunas, ENV_FILE, layout de $DO_STATE) são CONTRATO —
+      não se alteram; só se mudam de dono SEM mudar de texto.</constraint>
+    <constraint id="C2">Decisões inegociáveis da história do projeto
+      (docs/decisions/): (a) pesquisa SÓ via surf-agent-skill v9+, sem
+      fallback, falha de pesquisa exigida = pergunta INCONDICIONAL
+      (protocolo PESQUISA-FALHOU, surf-gate.sh fail-closed, exit 0 sempre
+      com veredito na linha); (b) portão Plannotator: nada antes do APROVADO,
+      título do plano imutável, AskUserQuestion VETADO (pergunta = texto +
+      estado em disco + fim de turno); (c) auto-evolução com gate humano,
+      NO_SELF_VALIDATION, memória gitignored; (d) wt= termina em commit+push,
+      nunca merge de volta; (e) I-CLEAN: quem limpa é o script no gate verde;
+      (f) R1 nunca escrever código (excões exatamente como hoje); (g) uma
+      casa canónica por regra.</constraint>
+    <constraint id="C3">Portabilidade macOS bash 3.2: sem `flock`, `readlink
+      -f`, `sed -i`, `declare -A`, `grep -P`. Todo o Bash extraído tem de
+      passar nas 5 suítes (herméticas, sem rede).</constraint>
+    <constraint id="C4">Orçamentos de tamanho (spec agentskills.io + guia
+      oficial Anthropic): SKILL.md router ≤500 linhas; cada ficheiro
+      `references/*.md` e `prompts/*.md` ≤500 linhas; grafo de referência a
+      1 HOP (proibido reference→reference); description ≤1024 chars e
+      description+when_to_use ≤1536 chars combinados; `name` = nome da pasta,
+      kebab-case.</constraint>
+    <constraint id="C5">Os testes são a lei: antes de cada corte roda
+      `for t in scripts/test-*.sh; do bash "$t"; done` (1064 asserções) e
+      só avança com 0 FAIL. Os testes G12/B01 (contratos cruzados) e o
+      check-install.sh são atualizados NO MESMO commit da extração que os
+      invalida — nunca antes, nunca depois.</constraint>
+    <constraint id="C6">Não decompor do-wt.sh nem do-context.sh nesta missão
+      (fica no backlog; ver secção script_backlog). Não renomear subcomandos nem mudar o
+      dispatch.</constraint>
+    <constraint id="C7">O bloco `&lt;orchestrator&gt;` do SKILL.md é parseado
+      como XML inteiro por test-surf-gate.sh: se o router continuar em XML,
+      mantém o parse válido (sem '&lt;' ou '&amp;' cru fora de CDATA); se
+      converteres para Markdown, atualiza o parser do teste no mesmo commit e
+      justifica a escolha (ganho estimado: 10-15% em tags).</constraint>
+    <constraint id="C8">Namespace de decisões: existem 4 séries "D" distintas.
+      Toda a citação leva o documento (ex.:
+      "docs/decisions/2026-09-20-…, D24"). Novas decisões desta refatoração
+      entram como D32+ em `docs/decisions/`, com supersede explícito quando
+      aplicável, e atualização de README + SKILL.md + frontmatter no mesmo
+      commit.</constraint>
+    <constraint id="C9">Economia de tokens de SAÍDA (o modelo alvo é lento e
+      verboso): nenhum preâmbulo, nenhuma repetição do pedido, nenhum resumo
+      por fase; comunicação em tabelas/checklists incrementais
+      (fase → ficheiro → comando de verificação → estado).</constraint>
+    <constraint id="C10">Uma fase por mensagem de trabalho; diffs revisáveis
+      (um commit por extração, mensagem com o módulo extraído + resultado dos
+      testes). Sem mega-diff.</constraint>
+    <constraint id="C11">MODELO ÚNICO: todo o trabalho — orquestrador, features,
+      testes, validação, revisores, síntese — corre no MESMO modelo
+      `mimo-v2.6-pro` (`model: inherit`). PROIBIDO tiering por modelo ou
+      qualquer downgrade (Flash/leve) para "tarefas mecânicas". Remove as
+      sugestões de tiering existentes (SKILL.md L1365-1369 e L1850) e marca
+      todos os templates com "modelo: mimo-v2.6-pro — proibido flash/downgrade".</constraint>
+    <constraint id="C12">CONCORRÊNCIA sob controlo do utilizador:
+      `max-parallel=N` → `DO_MAX_PARALLEL` (teto de in-flight por onda,
+      inteiro positivo) é a flag ÚNICA de concorrência, de 1ª classe no router
+      e documentada no CONTRATO.md; `surf-sub-agents=N` (1..20) é sub-flag da
+      pesquisa (nunca multiplicada por DO_MAX_PARALLEL). Inclui nota com o
+      paralelismo realista do MiMo (6–12 subagents simultâneos).</constraint>
+  </constraints>
+
+  <target_architecture>
+    <principle>Router decide e encaminha; o detalhe vive em ficheiros
+      carregados sob demanda. Um trabalho = um ficheiro. Uma regra = uma
+      casa. Se um script pode calcular, o prompt só recebe o resultado.</principle>
+
+    <note strategy="porquê este split e não N skills separadas">
+      A pesquisa mostrou que skills separadas têm custo fixo de listagem
+      (~30-100 tokens cada) e que o skill listing tem orçamento de 1% da
+      janela com CORTE SILENCIOSO de descrições das menos usadas. Por isso:
+      a decomposição primária é DENTRO da skill (references/ + prompts/ =
+      custo zero até leitura); só material com valor autónomo pode virar
+      skill companheira (máx. 2, ver secção optional_skills).
+    </note>
+
+    <modules>
+      <module name="SKILL.md (router)" target="≤500 linhas / ~32 KB" load="sempre">
+        frontmatter (description limpa: só triggers de uso, sem resumo de
+        fluxo) + identity + R1–R6/R8/R9 CANÓNICAS (uma casa cada, com
+        severity graduada: FATAL só para R1/R8 + HIGH/MEDIUM) + tabela de
+        flags (L633-673) + ÍNDICE DE SINTOMAS (ex.: "pesquisa falhou →
+        references/research-protocol.md") + mapa FASE→ficheiro + final-note
+        (mantra de recuperação, L3272-3288).
+      </module>
+      <module name="references/phase0-context.md" target="256 L / 19 KB" load="sempre (FASE 0)">
+        FASE 0 inteira (L552-807) + invariantes R8 (a)-(j).
+      </module>
+      <module name="references/research-protocol.md" target="~205 L / 15 KB" load="só quando SEARCH_REQUIRED=sim ou portão surf ≠ 0">
+        R7 canónica + protocolo PESQUISA-FALHOU (L288-365) + casos
+        surf-ausente/brave-key-invalida (L3064-3088). A tabela SURF_GATE e o
+        texto da pergunta [1]-[4] ficam AQUI como fonte única; o surf-gate.sh
+        pause passa a consumir este ficheiro (ou gera-o) — elimina a
+        duplicação literal G12.
+      </module>
+      <module name="references/plan-approval.md" target="~290 L / 21 KB" load="só com plan=on">
+        R10 + FASE 2.5 (L1103-1259) + casos plan-* (L3135-3173) + ex2
+        (L3221-3269) + esqueleto do $PLAN_DOC (L1143-1165) — e LIGA
+        prompts/plan-approval-prompts.md (hoje órfão) como template oficial,
+        removendo a duplicação.
+      </module>
+      <module name="references/execute-wave.md" target="491 L / 36 KB" load="ao entrar na FASE 3">
+        FASE 3 inteira (L1260-1750), incluindo REPLAN e portão inter-onda;
+        achata o nesting de 4 níveis (L1686) para o mínimo que preserve os
+        13 `&lt;step order&gt;` canónicos (0 1 2 3 3.5 4 4.5 5 6 7 8 9 10).
+      </module>
+      <module name="references/test-modes.md" target="~340 L / 22 KB" load="só com testes ativos (full/e2e)">
+        passos 9.5/4.5, TEST_POLICY, jornadas, TROCAS e2e, tabela E2E_PORT,
+        casos test-*/e2e-runner-unavailable. Com no-test nada disto carrega.
+      </module>
+      <module name="prompts/subagent-prompt.md" target="281 L" load="no dispatch do sub-agente feature/fix/prep">
+        template L1989-2269. A regra 2 (pesquisa) passa a PONTEIRO para
+        references/research-protocol.md — fim da 2ª encarnação da tabela.
+      </module>
+      <module name="prompts/adversarial-review.md" target="48 L" load="na revisão adversarial">template L2270-2317.</module>
+      <module name="prompts/test-agent.md" target="239 L" load="só sem no-test, no dispatch">template L2318-2556 incl. bloco MODO e2e (L2425-2470).</module>
+      <module name="prompts/validation-agent.md" target="111 L" load="no dispatch do validador">template L2557-2667 (roda nos 3 modos).</module>
+      <module name="prompts/explainer-agent.md" target="66 L" load="no dispatch">template L2668-2733.</module>
+      <module name="prompts/evolution-agent.md" target="92 L" load="só sem no-evolve, no dispatch">template L2734-2825 + ponteiro para prompts/evolution-guide.md.</module>
+      <module name="references/final-report.md" target="122 L" load="só na FASE 4">template L2826-2947 (3 variantes de modo).</module>
+      <module name="references/degradation.md" target="~230 L / 15 KB" load="lookup SÓ em falha">15 casos de degradação (L2948-3175), índice por sintoma no topo.</module>
+      <module name="references/examples.md" target="96 L" load="opcional (few-shot)">ex1/ex2 (L3176-3271).</module>
+      <module name="references/placeholders.md" target="~60 L" load="sob consulta">tabela ÚNICA dos 54 placeholders {{…}}: nome, definido-em, colado-em, consumido-em.</module>
+    </modules>
+
+    <optional_skills regra="máx. 2; só se tiverem valor fora da orquestração">
+      - `deep-orchestrator-evolution` (meta-skill: evolution-survey + evolve-skill + do-prefs + evolution-guide) com `disable-model-invocation: false` — única peça com ciclo de vida próprio.
+      - NÃO criar skills para plan-approval, pesquisa, testes ou degradações: são caminhos condicionais da mesma tarefa e skills separadas pagam listagem sem benefício.
+    </optional_skills>
+
+    <script_backlog fora_de_escopo_nesta_missão="sim, mas regista em docs/decisions">
+      do-wt.sh → lib/wt-ledger.sh + módulos merge/gate/report atrás do dispatch;
+      do-context.sh → lib/flags.sh; tabela de flags do README gerada a partir
+      da fonte única. Pré-requisito: CONTRATO.md validado pelos testes.
+    </script_backlog>
+  </target_architecture>
+
+  <phases>
+
+    <phase n="0" name="PLANO (sem edições)">
+      <steps>
+        1. Lê os 6 input_documents e esta missão; confirma os números contra o
+           repo real (wc -l, grep de âncoras citadas).
+        2. Produz o plano de extração fase-a-fase com: ficheiro de destino,
+           linhas de origem (intervalos exatos), dependências do modo/fase,
+           testes que a extração invalida e a atualização correspondente.
+        3. Regista o plano em `docs/planos/v4.2.0-split.md`.
+      </steps>
+      <gate>GATE: apresenta o plano (tabela ≤ 30 linhas) e AGUARDA aprovação
+        textual do utilizador. Sem aprovação, não executa.</gate>
+    </phase>
+
+    <phase n="1" name="CONGELAR CONTRATOS">
+      <steps>
+        1. Cria `CONTRATO.md` (fonte única de verdade de máquina):
+           exit codes por subcomando, marcadores de stdout, layout de
+           $DO_STATE, formato de owned.tsv/ENV_FILE, literais congelados
+           G12/B01, tabela de flags, tabela SURF_GATE, texto [1]-[4].
+        2. Corrige a falha atual do G12 (ordem dos 13 step orders da FASE 3).
+        3. Atualiza test-surf-gate.sh G12/B01 e test-contencao.sh para
+           validarem CONTRATO.md (ou gerarem a partir dele), mantendo os
+           literais byte-a-byte.
+        4. Atualiza check-install.sh para cobrir o layout novo de ficheiros.
+      </steps>
+      <verification>`for t in scripts/test-*.sh; do bash "$t"; done` → 0 FAIL
+        (base nova: 1064+ asserções verdes).</verification>
+    </phase>
+
+    <phase n="2" name="EXTRAIR TEMPLATES DE SUB-AGENTE (corte de menor risco)">
+      <steps>
+        1. Move L1989-2825 para prompts/*.md conforme a tabela de módulos
+           (subagent-prompt, adversarial-review, test-agent,
+           validation-agent, explainer-agent, evolution-agent).
+        2. Substitui no SKILL.md por ponteiros de 1 linha por papel
+           ("no dispatch, lê prompts/test-agent.md"), mantendo os slots
+           {{…}} byte-a-byte.
+        3. Elimina a duplicação da tabela de pesquisa no template (regra 2 →
+           ponteiro para references/research-protocol.md; cria o ficheiro já
+           nesta fase se necessário).
+      </steps>
+      <verification>suíte a 0 FAIL + `grep -c '&lt;cmd&gt;' SKILL.md` estável +
+        nenhum literal congelado perdido (testes G12/B01).</verification>
+    </phase>
+
+    <phase n="3" name="EXTRAIR REFERÊNCIAS CONDICIONAIS">
+      <steps>
+        1. references/plan-approval.md (R10+FASE 2.5+casos plan-*+ex2) e
+           liga prompts/plan-approval-prompts.md (fim do órfão).
+        2. references/test-modes.md (passos 4.5/9.5, TEST_POLICY, TROCAS e2e,
+           casos test-*).
+        3. references/execute-wave.md (FASE 3 inteira; achata nesting L1686).
+        4. references/final-report.md, references/degradation.md (índice por
+           sintoma), references/examples.md, references/placeholders.md.
+        5. references/phase0-context.md por último (é o mais acoplado).
+        6. Cada extração termina com o router a apontar com o PONTEIRO de
+           carregamento respetivo ("Ao entrar na FASE 3, lê
+           references/execute-wave.md ANTES do passo 0").
+      </steps>
+      <verification>suíte a 0 FAIL após CADA extração (uma extração = um
+        commit); nenhum ficheiro &gt;500 linhas; `grep -rn 'references/' 
+        SKILL.md` mostra apenas 1 HOP.</verification>
+    </phase>
+
+    <phase n="4" name="MAGRAR O ROUTER (dedupe + contradições)">
+      <steps>
+        1. Funde as 5 definições de AGUARDE numa só (em R2); as restantes
+           viram ponteiros.
+        2. Corrige as contradições: surf "v9+" canónico (corrige L784),
+           orçamentos de retry unificados (escolhe 3 e documenta em
+           CONTRATO.md), R1 vs exceção (b) clarificada.
+        3. Grada severidades: FATAL só R1/R8 (+ protocolo PESQUISA-FALHOU);
+           HIGH para R2/R3/R5/R6/R7/R10; MEDIUM onde couber.
+        4. Frontmatter: description SEM resumo de fluxo (só triggers
+           literais + cláusula de exclusão), ≤1024 chars; when_to_use curto;
+           mantém allowed-tools/disallowed-tools exatos.
+        5. Reduz &lt;examples&gt; no router ao mínimo; o resto em
+           references/examples.md.
+      </steps>
+      <verification>suíte a 0 FAIL; SKILL.md ≤500 linhas; description
+        ≤1024 chars; XML parseia (ou parser atualizado — ver C7).</verification>
+    </phase>
+
+    <phase n="5" name="BASH EM PROSA → SCRIPTS">
+      <steps>
+        1. Converte os 3 blocos inline (scan de pendentes L565, localizador
+           de SKILL_HOME L702, DESCARTE DE ESTADO L1971) em subcomandos de
+           do-context.sh/do-wt.sh cobertos por testes novos
+           (test-contencao.sh/test-flags.sh).
+        2. O SKILL.md passa a citar só o comando + o marcador de stdout.
+      </steps>
+      <verification>suíte a 0 FAIL com asserções novas; bash -n em todos os
+        scripts; nada usa GNU-isms (C3).</verification>
+    </phase>
+
+    <phase n="6" name="DOCS, VERSÃO E FECHO">
+      <steps>
+        1. docs/decisions/2026-09-XX-split-progressive-disclosure.md (D32+):
+           contexto, decisão, alternativas rejeitadas (N skills separadas —
+           listing budget), consequências, supersede do "trabalho futuro" de
+           2026-09-20.
+        2. README.md: estrutura nova da casa da skill, orçamentos, como
+           adicionar um módulo; scripts/README.md sincronizado.
+        3. metadata.version → 4.2.0 + updated; changelog no README.
+        4. Corre o check-install.sh final e a prova completa:
+           `bash scripts/check-install.sh` (exit 0) + suíte inteira.
+      </steps>
+      <verification>tudo verde; `wc -l .claude/skills/deep-orchestrator-agent-skill/SKILL.md`
+        ≤500; orçamento por ficheiro respeitado.</verification>
+    </phase>
+
+  </phases>
+
+  <deliverables>
+    - SKILL.md (router) + references/*.md + prompts/*.md novos/reorganizados
+    - CONTRATO.md (fonte única de contratos de máquina)
+    - Testes atualizados (G12/B01 adaptados ao split) + asserções novas dos scripts do fase 5
+    - docs/decisions/…-split-progressive-disclosure.md (D32+)
+    - docs/planos/v4.2.0-split.md (fase 0) e README.md atualizados
+    - Um commit por extração (mensagens: "v4.2.0: extrair &lt;módulo&gt; → &lt;destino&gt; [testes: N PASS]")
+  </deliverables>
+
+  <verification>
+    <commands>
+      for t in scripts/test-*.sh; do bash "$t"; done      # 0 FAIL obrigatório
+      bash scripts/check-install.sh                        # exit 0
+      wc -l .claude/skills/deep-orchestrator-agent-skill/SKILL.md   # ≤ 500
+      wc -l references/*.md prompts/*.md                   # cada ≤ 500
+      grep -c 'FAILED_QUOTA\|SEARCH_STATUS\|MERGED-PARTIAL' -r .      # literais intactos
+    </commands>
+    <acceptance>
+      A1 Comportamento idêntico: todos os exit codes e literais de CONTRATO.md byte-a-byte.
+      A2 Router ≤500 linhas; nenhum ficheiro de módulo &gt;500 linhas; referências a 1 HOP.
+      A3 Zero duplicações de contrato (as 8 G12/B01 têm dono único).
+      A4 Material condicional NÃO carrega por default (plan=off + no-test não lê plan-approval.md nem test-modes.md).
+      A5 Suíte 1064+ asserções verde; a falha atual do G12 resolvida.
+    </acceptance>
+  </verification>
+
+  <report>
+    <!-- Economia de saída: o modelo alvo é lento (~46 t/s) e verboso. -->
+    <format>Durante o trabalho: checklist incremental (fase | ficheiro | comando | estado),
+      máximo 1 linha por item. Sem preâmbulos, sem "vou agora…", sem repetir o pedido,
+      sem resumo por fase.</format>
+    <final_report máximo="15 linhas">
+      TABELA módulo | destino | linhas movidas | testes.
+      Linha: versão final + resultado da suíte (N PASS / 0 FAIL).
+      Pendências: bullet curto ou "nenhuma".
+    </final_report>
+  </report>
+
+  <critical_reprise>
+    <!-- Repetição deliberada (lost-in-the-middle): as 5 regras que não podem falhar. -->
+    1. ZERO mudança de comportamento — contratos e literais são intocáveis (C1).
+    2. Decisões inegociáveis preservadas: surf-only fail-closed, portão Plannotator, AskUserQuestion vetado, I-CLEAN/I-MERGE, wt= sem merge de volta (C2).
+    3. Testes a 0 FAIL antes e depois de CADA corte; um corte = um commit (C5).
+    4. macOS bash 3.2 em tudo (C3).
+    5. Router ≤500 linhas; material condicional só sob demanda (C4).
+  </critical_reprise>
+
+</refactor_mission>

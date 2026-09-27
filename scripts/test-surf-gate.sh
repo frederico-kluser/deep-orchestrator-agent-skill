@@ -654,6 +654,7 @@ ok "check-install.sh registra scripts/surf-gate.sh" \
 newcase
 mkdir -p "$CASE/home/scripts"
 ln -s "$ROOT/SKILL.md" "$CASE/home/SKILL.md"
+ln -s "$ROOT/CONTRATO.md" "$CASE/home/CONTRATO.md"
 ln -s "$ROOT/prompts" "$CASE/home/prompts"
 for f in "$ROOT/scripts/"*; do
   [ "$(basename "$f")" = "surf-gate.sh" ] || ln -s "$f" "$CASE/home/scripts/$(basename "$f")"
@@ -757,14 +758,16 @@ fi
 # B01: os números de passo do CARTÃO ("$DO_WT" checklist) são os MESMOS dos
 # <step order> da FASE 3 — re-ancorar pelo cartão não pode trocar "passo 7".
 steps3="$(awk '/<phase id="3"/{p=1} p && /<\/phase>/{p=0} p' "$SKILL_MD" \
-          | sed -nE 's/.*<step order="([0-9]+(\.[0-9]+)?)".*/\1/p' | sort -u)"
+          | sed -nE 's/.*<step order="([0-9]+(\.[0-9]+)?)".*/\1/p')"
 cardnums() { # lê o cartão no stdin → números de passo (linha que COMEÇA com "N." / "N.N")
-  sed -nE 's/^ {0,2}([0-9]+(\.[0-9]+)?)\.?[[:space:]].*/\1/p' | sort -u
+  sed -nE 's/^ {0,2}([0-9]+(\.[0-9]+)?)\.?[[:space:]].*/\1/p' | sort -t. -k1,1n -k2,2n -u
 }
 card="$( { PATH="$SAFE_PATH" bash "$ROOT/scripts/do-wt.sh" checklist
            DO_QUESTION=1 PATH="$SAFE_PATH" bash "$ROOT/scripts/do-wt.sh" checklist; } 2>/dev/null | cardnums)"
-chk "a FASE 3 do SKILL.md tem os 13 <step order> congelados (0 1 2 3 3.5 4 4.5 5 6 7 8 9 10)" \
-    "$(printf '%s\n' "$steps3" | sort -n | tr '\n' ' ')" "0 1 2 3 3.5 4 4.5 5 6 7 8 9 10 "
+# ORDEM DE FICHEIRO, sem sort: `sort -n` NÃO ordena decimais em POSIX/coreutils
+# (3.5/4.5 caíam para o fim e a asserção falhava com o SKILL.md CORRETO).
+chk "a FASE 3 do SKILL.md tem os 13 <step order> congelados em ORDEM (0 1 2 3 3.5 4 4.5 5 6 7 8 9 10)" \
+    "$(printf '%s\n' "$steps3" | tr '\n' ' ')" "0 1 2 3 3.5 4 4.5 5 6 7 8 9 10 "
 if grep -qE '^(3\.5|4\.5)$' <<< "$card"; then
   extra=""
   for n in $card; do
@@ -773,7 +776,7 @@ if grep -qE '^(3\.5|4\.5)$' <<< "$card"; then
   chk "os números de passo do '\"\$DO_WT\" checklist' ⊆ <step order> da FASE 3 (fora:$extra)" "$extra" ""
 else
   printf '  (pulado — PENDENTE-DE-INTEGRACAO: o cartão do do-wt.sh checklist ainda não foi renumerado [sem 3.5/4.5]; números atuais: %s)\n' \
-         "$(printf '%s' "$card" | sort -n | tr '\n' ' ')"
+         "$(printf '%s' "$card" | sort -t. -k1,1n -k2,2n | tr '\n' ' ')"
 fi
 
 section "G13 — hermeticidade (SG-2): ambiente de run VIVO herdado não muda nada"

@@ -84,6 +84,7 @@ fi
 
 # --- 1. SKILL.md presente e com identity correta -----------------------------
 check "SKILL.md" "$ROOT/SKILL.md"
+check "CONTRATO.md" "$ROOT/CONTRATO.md"
 if [ -f "$ROOT/SKILL.md" ] && ! grep -qx "name: $SKILL_NAME" "$ROOT/SKILL.md" 2>/dev/null; then
   MISSING+=("SKILL.md com 'name: $SKILL_NAME'")
   [ "$QUIET" = 0 ] && [ "$JSON" = 0 ] && printf '  [FALTA] SKILL.md não identifica a skill (name: %s)\n' "$SKILL_NAME" >&2
