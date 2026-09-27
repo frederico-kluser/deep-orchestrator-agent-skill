@@ -76,6 +76,7 @@ branch.
 | `sweep` | 0 = ok; != 0 = gate-pending/REVERTED/feature\|fix ACTIVE (com comando de conserto) |
 | `undo <nome>` | 1 = recusa (squash divergente do ledger) |
 | `checklist [final]` | 0; funciona SEM ENV_FILE (igual `--help`) |
+| `discard-state` | 0 sempre (veredito na mensagem): "ESTADO DESCARTADO" ou "DESCARTE RECUSADO …" |
 
 ### 2.3 `surf-gate.sh`
 `gate` **SEMPRE exit 0** — o veredito vem na linha `SURF_GATE=<0|78|127>`
@@ -117,6 +118,7 @@ título. `check-plannotator.sh`: `0` disponível · `1` ausente · `2` erro.
 | `RESUME=OK\|STILL_BLOCKED` | `surf-gate.sh resume` | retomada da pesquisa |
 | `SURF_MODE=no-search` | `surf-gate.sh choose` | modo sem pesquisa escolhido |
 | ÚLTIMA linha de stdout = caminho do ENV_FILE | `do-context.sh` | contrato de captura |
+| `ESTADO DESCARTADO` / `DESCARTE RECUSADO …` | `do-wt.sh discard-state` | descarte do estado (FASE 4 passo 8) |
 
 ---
 

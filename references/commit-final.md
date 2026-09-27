@@ -221,7 +221,7 @@
         <step order="8"><strong>DESCARTE O ESTADO (PULADO com pergunta
           pendente):</strong> UM comando, NESTA ordem — clean-ignored-delta e
           assert-clean leem arquivos de $DO_STATE, logo ANTES do rm -rf:
-          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_WT" clean-ignored-delta; if "$DO_WT" assert-clean; then rm -rf "$DO_STATE"; find "$DO_HOME" -mindepth 1 -maxdepth 1 -name 'run-*' 2&gt;/dev/null | grep -q . || rm -rf "$DO_HOME"; rmdir "$CHILD_ROOT" "$(dirname "$CHILD_ROOT")" 2&gt;/dev/null || true; echo "ESTADO DESCARTADO"; else echo "DESCARTE RECUSADO — há sobra desta execução: conserte pelo comando acima (ou rode o purge do passo 6) e repita"; fi</cmd>
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_WT" discard-state</cmd>
           clean-ignored-delta apaga SÓ os ignorados que NÃO existiam na FASE
           0 (deps que você instalou para o gate, R9 — gigabytes na worktree do
           usuário; o baseline protege node_modules/.venv/.env.local

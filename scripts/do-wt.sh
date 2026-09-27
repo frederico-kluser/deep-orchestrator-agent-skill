@@ -74,6 +74,11 @@
 #   do-wt.sh checklist                    CARTÃO DA ONDA (FASE 3, passos 0-10 do SKILL.md;
 #                                        re-ancoragem pós-compactação)
 #   do-wt.sh checklist final              CHECKLIST FINAL (FASE 4, passos 0-8, 1 linha cada)
+#   do-wt.sh discard-state                FASE 4 passo 8: clean-ignored-delta +
+#                                        (assert-clean ok) rm -rf $DO_STATE (+ DO_HOME
+#                                        órfão, CHILD_ROOT vazia). "ESTADO DESCARTADO" |
+#                                        "DESCARTE RECUSADO …" (sobra no ledger). SÓ com
+#                                        ENV_FILE sourceado.
 #   do-wt.sh sweep                        fim de onda: fecha MERGED (via finish) e os
 #                                        snapshots cujo parent já fechou; rc != 0 com
 #                                        gate-pending, REVERTED ou feature|fix ACTIVE
@@ -173,7 +178,7 @@ CHECKLIST FINAL — FASE 4, do fim das ondas até o descarte do estado (`. '<ENV
  6. Purge final: "$DO_WT" purge; echo PURGE_RC=$?; "$DO_WT" assert-clean; "$DO_WT" ledger; "$DO_WT" verify   (com ;, nunca &&)
  7. Relatório final — a FONTE de cada destino é o ledger do passo 6 (título PARCIALMENTE com NUNCA INTEGRADAS/PARCIAIS)
  7.5. Pergunta de evolução em TEXTO ao fim de tudo (pule o passo INTEIRO com no-evolve)
- 8. Descarte do estado: "$DO_WT" clean-ignored-delta; if "$DO_WT" assert-clean; then rm -rf "$DO_STATE"; fi   (NESTA ordem)
+ 8. Descarte do estado: "$DO_WT" discard-state   (clean-ignored-delta + rm só com ledger limpo)
 FIM
     return 0
   fi
@@ -1929,6 +1934,23 @@ cmd_purge() { # COMMIT-FINAL: garantia final — NADA desta execução sobrevive
   return $rc
 }
 
+# v4.2.0 (FASE 5): o DESCARTE DO ESTADO era prosa no SKILL.md — virou subcomando
+# testável. Comportamento idêntico à sequência original do passo 8 da FASE 4.
+cmd_discard_state() {
+  : "${DO_STATE:?ENV_FILE incompleto: DO_STATE}"
+  : "${DO_HOME:?ENV_FILE incompleto: DO_HOME}"
+  : "${CHILD_ROOT:?ENV_FILE incompleto: CHILD_ROOT}"
+  "$0" clean-ignored-delta || :
+  if "$0" assert-clean; then
+    rm -rf "$DO_STATE"
+    find "$DO_HOME" -mindepth 1 -maxdepth 1 -name 'run-*' 2>/dev/null | grep -q . || rm -rf "$DO_HOME"
+    rmdir "$CHILD_ROOT" "$(dirname "$CHILD_ROOT")" 2>/dev/null || true
+    echo "ESTADO DESCARTADO"
+  else
+    echo "DESCARTE RECUSADO — há sobra desta execução: conserte pelo comando acima (ou rode o purge do passo 6) e repita"
+  fi
+}
+
 # =============================================================================
 case "${1:-}" in
   new)          shift; cmd_new "${1:-}" "${2:-}" ;;
@@ -1948,6 +1970,7 @@ case "${1:-}" in
   verify)       shift; cmd_verify "$@" ;;
   stage-delta)  shift; cmd_stage_delta "$@" ;;
   clean-ignored-delta) shift; cmd_clean_ignored_delta "$@" ;;
+  discard-state)  shift; cmd_discard_state "$@" ;;
   wave-files)   shift; cmd_wave_files "$@" ;;
   status)       shift; cmd_status "$@" ;;
   mark)         shift; cmd_mark "$@" ;;

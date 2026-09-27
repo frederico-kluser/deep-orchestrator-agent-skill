@@ -1282,5 +1282,17 @@ chk "A56 o sweep NÃO fecha a filha vermelha (rc != 0, aponta o fix)" \
     "$(test "$rc56s" != 0 && echo sim || echo nao)/$(has "$out56s" "gate VERMELHO")" "sim/sim"
 "$WT" finish onda56-a --gate-ok >/dev/null 2>&1                  # cleanup: fecha filha + snapshot
 
+echo "=== A57: discard-state (v4.2.0) — o descarte do estado virou subcomando testável ==="
+newrun
+out57a=$("$WT" discard-state 2>&1); rc57a=$?
+chk "A57 ledger limpo → ESTADO DESCARTADO" "$(test "$rc57a" = 0 && echo sim || echo nao)/$(has "$out57a" "ESTADO DESCARTADO")" "sim/sim"
+chk "A57 o diretório de estado foi apagado" "$(test -d "$DO_STATE" && echo existe || echo apagado)" "apagado"
+newrun
+mk_child feature onda57-a a57 || bad "A57 mk_child"
+out57b=$("$WT" discard-state 2>&1)
+chk "A57 com filha aberta → DESCARTE RECUSADO e estado fica" "$(has "$out57b" "DESCARTE RECUSADO")/$(test -d "$DO_STATE" && echo estado-fica || echo estado-sumiu)" "sim/estado-fica"
+"$WT" close onda57-a --discard "a57 cleanup" >/dev/null 2>&1
+"$WT" discard-state >/dev/null 2>&1
+
 echo; printf 'RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1
