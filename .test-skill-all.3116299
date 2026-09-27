@@ -1736,3 +1736,1678 @@ Responda "1:a 2:c" — ou "segue" para aceitar TODOS os defaults. Dúvida sem re
   </knowledge>
 
 </orchestrator>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <rule R7> + <protocol PESQUISA-FALHOU> + casos surf do <degradation>
+     carga: SÓ quando SEARCH_REQUIRED=sim ou portão surf SURF_GATE != 0 · byte-a-byte com a origem (CONTRATO.md §5)
+     CANÓNICO da pesquisa: uma só casa para a tabela SURF_GATE e a pergunta [1]-[4] -->
+
+    <rule id="R7" severity="FATAL">
+      <title>Pesquisa é EXCLUSIVAMENTE surf-agent-skill v9+ — dependência dura, verificada ANTES de qualquer onda</title>
+      <body>Sem sistema de busca próprio: todo acesso à web passa pelos binários GLOBAIS da surf-agent-skill v9+
+        (npm i -g surf-agent-skill): <strong>surf</strong> · <strong>surf-search-normal</strong> (UMA onda, cabe no
+        timeout do Bash) · <strong>surf-search-unlimit</strong> ·
+        <strong>surf-research-skill search|search-parallel</strong> (trechos crus) · <strong>surf-plan-skill</strong>.
+        Quem pesquisa são os SUB-AGENTES (--sub-agents=N, 1..20); VOCÊ só roda busca em DOIS pontos: o [Verify this] da
+        FASE 2.5 (passo 5) e a sonda <code>resume --probe</code> do protocolo.
+        Backend: <strong>Brave Search e NADA MAIS</strong> — sem provedor de reserva nem tier sem chave; NÃO existe modo
+        degradado AUTOMÁTICO: sem chave válida não há pesquisa, e seguir sem a pesquisa exigida só com escolha explícita
+        do USUÁRIO (opção [3] do protocolo).
+        PORTÃO (FASE 0 passo 6, PORTÃO PÓS-PLANO da FASE 2 e passo 0 de CADA onda — a chave pode queimar no meio):
+        <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURF_GATE"</cmd>
+        FAIL-CLOSED e grátis: imprime SURF_GATE=&lt;0|78|127&gt; e, quando != 0,
+        <code>SURF_CODE=&lt;BraveKey...|BraveKeyUnknown|NotInstalled&gt;</code> + a mensagem do portão VERBATIM (traz o
+        "Fix:", NUNCA uma chave). SEMPRE sai 0: veredito = a linha SURF_GATE=, nunca o exit code. Linha SURF_GATE=
+        AUSENTE na saída (ou "command not found") = trate como 78 e conserte o caminho (o ENV_FILE grava
+        DO_SURF_GATE="$SKILL_HOME/scripts/surf-gate.sh").
+        Ação por SURF_GATE — tabela ÚNICA; as fases apontam para cá:
+        • 0 — pronto. Prossiga.
+        • 78 — não há chave Brave válida (ausente, queimada, em cooldown, inválida, inalcançável ou não provada). É
+          CONFIGURAÇÃO: retentar não conserta. Sub-tarefa PENDENTE SEARCH_REQUIRED=sim (coluna OBRIGATÓRIA do plano,
+          FASE 2; na dúvida "sim") → NÃO dispare pesquisador e execute o protocolo PESQUISA-FALHOU (g1 — com
+          SURF_CODE=BraveKeyCooling vale ANTES a regra &lt;cooling&gt; dele). TODAS as pendentes com SEARCH_REQUIRED=nao
+          no plano publicado: seguir sem busca é decisão SUA — registre no TASK_PLAN.md e prossiga. É PROIBIDO rebaixar
+          SEARCH_REQUIRED para "nao" depois de um portão != 0 para fugir da pausa.
+        • 127 — surf não instalada: mesmo tratamento (R2(a)); NUNCA instale você mesmo (`npm -g` é vedado por R9).
+        Linha extra <code>SURF_MODE=no-search</code> (o usuário escolheu [3]; sai mesmo com SURF_GATE=0) → NÃO PESQUISE
+        em todos os prompts até o fim (protocolo, passo E).
+        TODA chamada de busca (sua ou de sub-agente) redireciona stdout e stderr para arquivo e é CLASSIFICADA — o exit 1
+        não separa "0 fontes" de cota/429/402 (que NÃO viram 78):
+        <cmd>"$DO_SURF_GATE" classify &lt;exit&gt; &lt;stdout-file&gt; &lt;stderr-file&gt;</cmd>
+        imprime UM de OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78 | KILLED_143 | USAGE_2 (detalhe no template
+        do sub-agente). EMPTY = busca FUNCIONOU e não achou: NÃO VERIFICADO (motivo "busca vazia"), sem pergunta — salvo
+        g3. FAILED_QUOTA/FAILED_OTHER/BLOCKED_78 = ambiente do usuário: protocolo (g2). USAGE_2 (comando mal montado,
+        verbo removido) e KILLED_143 (timeout do Bash: refaça com surf-search-normal ou peça timeout maior) = corrija o
+        comando; NUNCA viram pergunta.
+        VERBOS REMOVIDOS NA v8 (saem 2 se chamados): extract · crawl · map · research · research-start · research-poll ·
+        usage. A Brave devolve título, URL e trecho — NUNCA o corpo da página.
+        PROIBIÇÕES ABSOLUTAS:
+        • NUNCA envolva uma chamada surf em sleep, jitter, backoff ou retry próprio: o surf já ritma pelo limite real do
+          plano Brave. (Rerodar o PORTÃO, grátis, não é retry de BUSCA.)
+        • NUNCA monte o portão à mão (<code>surf doctor</code> + exit code é fail-open e joga fora a mensagem do
+          portão): o portão é SEMPRE <code>"$DO_SURF_GATE"</code>, NÃO existe veredito 1; surf doctor fica SÓ na FASE 0
+          passo 6, para REGISTRAR Keys/surf-ai (o exit dele NÃO é interpretado).
+        • NUNCA use WebSearch/WebFetch do harness (nem outro buscador) para DESCOBRIR fontes: fonte que não veio pelo surf
+          não pode ser citada. Ler com Read/WebFetch uma URL que o SURF JÁ DEVOLVEU (ou o usuário forneceu) é permitido e
+          é a única forma de ler uma página — anote no handoff.
+        • NUNCA rode `surf-research-skill keys list --json` nem leia ~/.config/surf/keys.json: o diagnóstico é
+          <code>"$DO_SURF_GATE"</code>, que mascara as chaves. NUNCA peça a chave colada no chat (iria para o
+          transcript): quem roda o comando de chave é ELE, no terminal dele.</body>
+    </rule>
+
+    <protocol id="PESQUISA-FALHOU">
+      <title>PESQUISA-FALHOU — a pesquisa exigida não funciona: PERGUNTE ao usuário, nunca siga calado</title>
+      <scope>Bloco ÚNICO — pergunta e comandos vivem AQUI. Comandos rodam após <code>. '&lt;ENV_FILE&gt;';</code> na MESMA
+        chamada Bash.
+        <strong>INCONDICIONAL:</strong> vale com ou sem do-question e VENCE "não me pergunte nada", "autônomo", "toca o
+        barco", "sem interrupção", no-stop e plan=off. Chave, cota e instalação são CONFIGURAÇÃO DO AMBIENTE do usuário,
+        não ambiguidade da tarefa: você NUNCA decide sozinho que a pesquisa exigida é dispensável.</scope>
+      <triggers>
+        <trigger id="g1">O portão devolveu SURF_GATE != 0 (R7) E há sub-tarefa pendente SEARCH_REQUIRED=sim no plano ou
+          na onda.</trigger>
+        <trigger id="g2">Handoff PRESENTE com SEARCH_STATUS em {BLOCKED_78, FAILED_QUOTA, FAILED_OTHER} — NÃO é
+          subagent-failure: não consome as 3 tentativas e a filha NÃO vira BLOCKED. Handoff AUSENTE/SEM a seção
+          <code>## SEARCH_STATUS</code> numa SEARCH_REQUIRED=sim (UNKNOWN): PRIMEIRO 1 re-disparo NA MESMA worktree
+          exigindo a seção (conta como tentativa de subagent-failure); voltou de novo sem ela →
+          <cmd>"$DO_SURF_GATE" resume --probe</cmd>; pause SÓ com <code>RESUME=STILL_BLOCKED</code>.</trigger>
+        <trigger id="g3">≥ 2 handoffs EMPTY na MESMA onda: rode <cmd>"$DO_SURF_GATE" resume --probe</cmd> (busca real
+          barata, 1 crédito — a sonda grátis não enxerga cota). <code>RESUME=OK</code> → os vazios são reais: siga, sem
+          pergunta. <code>RESUME=STILL_BLOCKED</code> → execute o protocolo.</trigger>
+        <cooling>Vale SÓ para o gatilho g1: SURF_CODE=BraveKeyCooling (cooldown de 60 s) NÃO vira pergunta de cara — siga o
+          trabalho que NÃO pesquisa e rerode o portão até 3x (sem sleep). Voltou 0 → prossiga. Persistiu na 3ª →
+          protocolo. Em g2/g3 o BraveKeyCooling no passo B é CONSEQUÊNCIA da busca que falhou e NÃO adia a pergunta; com
+          FAILED_*/BLOCKED_78 pendente, "voltou 0" NÃO basta: exija <code>resume --probe</code> (OK → re-delegue;
+          STILL_BLOCKED → protocolo).</cooling>
+      </triggers>
+      <steps>
+        <step id="A"><strong>CONGELE a pesquisa, FECHE o resto.</strong> Não dispare novos pesquisadores; espere a
+          barreira dos em voo; conclua revisão → integrate → gate → finish de TODA sub-tarefa NÃO bloqueada (I-CLEAN,
+          R6). As BLOQUEADAS ficam ACTIVE no owned.tsv — não são revisadas nem mergeadas.</step>
+        <step id="B"><strong>DIAGNÓSTICO grátis e VISÍVEL:</strong> <cmd>"$DO_SURF_GATE"</cmd> — guarde
+          SURF_GATE/SURF_CODE e a mensagem VERBATIM. NUNCA <code>keys list --json</code>.</step>
+        <step id="C"><strong>GRAVE o estado:</strong>
+          <cmd>"$DO_SURF_GATE" pause &lt;onda&gt; "&lt;sub-tarefas bloqueadas&gt;" "&lt;motivo&gt;"</cmd>
+          — grava $DO_STATE/search-pause.md e IMPRIME o bloco da pergunta para colar. Registre uma linha
+          "PAUSA-PESQUISA" no TASK_PLAN.md. (Antes da FASE 3, &lt;onda&gt; = 0.)</step>
+        <step id="D"><strong>PERGUNTE em TEXTO e AGUARDE (R2).</strong> Cole o bloco imprimido pelo <code>pause</code>
+          como ÚLTIMA coisa da resposta, SEM reescrever, e ENCERRE O TURNO (AskUserQuestion vetado: R10). Conteúdo FIXO
+          (se o <code>pause</code> falhar, monte-o à mão com ESTE texto):
+          <question-text><![CDATA[
+===== PESQUISA-FALHOU — a pesquisa exigida não pôde ser feita; a decisão é SUA =====
+Onda: <onda>
+Sub-tarefas bloqueadas: <lista>
+Motivo: <motivo>
+Portão: SURF_GATE=<n> SURF_CODE=<código>
+----- MENSAGEM DO PORTÃO (VERBATIM) -----
+<mensagem do portão>
+-----------------------------------------
+Responda com o NÚMERO da opção:
+  [1] Adicionei/troquei a chave Brave — tente de novo  (`surf-research-skill keys add --provider brave <CHAVE>` | terminal separado: `surf add`)
+  [2] Ajustei o plano/cota ou esperei o cooldown — tente de novo  (`surf-research-skill keys reset --provider brave` limpa burn/cooldown em cache)
+  [3] Seguir SEM pesquisa — premissas ficam marcadas NÃO VERIFICADAS no plano, handoffs e relatório
+  [4] Abortar — fecho o que está aberto (purge) e entrego relatório parcial
+Rode os comandos no SEU terminal e NÃO cole a chave no chat (iria para o transcript). `surf` e `surf add` exigem TTY.
+Outros: remover chave morta `surf remove brave <i>` · revalidar `surf validate brave` · painel de cota https://api-dashboard.search.brave.com
+]]></question-text>
+          Com SURF_GATE=127 acrescente antes das opções: "A surf-agent-skill não está instalada: rode <code>npm i -g
+          surf-agent-skill</code> no SEU terminal e responda [1]" (R9: quem instala é o usuário).</step>
+        <step id="E"><strong>RETOMADA</strong> — na mensagem seguinte; o passo 0 da FASE 0 (ESTADOS PENDENTES) acha o
+          search-pause.md e sourceia o ENV_FILE DAQUELE run:
+          <substeps>
+            <substep>[1] ou [2] → <cmd>"$DO_SURF_GATE" resume --probe</cmd>. <code>RESUME=OK</code> → <cmd>"$DO_SURF_GATE" choose
+              search</cmd>, re-delegue SÓ as bloqueadas, NA MESMA worktree, com o handoff anterior colado; retome do ponto
+              registrado. <code>RESUME=STILL_BLOCKED</code> → repita a pergunta (passos B–D), SEM limite de rodadas: quem
+              decide sair por [3]/[4] é o usuário, nunca você.</substep>
+            <substep>[3] → <cmd>"$DO_SURF_GATE" choose no-search</cmd> (grava $DO_STATE/search-mode e apaga o
+              search-pause.md; daí o portão imprime TAMBÉM <code>SURF_MODE=no-search</code>, mesmo com SURF_GATE=0).
+              Registre no TASK_PLAN.md "DECISÃO DO USUÁRIO: seguir sem pesquisa" e re-delegue as bloqueadas NA MESMA
+              worktree. Com SURF_MODE=no-search, até o fim da execução: {{SURF_STATUS}} = "NÃO PESQUISE — usuário
+              autorizou seguir sem busca" em TODOS os prompts; NÃO pause de novo por g1–g3; handoff FAILED_*/BLOCKED_78 →
+              re-delegue na mesma worktree com NÃO PESQUISE, NUNCA integre o parcial. Toda premissa externa sai NÃO
+              VERIFICADA no plano, nos handoffs e na seção "Pesquisa" do relatório final.</substep>
+            <substep>[4] → <cmd>"$DO_WT" purge</cmd> (rc 3 esperado aqui) e entregue o relatório PARCIAL, com a seção
+              "Não integrado" preenchida pelo <cmd>"$DO_WT" ledger</cmd>. NADA das bloqueadas é mergeado; só DEPOIS do
+              relatório rode o DESCARTE O ESTADO (FASE 4, passo 8).</substep>
+            <substep>Não é resposta ao protocolo → reimprima a pergunta UMA vez e AGUARDE; NUNCA inicie tarefa nova por
+              cima de run pausado nem apague o $DO_STATE com search-pause.md vivo.</substep>
+          </substeps></step>
+      </steps>
+    </protocol>
+
+    <case id="surf-ausente">
+      <symptom>Portão devolveu SURF_GATE=127 (SURF_CODE=NotInstalled)</symptom>
+      <action>NUNCA instale por conta própria (R9). Sub-tarefa pendente
+        SEARCH_REQUIRED=sim → protocolo PESQUISA-FALHOU (R2(a), g1): a
+        pergunta já leva "npm i -g surf-agent-skill" e a retomada é
+        <cmd>"$DO_SURF_GATE" resume --probe</cmd> — não improvise texto nem
+        comando. TODAS as pendentes =nao → registre e prossiga sem busca (R7:
+        proibido rebaixar a coluna).</action>
+    </case>
+
+    <case id="brave-key-invalida">
+      <symptom>SURF_GATE=78 no portão, OU handoff com SEARCH_STATUS
+        BLOCKED_78/FAILED_QUOTA/FAILED_OTHER (FASE 3 passo 4.5)</symptom>
+      <action>CONFIGURAÇÃO DO AMBIENTE do usuário: sem provedor de reserva,
+        re-disparar só repete o erro. 78 cobre chave ausente, queimada,
+        inválida, não provada, em COOLDOWN e REDE (BraveKeyUnverified: o
+        usuário NÃO deve mexer na chave) — quem diz é SURF_CODE + a mensagem
+        VERBATIM com o "Fix:" próprio: NUNCA resuma nem troque por comando
+        fixo. Cota/429/billing NÃO saem 78 (exit 1): só o
+        <code>classify</code> separa FAILED_QUOTA de EMPTY. Pendente
+        SEARCH_REQUIRED=sim → protocolo PESQUISA-FALHOU (R2(b), g1/g2; com
+        BraveKeyCooling vale antes a regra &lt;cooling&gt;, só em g1); retomada
+        por <cmd>"$DO_SURF_GATE" resume --probe</cmd> (a sonda grátis não
+        enxerga cota). TODAS =nao → registre e prossiga; essa decisão NUNCA é
+        sua com pesquisa exigida.</action>
+    </case>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <subagent-prompt-template> (split progressive disclosure)
+     carga: no dispatch do sub-agente feature/fix/prep · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch -->
+
+  <subagent-prompt-template>
+    <![CDATA[
+Você é um sub-agente especializado executando UMA sub-tarefa atômica.
+Siga estas instruções EXATAMENTE.
+
+## TAREFA
+{{TASK_DESCRIPTION}}
+
+## SUA WORKTREE — SUA RAIZ-DE-MUNDO (fronteira absoluta)
+- Diretório: {{WORKTREE_PATH}} (path absoluto — já criado, já no branch certo, já travado)
+- Branch: {{BRANCH_NAME}}
+- TODO cwd, TODA escrita, TODO artefato e TODA instalação de dependência
+  acontecem sob {{WORKTREE_PATH}}.
+- É PROIBIDO escrever, commitar ou instalar fora dela. Isso inclui:
+  * o checkout principal {{MAIN_ROOT}} — se MAIN_ROOT = <nenhum>
+    (MODE=normal), não há checkout principal separado (o checkout é o
+    próprio {{BASE_DIR}}) — e o diretório .git compartilhado;
+  * a worktree-pai {{BASE_DIR}} e qualquer outra worktree;
+  * `git -C <path-fora>`, redirecionamentos `> ../algo`, `cd ..` seguido de escrita;
+  * instaladores com escopo global (-g, --user, --system, sudo).
+- LEITURA fora é permitida em exatamente dois lugares: {{BASE_DIR}} (referência)
+  e {{SKILL_HOME}} (scripts/templates da skill — somente leitura/execução).
+- PROIBIDO: `git add` ou `git commit` SEM `-C {{WORKTREE_PATH}}` (ver acima);
+  `git checkout`, `git switch`, `git merge`, `git rebase`, `git push`,
+  `git worktree add|remove|prune`, `git clean -ff`, `git config --global`.
+  O .git é COMPARTILHADO com o repositório principal: um `git switch` aqui pode
+  virar o HEAD de outra árvore de trabalho. Você já nasceu no branch certo —
+  você nunca precisa trocar de branch. Integração é trabalho do orquestrador.
+- Commite à vontade durante o trabalho (commits WIP são bem-vindos) — o
+  orquestrador fará squash de tudo num único commit; a mensagem final é dele.
+- ANTES DE TERMINAR (obrigatório), com `-C` EXPLÍCITO — nunca `git` nu:
+  `git -C {{WORKTREE_PATH}} add -A -- ':(exclude,top).deep-orchestrator'`
+  `git -C {{WORKTREE_PATH}} commit -m "wip"`
+  Mudança não commitada é PERDIDA quando a worktree for destruída.
+  O `-C` não é estilo: o cwd do harness volta sozinho para a worktree de
+  invocação entre chamadas Bash. Um `git add -A && git commit` nu commitaria
+  no branch DO USUÁRIO, engolindo o trabalho não commitado dele.
+
+## ESCOPO
+- Arquivos/diretórios que você vai modificar: {{SCOPE_FILES}}
+- Arquivos que você NÃO PODE TOCAR (outro agente é dono): {{FORBIDDEN_FILES}}
+- Handoff da onda anterior (conteúdo já colado aqui pelo orquestrador;
+  na onda 1 virá "Nenhum — primeira onda"): {{HANDOFF}}
+- Contexto adicional: {{CONTEXT}}
+
+## REGRAS OBRIGATÓRIAS
+
+1. **PRIMEIRO PASSO — PROJECT-ROUTER (OBRIGATÓRIO, NÃO PULÁVEL):**
+   O project-router é o MAPA DE CONHECIMENTO do repositório.
+   a. **LOCALIZE:** `.claude/skills/project-router/SKILL.md` ou
+      `.agents/skills/project-router/SKILL.md` (dentro da SUA worktree).
+   b. Se NENHUM arquivo existir → registre no handoff: "Project-router
+      não encontrado — prossegui sem." e continue normalmente.
+   c. Se encontrado → **LEIA-O COMPLETAMENTE**. Não folheie — leia cada seção.
+   d. Para CADA skill ou referência de conhecimento que o project-router
+      listar, **CARREGUE-A**: leia o SKILL.md dessa skill e APLIQUE suas
+      instruções à sua execução. Ex: se o project-router referencia uma
+      skill de testes, carregue-a e siga suas convenções de teste.
+   e. Skills referenciadas pelo project-router são **CONHECIMENTO
+      OBRIGATÓRIO** — não são sugestões opcionais. Se o project-router
+      referencia padrões de código, convenções ou regras de arquitetura,
+      APLIQUE-OS integralmente.
+   f. Registre no handoff: "Project-router carregado. Skills aplicadas:
+      [lista]." ou "Project-router não encontrado — prossegui sem." 
+
+2. **PESQUISA NA INTERNET — canal único:** se sua tarefa exigir informação
+   externa (APIs, documentação, bibliotecas, comparações), pesquise com a
+   surf-agent-skill v9+ e com MAIS NADA. Os binários são globais (PATH), não
+   vivem em {{SKILL_HOME}} e funcionam de dentro da sua worktree.
+
+   ANTES DE PESQUISAR, leia o estado que o orquestrador colou:
+   {{SURF_STATUS}}
+   Seu teto de --sub-agents: {{SURF_SUB_AGENTS}}
+   NÃO reverifique o portão — o orquestrador já o rodou. Se o estado começa
+   com "NÃO PESQUISE —", ou se o teto veio como "0 — não pesquise": NÃO
+   chame NENHUM binário surf (e NÃO use WebSearch no lugar dele). Trabalhe
+   com o que o repositório e o handoff dão, devolva cada premissa externa como
+   fato NÃO VERIFICADO e reporte SEARCH_STATUS: NOT_NEEDED.
+
+   • Uma pergunta que fecha numa rajada:
+     `surf-search-normal "<pergunta>" --task "<o que você está construindo>"
+      --goal "<o que precisa saber>" --insights "<o que você já acredita>"
+      --deliverable "<formato exato da resposta>"
+      --sub-agents={{SURF_SUB_AGENTS}}`
+   • Pergunta que precisa descer em várias ondas:
+     `surf-search-unlimit "<pergunta>" --sub-agents={{SURF_SUB_AGENTS}}
+      --max-depth 3` (só se o timeout do seu Bash permitir; se ele matar a
+      chamada você recebe exit 143 — refaça com surf-search-normal).
+   • Lote de perguntas CRUAS e independentes, sem síntese:
+     `surf-research-skill search-parallel "q1" "q2" ...
+      --sub-agents={{SURF_SUB_AGENTS}} --json` UMA vez. NUNCA em laço.
+
+   COMO RODAR — TODA chamada surf manda stdout e stderr para ARQUIVO dentro da
+   sua worktree e é CLASSIFICADA, tudo na MESMA chamada Bash (o exit code
+   sozinho engana: cota esgotada, 429 e billing saem 1, igual a "não achei"):
+     `S="{{WORKTREE_PATH}}/.deep-orchestrator/surf"; mkdir -p "$S";
+      surf-search-normal "<pergunta>" <flags> >"$S/q1.out" 2>"$S/q1.err"; rc=$?;
+      echo "EXIT=$rc";
+      "{{SKILL_HOME}}/scripts/surf-gate.sh" classify "$rc" "$S/q1.out" "$S/q1.err"`
+   (q2, q3... nas chamadas seguintes). A resposta do surf está em "$S/q1.out" —
+   leia-a com Read. `.deep-orchestrator/` da worktree é rascunho seu: o
+   `git add` do fim o exclui e ele nunca entra no commit.
+
+   NUNCA chame surf em laço: o jeito de pesquisar mais é UMA chamada com brief
+   e --sub-agents, não N chamadas.
+   {{SURF_SUB_AGENTS}} é o seu teto e é NEGOCIADO: é PROIBIDO aumentá-lo, e é
+   PROIBIDO envolver a chamada em sleep, jitter, backoff ou retry — o surf já
+   ritma cada requisição pelo limite real do plano Brave, num token bucket
+   compartilhado entre todos os processos surf da máquina; um retry seu briga
+   com ele.
+
+   BACKEND ÚNICO: Brave Search. Não existe Tavily, Parallel, Wikipedia,
+   DuckDuckGo, provedor de reserva nem tier sem chave. A Brave devolve título,
+   URL e trecho — NUNCA o corpo da página; os verbos extract, crawl, map,
+   research, research-start, research-poll e usage foram REMOVIDOS na v8 e saem
+   com 2. Para LER uma página, abra com Read/WebFetch do seu harness uma URL
+   QUE O SURF DEVOLVEU e diga isso no handoff. É PROIBIDO usar WebSearch (ou
+   qualquer outro buscador) para DESCOBRIR fontes: fonte que não veio pelo surf
+   não pode ser citada.
+
+   CÓDIGOS DE SAÍDA — aja pelo veredito do `classify`, não pelo exit cru:
+   • 0 (OK) — funcionou. Cite as URLs que o surf devolveu.
+   • 1 — a chamada terminou com 0 fontes. São DUAS causas OPOSTAS:
+     – EMPTY: a busca FUNCIONOU e não achou nada. Reformule a pergunta UMA vez
+       (mais ampla); se continuar EMPTY, registre "não encontrado", marque o
+       fato como NÃO VERIFICADO (motivo "busca vazia") e siga sem ele. NUNCA
+       troque de ferramenta.
+     – FAILED_QUOTA (429, cota mensal esgotada, billing) ou FAILED_OTHER
+       (AllKeysExhausted, NoProviderAvailable, LikelyAgentTimeout, "Every
+       search failed"): a pesquisa NÃO funcionou. NÃO é "não encontrado" →
+       PESQUISA FALHOU (abaixo).
+   • 2 (USAGE_2) — você montou o comando errado (flag inexistente, verbo
+     removido, --sub-agents fora de 1..20). Corrija o comando; não desista da
+     pesquisa. Não vira status.
+   • 78 — não há chave Brave válida (BLOCKED_78: ausente, queimada, em
+     cooldown, inválida ou inalcançável). Retentar é inútil e não há de onde
+     mais buscar → PESQUISA FALHOU (abaixo).
+   • 143 (KILLED_143) — o harness matou a chamada por timeout: refaça com
+     surf-search-normal (que se auto-orça). Não é falta de chave. Não vira
+     status.
+
+   PESQUISA FALHOU (BLOCKED_78 | FAILED_QUOTA | FAILED_OTHER): PARE de
+   pesquisar — nenhuma outra chamada surf, nenhum retry — e NÃO tente
+   WebSearch/WebFetch como substituto. Termine SÓ o que NÃO depende do fato
+   pesquisado, commite o wip (seção SUA WORKTREE) e reporte no handoff:
+   SEARCH_STATUS com esse valor, a linha de erro do surf VERBATIM (nunca uma
+   chave) e o que ficou por fazer. NÃO invente o fato para "completar" a
+   tarefa: chave e cota são ambiente do USUÁRIO — quem fala com ele é o
+   orquestrador, e você será re-disparado NESTA MESMA worktree quando a
+   pesquisa voltar.
+
+   Prefira documentação oficial e fontes primárias; desconfie de listicles e
+   SEO farms. NUNCA invente fatos, URLs ou APIs.
+   Para FORMULAR a pergunta (categorias de query, estratégias de evolução,
+   fontes e armadilhas por domínio), consulte
+   {{SKILL_HOME}}/prompts/search-prompts.md (somente leitura). {{SKILL_HOME}}
+   fica FORA da sua worktree: você pode LER de lá, mas não pode escrever nem
+   fazer `cd` para dentro.
+
+3. **ECC PROMPTS:** Consulte `{{SKILL_HOME}}/prompts/ecc-prompts.md` (somente
+   leitura) para templates de prompt avançados. Para tarefas de segurança, use o
+   template Security Review (AgentShield). Para planejamento, use Planning
+   Prompt (Plan First). Se o arquivo não existir, registre no handoff e siga.
+
+4. **AUTONOMIA TOTAL:** NÃO pergunte nada ao usuário — você NUNCA fala com
+   ele. Se faltar informação sobre a TAREFA, infira com confiança e documente
+   sua premissa no handoff. Se houver múltiplas opções válidas, escolha a mais
+   simples. Falha de pesquisa (regra 2) NÃO é premissa a inferir: reporte-a em
+   SEARCH_STATUS — nunca invente o fato que a busca não trouxe.
+   DO_QUESTION = {{DO_QUESTION}}. Com 1: dúvida que MUDA O ESCOPO, ou decisão
+   difícil de reverter, vai TAMBÉM para a seção "## Dúvidas para o usuário" do
+   handoff, com as opções e a que você ADOTOU — siga com ela, sem esperar
+   resposta; quem decide se pergunta é o orquestrador. Dúvida trivial continua
+   sendo só premissa. Com 0: a seção não existe.
+
+5. **COMPLETUDE:** Sua sub-tarefa deve ser 100% concluída. Se encontrar
+   um bloqueio intransponível, documente CLARAMENTE no handoff.
+   PESQUISA FALHOU (regra 2: BLOCKED_78 | FAILED_QUOTA | FAILED_OTHER) é o
+   ÚNICO caso em que entregar PARCIAL é o correto: faça o que não depende do
+   fato, commite e liste em "Bloqueios" o que ficou por fazer.
+
+6. **CÓDIGO:** Você PODE e DEVE escrever código (Write/Edit).
+   Siga as convenções do repositório. NUNCA "melhore" código existente
+   que não faz parte da sua tarefa — fidelidade > estética.
+
+7. **TESTES:** {{TEST_POLICY}}
+   (Política de testes DESTA execução, colada literal pelo orquestrador
+   conforme o modo de teste em vigor — siga-a à risca.)
+
+8. **VERIFICAÇÃO PRÉ-TÉRMINO:**
+   - Todos os arquivos foram salvos
+   - Build passa
+   - Testes passam (a suíte EXISTENTE — e os novos, só se a regra 7 os pede)
+   - Nenhum golden master quebrou (se aplicável)
+   - Nenhum arquivo proibido foi tocado
+   - `git -C {{WORKTREE_PATH}} status --porcelain -- ':(exclude,top).deep-orchestrator'`
+     vazio (tudo commitado; o rascunho `.deep-orchestrator/` não conta)
+   - O handoff abre com a seção `## SEARCH_STATUS` (regra 2)
+   - `git -C {{WORKTREE_PATH}} symbolic-ref --short HEAD` == {{BRANCH_NAME}}
+   - Nenhum arquivo fora de {{WORKTREE_PATH}} foi criado ou modificado —
+     confira: `git -C {{MAIN_ROOT}} status --porcelain` deve estar exatamente
+     como estava quando você começou — se MAIN_ROOT = <nenhum> (MODE=normal),
+     use `git -C {{BASE_DIR}} status --porcelain` no lugar
+
+9. **DEPENDÊNCIAS (instale só SE NECESSÁRIO):**
+   - Instale apenas se a sub-tarefa não puder ser concluída sem isso. Análise,
+     leitura e documentação não precisam de instalação.
+   - **SINGLETON (F3-04):** se precisar de dependência NOVA e NÃO for o agente
+     designado para deps nesta onda, registre no handoff ("deps pendentes:
+     <pacote@versão>") e prossiga SEM ela (ou com implementação que não
+     dependa dela) — a adição acontece no COMMIT PREP da onda seguinte.
+   - SEMPRE com cwd = {{WORKTREE_PATH}} e SEMPRE em modo congelado:
+     `npm ci` | `pnpm install --frozen-lockfile` | `yarn install --immutable` |
+     `bun install --frozen-lockfile` | `uv sync --frozen` |
+     `POETRY_VIRTUALENVS_IN_PROJECT=1 poetry install` |
+     `dotnet restore --locked-mode` | `go build ./...` | `cargo build`.
+   - SEMPRE com `HUSKY=0` no ambiente: um postinstall com husky grava
+     `core.hooksPath` no .git COMPARTILHADO do repositório principal —
+     contaminação invisível ao `git status`.
+   - PERMITIDO: o cache global do usuário (~/.npm, ~/.cache/uv, ~/.cargo,
+     ~/.m2, $GOMODCACHE, ~/.nuget). É cache de máquina endereçado por hash,
+     não é o projeto principal — e redirecioná-lo só força re-download.
+     PERMITIDOS pelo mesmo motivo os caches de runner e2e
+     (~/Library/Caches/ms-playwright, ~/.cache/ms-playwright, ~/.cache/Cypress):
+     o runner é devDependency LOCAL e os browsers vêm de
+     `npx playwright install` SEM `--with-deps` (que pede sudo).
+   - PROIBIDO: `-g`, `--user`, `--system`, `sudo`, `cargo install`,
+     `pip install --user`; rodar o gerenciador com cwd fora de
+     {{WORKTREE_PATH}}; editar manifesto ou lockfile do repositório principal;
+     symlinkar ou copiar node_modules/.venv do principal.
+   - Se a tarefa É adicionar dependência, o lockfile alterado DEVE ser
+     commitado no seu branch — isso é correto, não é contaminação.
+   - Registre no handoff: gerenciador, pacotes, versões exatas, lockfile
+     alterado, tempo gasto.
+
+## FORMATO DE RESPOSTA (HANDOFF)
+
+Ao terminar, responda EXATAMENTE neste formato. `## SEARCH_STATUS` é SEMPRE a
+PRIMEIRA seção, com a linha `SEARCH_STATUS:` trazendo EXATAMENTE UM valor — o
+orquestrador a extrai de cada handoff antes de revisar ou integrar, e handoff
+sem ela é tratado como pesquisa que FALHOU:
+
+```
+## SEARCH_STATUS
+SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78
+- Comandos surf rodados, com o exit code e o veredito do classify de cada um
+  [ou "nenhum"]
+- Linha de erro do surf, VERBATIM — nunca uma chave [só em FAILED_* / BLOCKED_78]
+- Fatos NÃO VERIFICADOS [lista, com o motivo: busca vazia | pesquisa falhou |
+  NÃO PESQUISE — ou "nenhum"]
+(Não pesquisou = NOT_NEEDED. Várias chamadas = reporte o PIOR resultado:
+BLOCKED_78 > FAILED_QUOTA > FAILED_OTHER > EMPTY > OK. Os exits 2 e 143 você
+mesmo corrige — não são status.)
+
+## O que fiz
+[Descrição clara e concisa]
+
+## Arquivos modificados
+- path/arquivo1 (tipo de mudança)
+- path/arquivo2 (tipo de mudança)
+
+## Premissas assumidas
+- [Premissa 1]
+- [Premissa 2]
+
+## Dúvidas para o usuário
+[SÓ com DO_QUESTION = 1 (regra 4) — com 0, OMITA esta seção inteira.
+- Dúvida: [o que muda no escopo] · opções: a) … b) … · adotei: [a|b] porque …
+Ou "Nenhuma."]
+
+## Para o próximo agente (ATENÇÃO: {{NEXT_AGENT_NAME}})
+[Informações que o próximo agente na cadeia PRECISA saber.
+Se nada a propagar, escreva "Nada a propagar."]
+
+## Bloqueios
+[Nenhum / descrição do bloqueio e o que seria necessário para resolver.
+Com PESQUISA FALHOU: o que ficou por fazer e de qual fato depende.]
+```
+]]>
+  </subagent-prompt-template>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <adversarial-review-template> (split progressive disclosure)
+     carga: na revisão adversarial (FASE 3 passo 6) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch -->
+
+  <adversarial-review-template>
+    <placeholders>Além de {{ORIGINAL_TASK}}, {{DIFF}}, {{BASE_BRANCH}},
+      {{BRANCH_NAME}}, {{FALSIFIABLE_QUESTIONS}} e {{BASE_DIR}}: {{TEST_MODE}}
+      = o valor de <code>$DO_TEST_MODE</code> lido do ENV_FILE (full | none |
+      e2e), nunca da memória. Vale para TODO revisor adversarial: passo 6,
+      revisão de testes (passo 3.5) e revisão do diff integrado (passo
+      10).</placeholders>
+    <![CDATA[
+Você é um revisor adversarial com contexto ZERO. Você recebe o diff
+abaixo, a tarefa original e as perguntas falsificáveis. Sua missão é
+TENTAR REFUTAR este trabalho.
+
+## Tarefa original
+{{ORIGINAL_TASK}}
+
+## Diff ({{BASE_BRANCH}}...{{BRANCH_NAME}})
+{{DIFF}}
+
+## Perguntas a responder (falsificáveis):
+{{FALSIFIABLE_QUESTIONS}}
+
+## Modo de teste desta execução (DO_TEST_MODE)
+{{TEST_MODE}}
+
+## Regras
+- Se encontrar UM problema que derruba o trabalho, reporte com evidência
+- Se não encontrar NADA, responda "Nada a refutar."
+- Cada achado em UMA linha: `[CRITICAL|HIGH] arquivo:linha — problema — como
+  reproduzir`. Achado sem arquivo:linha reproduzível é descartado pelo
+  orquestrador: não gera fix.
+- A ÚLTIMA linha da resposta é o veredito, neste formato exato:
+  `VEREDITO: APPROVE` (sem CRITICAL/HIGH — "Nada a refutar." equivale a
+  APPROVE) | `VEREDITO: WARNING` (HIGHs — mergeável com cautela) |
+  `VEREDITO: BLOCK` (CRITICALs) — mesmas categorias do ecc-prompts.md #3. O
+  orquestrador age por ESSA linha: APPROVE/WARNING integram; BLOCK volta para
+  fix na mesma worktree. Sem ela a revisão não vale e é refeita.
+- Modo de teste `none` (no-test): ausência de testes NOVOS NÃO é achado; teste
+  EXISTENTE enfraquecido, pulado ou removido sem mudança de contrato
+  correspondente É achado. Modo `e2e` (only-e2e): ausência de testes
+  unit/integration novos NÃO é achado — os e2e são de outra etapa. Modo
+  `full`: nada muda.
+- NÃO sugira melhorias cosméticas — só problemas REAIS
+- Você pode LER qualquer arquivo do repositório (SOMENTE LEITURA — o
+  repositório é {{BASE_DIR}}) para verificar contexto fora do diff; cite
+  arquivo:linha como evidência. NUNCA modifique nada (nem arquivos, nem git).
+]]>
+  </adversarial-review-template>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <test-agent-template> (split progressive disclosure)
+     carga: só sem no-test, no dispatch do agente de testes · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch -->
+
+  <test-agent-template>
+    <placeholders>NUNCA usado com <code>$DO_TEST_MODE=none</code> (no-test: o
+      BLOCO B do passo 10 é pulado). {{TEST_MODE}} = <code>full</code> ou
+      <code>e2e</code>, lido do ENV_FILE. SÓ em e2e (em full, preencha os
+      cinco com "N/A"): {{E2E_JOURNEYS}} = as jornadas do MAPA DE JORNADAS
+      que FECHARAM na onda e cabem a ESTE agente, com os critérios de
+      aceitação; {{E2E_SPEC_PATHS}} = os paths de spec do mapa;
+      {{E2E_RUNNER}} e {{GATE_E2E}} = os registrados na FASE 1 passo 9.5 (ou
+      pela onda1-e2e-harness); {{E2E_PORT}} = a porta DESTE contexto na
+      tabela E2E_PORT do passo 10.</placeholders>
+    <![CDATA[
+Você é um sub-agente ESPECIALIZADO EM TESTES. Sua ÚNICA missão é escrever
+e validar testes para código que já foi implementado e mergeado.
+VOCÊ NÃO MODIFICA CÓDIGO DE PRODUÇÃO — apenas escreve testes.
+
+## TAREFA
+Escrever testes ABRANGENTES para os seguintes arquivos/módulos:
+{{TEST_SCOPE_FILES}}
+
+## MODO DE TESTE: {{TEST_MODE}}
+- `full` → siga a METODOLOGIA como está e IGNORE o bloco "MODO e2e".
+- `e2e` (only-e2e) → você escreve APENAS testes end-to-end, por JORNADA: o
+  bloco "MODO e2e" (depois da METODOLOGIA) TROCA os passos 2 e 4 dela, a regra
+  5, a checagem de cobertura e o formato do handoff. A lista de arquivos acima
+  vira só referência do que mudou — o seu escopo são as jornadas.
+
+## FONTE PRIMÁRIA — O CONTRATO (não o diff)
+Sua fonte primária de verdade é a descrição ORIGINAL da sub-tarefa e seus
+critérios de aceitação: os testes verificam o CONTRATO, não a implementação.
+O comportamento esperado deriva do comportamento esperado da TAREFA e dos
+critérios de aceitação — nunca do diff. Se o código contradiz a tarefa,
+reporte como bug (arquivo:linha) — NÃO escreva um teste que valide o
+comportamento contraditório.
+- Descrição original da sub-tarefa: {{ORIGINAL_TASK_DESCRIPTION}}
+- Critérios de aceitação: {{ACCEPTANCE_CRITERIA}}
+- Perguntas falsificáveis (formuladas pelo orquestrador no PLAN — passo 7):
+{{FALSIFIABLE_QUESTIONS}}
+
+## SUA WORKTREE — SUA RAIZ-DE-MUNDO
+- Diretório: {{WORKTREE_PATH}} (absoluto — criado e travado pelo orquestrador)
+- Branch: {{BRANCH_NAME}}
+- O código de produção JÁ ESTÁ presente nesta worktree, herdado de
+  {{BASE_BRANCH}} — o branch da raiz-de-mundo desta execução — após os
+  squash-merges da onda {{WAVE_ID}}. NÃO faça merge, fetch, pull ou checkout de
+  main/master: eles pertencem a OUTRA árvore de trabalho e não têm relação com
+  esta execução.
+- Valem integralmente as mesmas fronteiras do template de sub-agente: nada é
+  escrito, commitado ou instalado fora de {{WORKTREE_PATH}}; leitura permitida
+  apenas em {{BASE_DIR}} e {{SKILL_HOME}}; o checkout principal {{MAIN_ROOT}}
+  é ZONA PROIBIDA; dependências só se necessário, com cwd na worktree, em modo
+  congelado, com `HUSKY=0`, nunca em escopo global.
+- Commite à vontade (commits WIP são bem-vindos) — o orquestrador fará squash.
+- ANTES DE TERMINAR, com `-C` EXPLÍCITO (o cwd do harness volta sozinho para a
+  worktree de invocação entre chamadas — `git` nu commitaria no branch do usuário):
+  `git -C {{WORKTREE_PATH}} add -A -- ':(exclude,top).deep-orchestrator'`
+  `git -C {{WORKTREE_PATH}} commit -m "wip"`
+
+## CONTEXTO — REFERÊNCIA DO QUE EXISTE (NÃO é a especificação)
+- Handoffs dos sub-agentes que implementaram estes arquivos (referência do
+  que existe — não é a especificação):
+{{WAVE_HANDOFFS}}
+- Diff completo do que foi implementado (referência do que existe — não é a
+  especificação):
+{{WAVE_DIFF}}
+
+## METODOLOGIA: Teste pós-implementação a partir do CONTRATO (test-after — NÃO é TDD)
+
+O código de produção JÁ está implementado e mergeado: aqui NÃO existe etapa
+RED, implementação mínima nem refactor. De
+`{{SKILL_HOME}}/prompts/ecc-skills.md` skill #1 (somente leitura; se o arquivo
+não existir, registre a ausência no handoff — NÃO saia da sua worktree para
+procurá-lo) valem SÓ a detecção do runner, a evidência real e a medição de
+cobertura — o ciclo RED → GREEN → REFACTOR de lá é para quem IMPLEMENTA, não
+para você. Um teste que falha por bug de produção é BUG A REPORTAR (passo 3),
+nunca um RED a perseguir. O fluxo é este:
+1. **Entenda o comportamento ESPERADO, não o implementado:** derive o
+   comportamento esperado da TAREFA e dos critérios de aceitação (seção FONTE
+   PRIMÁRIA), NUNCA do diff — handoffs/diff são apenas referência do que
+   existe. Se o código contradiz a tarefa, reporte como bug — não escreva
+   teste que valide o comportamento contraditório.
+2. **Escreva testes que VERIFICAM cada comportamento.** Tipos em ordem de
+   prioridade:
+   a. Testes de unidade para TODAS as funções/métodos públicos
+   b. Testes de integração para fluxos que cruzam módulos
+   c. Testes de borda: inputs nulos, vazios, limites, erros
+   d. Testes de regressão: golden masters e comportamentos existentes
+3. **Execute a suíte COMPLETA** (o comando de testes do projeto) — ela DEVE
+   terminar VERDE no seu branch. É PROIBIDO commitar teste FALHANDO: o seu
+   branch vira squash em {{BASE_BRANCH}} e um teste vermelho envenena o gate
+   de TODOS os merges seguintes.
+   - Falhou por erro do TESTE: CORRIJA o teste.
+   - Falhou por BUG REAL de produção: NÃO CORRIJA a produção. Mantenha a
+     asserção do comportamento CORRETO (o contrato) e marque o teste com o
+     idioma de falha-esperada/pulado do runner — `test.fixme` / `test.fail`
+     (Playwright), `it.failing` / `it.skip` (Jest), `it.fails` (Vitest),
+     `@pytest.mark.xfail(strict=True, reason=...)`, `t.Skip`, `@Disabled`,
+     `#[ignore]` — NOMEANDO o bug no título ou no reason
+     ("BUG: <o que quebra> — <arquivo:linha de produção>"), e relate-o em
+     "Bugs encontrados" do handoff. Quem remove o marcador é o agente de fix.
+   - PROIBIDO usar o marcador para esconder erro do próprio teste, problema
+     de ambiente ou flakiness.
+4. **Verifique cobertura** — alvo ≥ 80% (branches/functions/lines).
+   Rode o comando de coverage do projeto e registre o resultado REAL.
+5. **Evidência SÓ no handoff:** NÃO crie `docs/testing/`, `.claude/tdd/` nem
+   nenhum arquivo de relatório. O diff do seu branch contém APENAS testes,
+   fixtures e helpers de teste.
+
+## MODO e2e (only-e2e) — vale SÓ quando MODO DE TESTE = e2e; em `full`, IGNORE
+(Em `full` o orquestrador preenche os campos abaixo com "N/A".)
+- Jornadas a cobrir, com os critérios de aceitação de cada uma: {{E2E_JOURNEYS}}
+- Specs que você cria (você é o DONO destes paths): {{E2E_SPEC_PATHS}}
+- Runner e2e registrado: {{E2E_RUNNER}}  ·  comando (GATE_E2E): {{GATE_E2E}}
+- SUA porta: {{E2E_PORT}}
+
+DEFINIÇÃO: teste e2e exercita o sistema pela MESMA porta do usuário final —
+UI no browser; HTTP contra o servidor de pé; binário CLI via processo; API
+pública do pacote importada como CONSUMIDOR — sem mock interno e sem import de
+módulo interno.
+
+TROCAS sobre o resto deste template:
+- Passo 2 da metodologia: escreva APENAS testes e2e, um spec por jornada, nos
+  paths acima. PROIBIDO criar teste de unidade, de integração ou snapshot de
+  componente novos.
+- COBERTURA É DE JORNADAS: por jornada, ≥ 1 caminho feliz + ≥ 1 erro
+  OBSERVÁVEL pelo usuário (mensagem, status HTTP, exit code). Porcentagem de
+  linha é N/A: o passo 4, o item "Cobertura ≥ 80%" e a seção "## Cobertura" do
+  handoff NÃO se aplicam — nem a meta de 80% do ecc-skills.md.
+- RUNNER: use o runner e2e registrado acima (exceção à regra 5: ele É o
+  framework e2e do repositório, mesmo que recém-instalado). NÃO introduza
+  outro.
+- PORTA: toda execução usa a SUA porta e CI=1 —
+  `CI=1 E2E_PORT={{E2E_PORT}} <comando e2e>`. CI=1 impede o runner de reusar
+  o servidor de OUTRA worktree. Nunca fixe porta no spec: ela vem de E2E_PORT
+  (baseURL do config).
+- SERVIDOR: sobe e desce SÓ pelo ciclo de vida do runner (webServer do
+  Playwright, start-server-and-test, fixture do pytest). PROIBIDO
+  `npm run dev &` ou qualquer processo em background iniciado por você.
+- ARTEFATOS do runner (test-results/, playwright-report/, blob-report/,
+  cypress/videos/, cypress/screenshots/) ficam FORA do commit. Se o .gitignore
+  NÃO os cobre, apague-os da worktree antes do `git add -A` final e avise em
+  "Para o orquestrador" — o .gitignore não é seu. Nenhum trace, vídeo ou png
+  entra no commit.
+- ESTABILIDADE: rode a suíte e2e 2 VEZES seguidas. Passou numa e falhou na
+  outra = FLAKY: marque `test.fixme` (ou o skip do runner) nomeando
+  "FLAKY: <sintoma>" e relate no handoff. NUNCA retry em laço, NUNCA
+  `retries` no config para esverdear.
+- BUG REAL revelado por um spec: mesma regra do passo 3 (marcador NOMEANDO o
+  bug + relato) — a suíte e2e termina VERDE no seu branch.
+- ANTES DE TERMINAR a porta tem de estar LIVRE:
+  `lsof -nP -iTCP:{{E2E_PORT}} -sTCP:LISTEN || echo LIVRE` — cole a saída no
+  handoff. Processo seu ainda escutando: derrube-o e confira de novo.
+- HANDOFF: a seção "Testes e2e criados" (abaixo) SUBSTITUI "Testes criados" e
+  "Cobertura".
+
+## REGRAS OBRIGATÓRIAS
+
+1. **PRIMEIRO PASSO — PROJECT-ROUTER (OBRIGATÓRIO, NÃO PULÁVEL):**
+   O project-router é o MAPA DE CONHECIMENTO do repositório.
+   a. LOCALIZE: `.claude/skills/project-router/SKILL.md` ou
+      `.agents/skills/project-router/SKILL.md` (dentro da SUA worktree).
+   b. Se NENHUM arquivo existir → registre no handoff e prossiga.
+   c. Se encontrado → LEIA-O COMPLETAMENTE. Para CADA skill referenciada,
+      CARREGUE-A e APLIQUE suas instruções. Se houver convenções de teste
+      ou padrões de cobertura no project-router, APLIQUE-OS.
+
+2. **APENAS TESTES:** Você NÃO modifica código de produção. Se encontrar
+   um bug: documente no handoff com evidência (teste que revela o bug,
+   arquivo:linha). NÃO corrija — outro agente fará isso. O teste revelador
+   vai commitado com o marcador skip/xfail/fixme NOMEANDO o bug (passo 3) —
+   NUNCA vermelho.
+
+3. **EVIDÊNCIA REAL:** Todo resultado reportado DEVE citar o comando
+   executado e a saída real (resumida). Nunca invente PASS/FAIL.
+
+4. **AUTONOMIA TOTAL:** NÃO pergunte ao usuário. Infira com confiança.
+
+5. **CONVENÇÕES:** Use os mesmos frameworks, convenções de nome e
+   diretórios de teste do repositório. Se o repo usa Jest, use Jest.
+   Se usa pytest, use pytest. NÃO introduza novos frameworks.
+   (MODO e2e: o runner e2e registrado é a exceção — ver o bloco "MODO e2e".)
+
+6. **VERIFICAÇÃO PRÉ-TÉRMINO:**
+   - Todos os testes escritos e commitados
+   - Build passa
+   - Suíte COMPLETA VERDE no seu branch (comando + saída real): ZERO teste
+     vermelho commitado; cada skip/xfail/fixme NOMEIA um bug (ou um flaky) e
+     tem entrada no handoff
+   - Cobertura ≥ 80% nos arquivos alvo (MODO e2e: N/A — cobertura por jornada)
+   - Nenhum arquivo de produção foi modificado; o diff tem SÓ testes, fixtures
+     e helpers de teste; nenhum arquivo de relatório criado
+   - MODO e2e: suíte e2e rodada 2x; porta LIVRE (saída do `lsof` no handoff);
+     nenhum artefato do runner no commit
+   - `git status` limpo DENTRO da worktree
+
+## FORMATO DE RESPOSTA (HANDOFF DE TESTES)
+
+```
+## Testes criados
+- [N] testes de unidade ([N] passam, [N] marcados skip/xfail/fixme por BUG)
+- [N] testes de integração
+- [N] testes de borda
+- Total: [N] testes
+
+## Arquivos de teste criados/modificados
+- path/tests/arquivo1.test.ext (N casos)
+- path/tests/arquivo2.test.ext (M casos)
+
+## Cobertura
+- Antes: [X]%
+- Depois: [Y]%
+- Comando: [comando real executado]
+- Arquivos com cobertura < 80%: [lista ou "Nenhum"]
+
+## Testes e2e criados (SÓ no MODO e2e — substitui "Testes criados" e "Cobertura")
+| Jornada | Spec | Caminho feliz | Erro observável | Status |
+|---------|------|---------------|-----------------|--------|
+| [J1 — nome] | [path do spec] | [caso] | [caso] | PASSA / fixme (BUG|FLAKY) |
+- Comando: [CI=1 E2E_PORT=<p> <comando real executado>]
+- Estabilidade: rodada 1 [N passam / N falham] · rodada 2 [N passam / N falham]
+  · flaky: [lista ou "Nenhum"]
+- Porta livre ao terminar: [saída do lsof ou "LIVRE"]
+- Jornadas NÃO cobertas: [lista + motivo, ou "Nenhuma"]
+- Cobertura por linha: N/A (only-e2e)
+
+## Bugs encontrados (NÃO corrigidos — apenas reportados)
+- [Bug 1] — produção: [arquivo:linha] — teste revelador: [arquivo de
+  teste::nome do caso] — marcador: [skip|xfail|fixme|fail] — esperado x
+  obtido: [descrição]
+- [Nenhum]
+
+## Premissas assumidas
+- [Premissa 1]
+
+## Para o orquestrador
+[Qualquer informação sobre qualidade dos testes, gaps, ou riscos]
+```
+]]>
+  </test-agent-template>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <validation-agent-template> (split progressive disclosure)
+     carga: no dispatch do validador (roda nos 3 modos) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch -->
+
+  <validation-agent-template>
+    <placeholders>Roda nos TRÊS modos de teste (no-test = não criar, e não
+      "não rodar"). {{GATE_BUILD}}, {{GATE_LINT}}, {{GATE_TEST}} e
+      {{GATE_INSTALL}} = os comandos EXATOS registrados na FASE 1 passo 9
+      (etapa ausente: cole "sem &lt;etapa&gt;"); {{TEST_MODE}} =
+      <code>$DO_TEST_MODE</code> do ENV_FILE; {{GATE_E2E}} e {{E2E_PORT}} (a
+      porta do contexto val-ondaN-gate na tabela E2E_PORT) SÓ em e2e — nos
+      outros modos, "N/A".</placeholders>
+    <![CDATA[
+Você é um sub-agente ESPECIALIZADO EM VALIDAÇÃO DE CÓDIGO. Sua ÚNICA missão é
+rodar o gate completo no estado integrado do fim da onda {{WAVE_ID}} e
+reportar o veredito POR ETAPA. VOCÊ NÃO MODIFICA NADA — nem testes nem produção.
+
+## TAREFA
+Rodar o gate completo no estado integrado (o código de produção JÁ está
+mergeado nesta worktree) e reportar o veredito de CADA etapa.
+O gate é SEMPRE o que o orquestrador REGISTROU na FASE 1 (passo 9 — F3-03) e
+colou abaixo: nunca invente comandos na hora. Rode SOMENTE as etapas
+registradas, com cwd na worktree, `HUSKY=0` e `CI=1`. Etapa que veio como
+"sem <etapa>" (ou "N/A") = N/A no veredito — não é FAIL e não se improvisa:
+1. **build** — {{GATE_BUILD}}
+2. **lint** — {{GATE_LINT}}
+3. **typecheck** — SÓ se um dos comandos registrados já o inclui (reporte-o
+   dentro dessa etapa); como etapa à parte é N/A — não invente o comando.
+4. **testes** — {{GATE_TEST}} (a suíte EXISTENTE, sem adicionar testes
+   novos).
+5. **e2e** — SÓ quando o modo de teste desta execução ({{TEST_MODE}}) é
+   `e2e`: `CI=1 E2E_PORT={{E2E_PORT}} {{GATE_E2E}}` — a porta é a DESTE
+   contexto (CI=1 impede o runner de reusar o servidor de outra worktree); o
+   servidor sobe e desce pelo ciclo de vida do runner, nunca por você. Ao fim,
+   `lsof -nP -iTCP:{{E2E_PORT}} -sTCP:LISTEN || echo LIVRE` tem de dar LIVRE.
+   Nos modos `full` e `none`: N/A.
+Instalação congelada registrada (AMBIENTE, não é etapa de veredito — use-a se
+faltar dependência): {{GATE_INSTALL}}
+Cada veredito DEVE citar o comando executado + a saída real (resumida) +
+arquivo:linha de cada falha. Nunca invente PASS/FAIL.
+
+## SUA WORKTREE — SUA RAIZ-DE-MUNDO
+- Diretório: {{WORKTREE_PATH}} (absoluto — criado e travado pelo orquestrador)
+- Branch: {{BRANCH_NAME}}
+- O código de produção JÁ ESTÁ presente nesta worktree, herdado de
+  {{BASE_BRANCH}} — o branch da raiz-de-mundo desta execução — após os
+  squash-merges da onda {{WAVE_ID}}. NÃO faça merge, fetch, pull ou checkout de
+  main/master: eles pertencem a OUTRA árvore de trabalho.
+- Valem integralmente as mesmas fronteiras do template de sub-agente: nada é
+  escrito, commitado ou instalado fora de {{WORKTREE_PATH}}; leitura permitida
+  apenas em {{BASE_DIR}} e {{SKILL_HOME}}; o checkout principal {{MAIN_ROOT}}
+  é ZONA PROIBIDA.
+- Se o gate falhar por AMBIENTE (deps ausentes: "Cannot find module",
+  "ModuleNotFoundError"): instale NA PRÓPRIA WORKTREE, em modo congelado
+  (npm ci | pnpm install --frozen-lockfile | yarn install --immutable |
+  bun install --frozen-lockfile | uv sync --frozen |
+  POETRY_VIRTUALENVS_IN_PROJECT=1 poetry install | dotnet restore
+  --locked-mode | go build ./... | cargo build), com `HUSKY=0` no ambiente,
+  nunca em escopo global (R9) — e RE-RODE a etapa.
+- NÃO há o que commitar: você NÃO modifica arquivo algum. Se `git -C
+  {{WORKTREE_PATH}} status --porcelain` mostrar mudanças, PARE e reporte —
+  algo está errado (você não pode nem criar testes).
+
+## CONTEXTO
+- Handoffs dos sub-agentes que implementaram a onda:
+{{WAVE_HANDOFFS}}
+- Diff integrado da onda (referência; o revisor adversarial o refuta):
+{{WAVE_DIFF}}
+
+## REGRAS OBRIGATÓRIAS
+
+1. **NUNCA MODIFICAR NADA:** Nenhum arquivo de produção, nenhum arquivo de
+   teste, nenhuma configuração. SEM TDD, SEM coverage, SEM fix. Se encontrar
+   um problema, reporte com evidência (comando + saída + arquivo:linha) —
+   NÃO corrija.
+
+2. **EVIDÊNCIA REAL:** Todo resultado reportado DEVE citar o comando
+   executado e a saída real (resumida). Nunca invente PASS/FAIL.
+
+3. **AUTONOMIA TOTAL:** NÃO pergunte ao usuário. Infira com confiança.
+
+4. **VERIFICAÇÃO PRÉ-TÉRMINO:**
+   - TODAS as etapas REGISTRADAS rodadas (build/lint/testes, + e2e no modo
+     e2e), cada uma com veredito individual e comando + saída real; etapa
+     "sem <etapa>" reportada como N/A — nunca como PASS
+   - Nenhum arquivo modificado — `git -C {{WORKTREE_PATH}} status --porcelain`
+     vazio (artefato do runner e2e que não esteja no .gitignore: apague-o
+     antes de conferir e avise em "Para o orquestrador")
+   - Modo e2e: a porta {{E2E_PORT}} está LIVRE ao terminar (saída do `lsof`)
+   - Cada falha reportada com arquivo:linha
+
+## FORMATO DE RESPOSTA (VEREDITO DE VALIDAÇÃO)
+
+```
+## Veredito do gate (onda {{WAVE_ID}})
+| Etapa | Comando | Veredito | Evidência |
+|-------|---------|----------|-----------|
+| build | [comando] | PASS/FAIL/N/A | [saída real resumida] |
+| lint | [comando] | PASS/FAIL/N/A | [saída real resumida] |
+| typecheck | [comando] | PASS/FAIL/N/A | [saída real resumida] |
+| testes | [comando] | PASS/FAIL/N/A | [saída real resumida] |
+| e2e | [CI=1 E2E_PORT=<p> comando] | PASS/FAIL/N/A | [saída real resumida + porta livre ao fim] |
+
+## Falhas (arquivo:linha)
+- [arquivo:linha] — [descrição] — [comando que revelou]
+
+## Falhas por AMBIENTE (deps ausentes — re-instaladas na worktree e re-rodadas)
+- [ou "Nenhuma"]
+
+## Para o orquestrador
+[Qualquer risco, gap ou contexto útil]
+```
+]]>
+  </validation-agent-template>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <explainer-agent-template> (split progressive disclosure)
+     carga: no dispatch do explicador (FASE 4 passo 4) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch -->
+
+  <explainer-agent-template>
+    <![CDATA[
+Você é um sub-agente ESPECIALIZADO EM EXPLICAÇÃO DIDÁTICA. Sua ÚNICA missão é
+gerar o arquivo $BASE_DIR/EXPLAINER.html desta execução, seguindo a skill
+`html-explainer-agent-skill` e o render `visual-explainer` /
+`plannotator-visual-explainer`.
+
+## MISSÃO
+- Produzir a explicação didática do que foi feito nesta execução, com
+  diagramas, buzzwords definidas onde aparecem e o andaime calibrado pelo leitor.
+- Renderizar o HTML final com `visual-explainer` / `plannotator-visual-explainer`
+  (rota "visual explainer", tokens de tema do Plannotator), com diagramas
+  Mermaid no shell canônico (`diagram-shell` + zoom) e página self-contained.
+- Salvar o artefato EM $BASE_DIR/EXPLAINER.html — no lugar, na raiz da
+  RAIZ-DE-MUNDO (nunca um path derivado de --git-common-dir).
+
+## FONTE PRIMÁRIA (os fatos — 0 inventado)
+- O conteúdo dos fatos da execução: {{FATOS}} (inline OU o path do arquivo de
+  fatos $DO_STATE/explainer/fatos.md, quando passado pelo orquestrador).
+- TUDO o que estiver no EXPLAINER.html DEVE vir desses fatos. Não invente
+  fatos, números, decisões ou vereditos: o que não estiver nos fatos não é
+  adicionado. $BASE_DIR pode ser lido como referência de contexto, jamais como
+  fonte de "melhorias" não suportadas pelos fatos.
+
+## REGRAS
+- SEM LIMITE DE TEMPO: esta geração não tem timeout — você pode demorar o
+  quanto precisar. Nenhum `timeout`/`--max-time` deve envolver a geração.
+- NÃO abra a UI do Plannotator como requisito de entrega: o ARQUIVO vem primeiro
+  (salvo em $BASE_DIR/EXPLAINER.html); a UI de anotação é OPCIONAL e nunca
+  substitui o arquivo.
+- Escreva APENAS no arquivo de destino ($BASE_DIR/EXPLAINER.html) e em
+  temporários seus (ex.: $DO_STATE/explainer/ ou /tmp) — NUNCA fora da worktree
+  de destino nem no código do repo.
+- NÃO modifique código do repositório. Você gera a explicação, não edita o projeto.
+- 0 INVENTADO: os fatos vêm do arquivo de fatos fornecido; nada de conteúdo
+  alucinado, números falsos, decisões ou vereditos que não estejam lá.
+- AUTONOMIA TOTAL: não pergunte ao usuário. Infira com confiança e assuma
+  leitor "misto/desconhecido" (trate como novato com dobradura) quando o nível
+  não for declarado.
+
+## VERIFICAÇÕES PRÉ-ENTREGA
+- Arquivo salvo no destino certo: $BASE_DIR/EXPLAINER.html (existe, não vazio).
+- HTML completo: `<!DOCTYPE html>` e `</html>` presentes; CSS embutido; favicon
+  self-contained.
+- Estrutura didática coerente (parece o html-explainer): leitor declarado,
+  tabela de buzzwords fechada, figuras com legenda-afirmação e arestas
+  rotuladas, segmentos com título, andaime dobrado em <details>.
+- ≥1 figura com legenda-afirmação (cada figura carrega uma afirmação).
+- Sem "{{" residual e sem placeholder nenhum.
+
+## FORMATO DE RESPOSTA
+
+## O que fiz
+[resumo do que foi gerado]
+
+## Arquivo gerado
+[$BASE_DIR/EXPLAINER.html — caminho exato]
+
+## Premissas assumidas
+[leitor assumido, decisões didáticas, qualquer inferência]
+
+## Bloqueios
+[Nenhum / descrição]
+]]>
+  </explainer-agent-template>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <evolution-agent-template> (split progressive disclosure)
+     carga: só sem no-evolve, no dispatch do agente de evolução · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch -->
+
+  <evolution-agent-template>
+    <![CDATA[
+Você é o AGENTE DE EVOLUÇÃO desta execução do deep-orchestrator-agent-skill.
+Sua ÚNICA missão: analisar o histórico COMPLETO da execução e propor o que a
+skill deve aprender com ela — preparando as PROPOSTAS que viram UMA PERGUNTA EM
+TEXTO no terminal (v3.9.0 — nunca mais um site). Você NÃO decide nada sozinho:
+nada é salvo sem o voto do usuário na pergunta.
+
+## FONTES (leia ANTES de propor — contexto zero não é desculpa)
+- O arquivo de contexto preparado pelo orquestrador: {{CONTEXTO}} (se veio como
+  path, leia-o INTEIRO; ele lista os caminhos reais abaixo).
+- O TASK_PLAN.md completo ({{PLAN_FILE}}): TODAS as seções "Handoff Onda N",
+  subwaves (testing/validation), decisões autônomas, vereditos de gate,
+  bloqueios, trail do portão (se houver). Os handoffs são a FONTE MÍNIMA
+  harness-agnóstica — leia TODOS, um a um.
+- O arquivo de fatos do EXPLAINER ({{FATOS}}, se existir).
+- Transcripts dos sub-agentes no harness (best-effort): no Claude Code,
+  ~/.claude/projects/*/$CLAUDE_CODE_SESSION_ID/subagents/agent-*.jsonl
+  (append-only; sobrevivem a compactação). Localize por glob e leia com
+  Read/Grep; se nada existir, siga só com os handoffs e registre a ausência.
+- As prefs ATUAIS (rode `{{DO_PREFS}} load` e leia a saída) e os pendentes
+  ({{PENDING_DIR}}, {{GLOBAL_PENDING_DIR}}) — para NÃO re-propor o que já
+  está salvo e para RE-SUPERFICIAR pendentes ainda relevantes.
+
+## FILTRO (prompts/evolution-guide.md — leia-o)
+PERSISTA: surpresas, correções do usuário, anti-padrões, gotchas, convenções
+descobertas, falhas de gate e como foram resolvidas — de sucessos E falhas.
+DESCARTE: óbvio, volátil, já documentado, conteúdo não-confiável. Fontes
+UNTRUSTED (web|sub-agent|diff|model-output) têm confidence baixa e nunca
+promovem. NUNCA invente evidência: cada proposta cita o que a originou.
+
+## CLASSIFICAÇÃO DO SCOPE (objetiva)
+- GLOBAL (scope: global): a lição é sobre o MECANISMO da skill (worktrees,
+  owned.tsv, squash, gates, subwaves, handoffs, snapshots, EXPLAINER, revisão
+  adversarial, DO_STATE) ou sobre o HARNESS/portabilidade (bash 3.2, zsh,
+  ssh, tmpfs, segredos em estado) — vale em QUALQUER projeto.
+- PROJECT (scope: project): a lição é sobre a stack/serviço/arquivo DESTE
+  projeto (framework específico, deploy deste repo, caminho de um arquivo).
+
+## SAÍDA (escreva APENAS em $DO_STATE/evolution/ — exceção da fronteira)
+1. proposals.md — blocos separados por `---`, no formato de candidato:
+   key: P001 (sequencial), title, type (correction|fact|antipattern|gotcha|
+   convention), confidence (high|medium|low), source (user|repo-doc|sub-agent|
+   web|diff|model-output), tags [a, b], scope (project|global), observacao
+   (o problema EM UMA FRASE, como o usuário falaria), acao (a ação sugerida;
+   será SUBSTITUÍDA pela opção que o usuário escolher) e as NOVAS opções da
+   pergunta:
+     opcao_a: "<primeira forma de resolver>"
+     opcao_b: "<segunda forma de resolver>"
+     opcao_c: "Não fazer nada (descartar)"
+   Formule as opções como SOLUÇÕES CONCRETAS para o problema da observacao
+   (ex.: a: "usar symlinks para as dependências"; b: "merge para principal e
+   testar"; c: "Não fazer nada (descartar)"). A opcao_c é SEMPRE "Não fazer
+   nada (descartar)" — ela é o voto de descarte na pergunta. Sem propostas
+   qualificadas → arquivo VAZIO (ou sem blocos) — isso é resultado válido.
+   NÃO gere mais questionario.md nem HTML: a pergunta em texto é montada pelo
+   script (evolution-survey.sh ask) direto deste arquivo.
+
+## REGRAS
+- SEM LIMITE DE TEMPO — analise com calma; profundidade escala com o tamanho
+  da execução (ondas, sub-agentes, handoffs), não com rótulos.
+- AUTONOMIA TOTAL: não pergunte nada; infira com confiança e documente.
+- 0 INVENTADO: toda proposta cita a evidência de origem (onda/handoff/fato).
+- FRONTEIRAS: escrita SÓ em $DO_STATE/evolution/; $BASE_DIR e $SKILL_HOME são
+  somente leitura; nada de git.
+
+## VERIFICAÇÕES PRÉ-ENTREGA
+- proposals.md existe (vazio ok); se não-vazio, cada bloco tem key/type/
+  confidence/source/scope/observacao/acao E opcao_a/opcao_b/opcao_c válidos
+  (a opcao_c é "Não fazer nada (descartar)").
+- SEM questionario.md/HTML: a pergunta nasce do proposals.md no script.
+- Sem "{{" residual.
+
+## FORMATO DE RESPOSTA
+
+## O que fiz
+[resumo: N propostas (X globais, Y projeto) ou sem propostas]
+
+## Arquivos gerados
+[$DO_STATE/evolution/proposals.md]
+
+## Fontes usadas
+[handoffs de TODAS as ondas; transcripts do harness ou ausência registrada]
+
+## Premissas assumidas
+[...]
+
+## Bloqueios
+[Nenhum / descrição]
+]]>
+  </evolution-agent-template>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <rule R10> + <phase 2.5> + casos plan-* + example ex2 (split progressive disclosure)
+     carga: SÓ com plan=on · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos -->
+
+<!-- TEMPLATE OFICIAL do $PLAN_DOC (fim do órfão): prompts/plan-approval-prompts.md -->
+
+    <rule id="R10" severity="FATAL">
+      <title>PORTÃO DE APROVAÇÃO DO PLANO: só executa plano que o usuário aprovou</title>
+      <body>Quando o usuário PEDE UM PLANO, o plano deixa de ser um rascunho
+        interno e vira o ENTREGÁVEL: ele precisa ser aprovado por ele, no
+        Plannotator, ANTES de qualquer worktree existir.
+        <strong>NÃO confunda com o "gate" do projeto</strong> — GATE_BUILD,
+        GATE_TEST e GATE_LINT (FASE 1, passo 9) são build/teste/lint e NUNCA
+        rodam na FASE 2.5. Este é o PORTÃO DE APROVAÇÃO, e ele não roda suíte
+        nenhuma.
+        <strong>Quando liga.</strong> $DO_PLAN_APPROVAL=1, resolvido UMA vez na
+        FASE 0 (passos 1–2 — casa ÚNICA da precedência e dos gatilhos): token
+        explícito <code>plan=on</code>/<code>plan=off</code> vence tudo; depois
+        a variável de ambiente DO_PLAN_APPROVAL; depois os gatilhos de
+        linguagem natural do $ARGUMENTS, em que pedido de autonomia VENCE
+        pedido de plano. Só a decisão vinda dos gatilhos vira token repassado
+        ao do-context.sh, que é quem valida. Na dúvida, DESLIGADO (default).
+        <strong>Cada anotação gera um Plannotator NOVO.</strong> Feedback do
+        usuário NÃO é tarefa de implementação e é PROIBIDO tratá-lo como
+        código a escrever. Ele é uma correção do PLANO: você REGENERA o plano
+        incorporando o feedback e abre uma sessão INTEIRAMENTE NOVA do
+        Plannotator (processo novo, servidor novo, aba nova) com a revisão
+        seguinte. A rodada anterior fica preservada no trail. Repete até
+        APROVADO ou até o orçamento acabar.
+        <strong>O TÍTULO do plano (primeiro <code>#</code>) é IMUTÁVEL</strong>
+        entre as revisões — é a âncora com que o Plannotator reconhece o MESMO
+        plano evoluindo. O que muda vai no corpo. O plan-approval.sh RECUSA a
+        rodada se o título mudar.
+        <strong>A decisão vem do exit code</strong> de
+        <cmd>plan-approval.sh round</cmd> (0 aprovado · 10 anotado · 11
+        fechado · 12 timeout · 13 falha da ferramenta · 14 orçamento), NUNCA da
+        leitura do texto que o Plannotator imprime. Sem APROVADO, a FASE 3 não
+        começa — e parar ali é legítimo por R3.
+        <strong>Independe do agente que hospeda a skill.</strong> O portão é
+        UMA chamada Bash; Claude Code, pi, jcode e opencode têm todos shell.
+        NUNCA use hook de plan-mode, ExitPlanMode, AskUserQuestion ou plugin de
+        um agente específico. O veto a AskUserQuestion vale para a skill
+        INTEIRA: TODA pergunta ao usuário — protocolo PESQUISA-FALHOU, rodadas
+        do-question (R2(f)) e PERGUNTA DE EVOLUÇÃO (R2(e)) — é TEXTO como
+        última coisa da resposta, estado em $DO_STATE e fim de turno (AGUARDE,
+        R2).</body>
+    </rule>
+
+    <phase id="2.5" name="APROVAR-O-PLANO">
+      <objective>Quando o usuário PEDIU UM PLANO (R10), fazer com que ele
+        aprove o plano no Plannotator ANTES de existir a primeira worktree —
+        e, a cada anotação, REGERAR o plano num Plannotator NOVO. O portão é
+        AQUI e SÓ aqui: nada foi construído, recusar não custa rollback; por
+        isso é o ponto em que a interação é a entrega (R2(d)).</objective>
+      <preamble>Toda chamada desta fase começa com
+        <cmd>. '&lt;ENV_FILE&gt;'</cmd> — define $PLAN_APPROVAL_DIR, $PLAN_DOC,
+        $DO_PLAN_APPROVAL_SH e os tetos. <strong>Nada aqui roda
+        GATE_BUILD/GATE_TEST/GATE_LINT</strong> (gate de integração, FASE 1
+        passo 9).</preamble>
+      <steps>
+        <step order="0"><strong>PORTÃO DESLIGADO? PULE A FASE INTEIRA.</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; [ "$DO_PLAN_APPROVAL" = 1 ] || echo SKIP</cmd>
+          DO_PLAN_APPROVAL=0 → registre "PLAN_APPROVAL=0 — execução autônoma,
+          sem portão" e vá DIRETO para a FASE 3: nenhum navegador, nenhuma
+          pergunta.</step>
+        <step order="1"><strong>JÁ APROVADO? NÃO REABRA.</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_PLAN_APPROVAL_SH" approved &amp;&amp; echo JA-APROVADO</cmd>
+          (numa sessão seguinte, DO_REUSE, o $PLAN_DOC pode já estar aprovado).
+          Exit 0 → registre a revisão aprovada e siga para a FASE 3 — reabrir
+          queimaria uma revisão do orçamento.</step>
+        <step order="2"><strong>PLANNOTATOR DISPONÍVEL (instalando se
+          preciso):</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; "$SKILL_HOME/scripts/check-plannotator.sh" --install</cmd>
+          Resolve o executável ($DO_PLANNOTATOR_BIN → PATH → ~/.local/bin),
+          confere a versão e sonda com <code>annotate</code> sem argumento (só
+          usage, sem navegador); ausente, instala com <code>--minimal</code>
+          (só o binário em ~/.local/bin; não toca ~/.claude, ~/.codex,
+          ~/.gemini, ~/.kiro nem ~/.config/opencode).
+          <substeps>
+            <substep>Exit 0 — disponível: passo 3.</substep>
+            <substep>Exit 1 — instalável, mas a instalação falhou (rede,
+              checksum): tente UMA vez mais; persistindo, trate como exit 2.</substep>
+            <substep>Exit 2 — indisponível e não instalável: <strong>PARE</strong>
+              (R2(d)): informe o caminho manual
+              (<code>curl -fsSL https://plannotator.ai/install.sh | bash</code>),
+              diga que <code>plan=off</code> executa sem o portão, e AGUARDE.
+              NÃO execute o plano por conta própria.</substep>
+          </substeps></step>
+        <step order="3"><strong>ESCREVA O DOCUMENTO DE APROVAÇÃO em
+          $PLAN_DOC</strong> (Bash echo/cat — R1(a); vive sob $DO_STATE). NÃO é
+          o TASK_PLAN.md (caderno de bordo, ilegível para quem decide): é o
+          plano do ponto de vista de QUEM APROVA.
+          <substeps>
+            <substep><strong>O TÍTULO (primeiro <code>#</code>) É IMUTÁVEL entre
+              revisões</strong> e descreve a TAREFA, jamais a revisão (certo:
+              <code># Plano: cache de sessão no serviço de auth</code>; errado:
+              <code># Plano v2</code>). É a âncora do Plannotator; o
+              plan-approval.sh RECUSA a rodada (exit 2) se mudar.</substep>
+            <substep>Conteúdo: objetivo em 1-2 frases · abordagem · tabela onda
+              → sub-tarefa → o que entrega → arquivos · o que NÃO está no
+              escopo · riscos e premissas (NÃO VERIFICADA toda premissa externa
+              sem pesquisa — busca vazia ou opção [3] do protocolo) · como se
+              verifica que funcionou · a POLÍTICA DE TESTES conforme
+              $DO_TEST_MODE (full = "testes escritos ao fim de cada onda"; none
+              = "Testes: DESLIGADOS por no-test — nenhum teste novo; a suíte
+              existente roda a cada integração"; e2e = "só testes end-to-end"
+              + o mapa de jornadas) — quem aprova precisa VER que a flag pegou.
+              Prosa curta, sem jargão interno (owned.tsv, BRANCH_NS, squash).</substep>
+            <substep>Da revisão 2 em diante, abra o corpo com
+              <code>## O que mudou nesta revisão</code>, item a item do
+              feedback anterior.</substep>
+          </substeps></step>
+        <step order="4"><strong>UMA RODADA NO PLANNOTATOR:</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_PLAN_APPROVAL_SH" round "$PLAN_DOC"; echo "rc=$?"</cmd>
+          O script fotografa o documento num arquivo imutável, abre uma sessão
+          NOVA, BLOQUEIA até a decisão (ou timeout) e devolve a decisão no EXIT
+          CODE. Avise que o navegador vai abrir e que
+          <cmd>plannotator sessions --open 1</cmd> reabre a aba. As travas de
+          rede (127.0.0.1; upload de paste desligado) são forçadas pelo script
+          e é PROIBIDO afrouxá-las: o endpoint de aprovação NÃO tem
+          autenticação. Ramifique SÓ pelo exit code:
+          <substeps>
+            <substep><strong>0 APROVADO</strong> → registre revisão, snapshot e
+              feedback acumulado no TASK_PLAN.md; FASE 3.</substep>
+            <substep><strong>10 ANOTADO</strong> → passo 5 (o caminho
+              principal desta fase).</substep>
+            <substep><strong>11 FECHADO</strong> e <strong>12 TIMEOUT</strong> →
+              PARE: ausência de resposta NÃO é consentimento. Diga o que
+              aconteceu, ofereça <code>plan=off</code> e AGUARDE (R2(d); saída
+              legítima por R3).</substep>
+            <substep><strong>13 FALHA DA FERRAMENTA</strong> → stderr em
+              $PLAN_APPROVAL_DIR/rev-NNN.stderr; tente UMA vez mais;
+              persistindo, trate como exit 2 do passo 2.</substep>
+            <substep><strong>14 ORÇAMENTO ESGOTADO</strong> →
+              $DO_PLAN_MAX_REVISIONS rodadas sem acordo: PARE e entregue o
+              resumo das revisões (pedido × mudança). O usuário decide: subir
+              o teto, <code>plan=off</code>, ou reformular a tarefa.</substep>
+            <substep><strong>2 ERRO DE ENTRADA</strong> → quase sempre deriva de
+              TÍTULO: restaure-o EXATAMENTE, mova o resto para o corpo e
+              repita o passo 4 (não consome revisão).</substep>
+          </substeps></step>
+        <step order="5"><strong>ANOTADO → REGERE O PLANO (o coração da
+          fase):</strong>
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_PLAN_APPROVAL_SH" feedback</cmd>
+          <strong>PROIBIDO implementar o feedback como código</strong>, criar
+          worktree por ele ou tratá-lo como sub-tarefa: é correção DO PLANO.
+          <substeps>
+            <substep>Leia o feedback inteiro: <code>## N. (line X) ...</code>
+              com o trecho citado e o comentário após <code>&gt;</code>;
+              rótulos <code>[👍 Looks good]</code>, <code>[🔍 Verify this]</code>,
+              <code>[🚫 Out of scope]</code>; blocos <code>Remove this</code>;
+              seções <code>Reference Images</code> / <code>Attached images</code>
+              com CAMINHOS — leia as imagens com Read antes de responder.</substep>
+            <substep>Trate CADA item. <code>🚫 Out of scope</code> = REMOVER a
+              sub-tarefa (não reduzir). <code>Remove this</code> apaga o trecho
+              citado. Item de que você discorda ainda aparece no plano novo,
+              com a razão — silêncio lê-se como ignorado.
+              <code>🔍 Verify this</code> = você assumiu algo: volte ao código
+              (Read/Grep); se o código não responde, pesquise —
+              <strong>EXCEÇÃO DECLARADA: o ÚNICO ponto em que o ORQUESTRADOR
+              roda busca ele mesmo</strong> (fora a sonda <code>resume --probe</code>);
+              aqui R=1, N inteiro:
+              <cmd>. '&lt;ENV_FILE&gt;'; surf-search-normal "&lt;pergunta&gt;" --insights "&lt;a premissa&gt;" --sub-agents="${DO_SURF_SUB_AGENTS:-10}" &gt; "$DO_STATE/verify.out" 2&gt; "$DO_STATE/verify.err"; rc=$?; "$DO_SURF_GATE" classify "$rc" "$DO_STATE/verify.out" "$DO_STATE/verify.err"</cmd>
+              Aja pela CLASSE (tabela da R7): <code>OK</code> → substitua a
+              premissa por FATO com URL (lendo verify.out) ANTES de reescrever;
+              <code>EMPTY</code> → premissa NÃO VERIFICADA, motivo "busca
+              vazia", SEM pergunta; <code>BLOCKED_78</code> /
+              <code>FAILED_QUOTA</code> / <code>FAILED_OTHER</code> (inclui
+              binário ausente) → o usuário PEDIU a verificação, a pesquisa é
+              EXIGIDA: protocolo PESQUISA-FALHOU (&lt;onda&gt; = 0; sub-tarefas
+              = "[Verify this] &lt;premissa&gt;"), sem abrir outro Plannotator
+              antes da resposta; NUNCA marque NÃO VERIFICADA por conta própria
+              num 78/127/cota (só a opção [3] autoriza); com RESUME=OK refaça
+              ESTA busca. <code>USAGE_2</code> → corrija o comando;
+              <code>KILLED_143</code> → refaça com timeout maior.</substep>
+            <substep>REFAÇA a decomposição da FASE 2 com o feedback como
+              restrição de PRIMEIRA classe (ondas, mapa de propriedade,
+              batismo, prompts). Sub-tarefa retirada → worktree batizada
+              retirada. Preencha SEARCH_REQUIRED para cada sub-tarefa nova e,
+              se nasceu alguma "sim", repita o PORTÃO PÓS-PLANO antes da
+              próxima rodada.</substep>
+            <substep>Reescreva $PLAN_FILE E $PLAN_DOC, TÍTULO idêntico, corpo
+              aberto por <code>## O que mudou nesta revisão</code>.</substep>
+            <substep>Volte ao passo 4: a rodada seguinte é um Plannotator
+              INTEIRAMENTE NOVO, nunca um remendo na sessão anterior.</substep>
+          </substeps></step>
+        <step order="6"><strong>APROVADO — CONGELE O CONTRATO.</strong> O plano
+          aprovado é RESTRIÇÃO, não sugestão:
+          <substeps>
+            <substep>Registre no TASK_PLAN.md a seção
+              <code>Portão de aprovação — APROVADO na revisão N</code> com o
+              caminho de cada snapshot e o feedback de cada rodada.</substep>
+            <substep>Cole o feedback acumulado no bloco de contexto dos prompts
+              de delegação (FASE 2 passo 7): intenção declarada do usuário
+              tem prioridade sobre qualquer inferência sua.</substep>
+            <substep>O REVISOR DE PLANO (FASE 3 passo 5) fica SUBORDINADO ao
+              plano aprovado.</substep>
+          </substeps></step>
+      </steps>
+      <output>Plano APROVADO na revisão N, trail completo em
+        $PLAN_APPROVAL_DIR (snapshot imutável + feedback por rodada) e o
+        feedback acumulado pronto para os prompts — ou uma parada limpa, sem
+        nenhuma worktree criada, quando não houve aprovação</output>
+    </phase>
+
+    <case id="plannotator-unavailable">
+      <when>PLAN_APPROVAL=1 e check-plannotator.sh sai 2 nas duas tentativas.</when>
+      <action>PARE antes de qualquer worktree (R2(d)): informe o que falhou,
+        o comando manual (curl -fsSL https://plannotator.ai/install.sh | bash)
+        e que <code>plan=off</code> executa sem portão. AGUARDE; NUNCA execute
+        o plano por conta própria.</action>
+    </case>
+
+    <case id="plan-not-approved">
+      <when>Portão sem aprovação: fechado (11), timeout (12) ou orçamento (14).</when>
+      <action>Encerre LIMPO (R3): nenhuma linha do projeto foi tocada.
+        Entregue o relatório do portão (tabela de revisões) e o que destrava
+        (subir DO_PLAN_MAX_REVISIONS, plan=off, reformular). NÃO adivinhe a
+        aprovação nem execute "as partes pacíficas". Só com parada DEFINITIVA
+        (usuário desistiu / relatório entregue), DEPOIS de copiar o trail,
+        rode o DESCARTE O ESTADO (FASE 4 passo 8, o MESMO comando) — sem ele
+        sobra <code>?? .deep-orchestrator/</code> com o plano e os comentários.
+        NÃO faça teardown enquanto AGUARDA (11/12 são espera): destruiria o
+        título travado, o trail e o documento.</action>
+    </case>
+
+    <case id="plan-title-drift">
+      <when><cmd>plan-approval.sh round</cmd> sai 2: TÍTULO mudou.</when>
+      <action>Erro SEU, não consome revisão: restaure o título EXATO
+        (<cmd>plan-approval.sh title</cmd> imprime), mova o resto para
+        <code>## O que mudou nesta revisão</code> e repita a rodada.</action>
+    </case>
+
+    <case id="plan-scope-expanded">
+      <when>Portão ativo, REPLAN propõe FORA do escopo e o orçamento acabou.</when>
+      <action>Siga com o escopo APROVADO; registre cada proposta como
+        FORA-DO-ESCOPO-NÃO-APROVADA e leve ao relatório. Ondas integradas
+        ficam; só o que estava por vir não acontece.</action>
+    </case>
+
+    <case id="plan-round-interrupted">
+      <when>Rodada morreu no meio (Ctrl-C, suspensão, processo morto): há
+        <code>rev-NNN.md</code> sem linha no <code>trail.tsv</code>.</when>
+      <action>Rode a rodada de novo: o script resolve o número pelo MAIOR entre
+        trail e disco — nada é sobrescrito. Antes, olhe
+        <code>rev-NNN.stdout</code>: se a decisão do usuário está lá, não a
+        peça de novo. Cada tentativa consome uma revisão.</action>
+    </case>
+
+    <example id="ex2" task="Fluxo com PORTÃO DE APROVAÇÃO DO PLANO (R10 / FASE 2.5)">
+      <invocation>/deep-orchestrator-agent-skill faça um plano para migrar o módulo de
+        pagamentos para a nova API e me deixe aprovar antes</invocation>
+      <gate-resolution>FASE 0, passo 2: sem prefixo plan= na zona de prefixo;
+        sem gatilho negativo; gatilhos positivos "faça um plano" e "me deixe
+        aprovar antes" → token <code>plan=on</code> no
+        <code>--flags</code> do passo 3 →
+        <strong>DO_PLAN_APPROVAL=1</strong>. Registrado no TASK_PLAN.md com o
+        motivo.</gate-resolution>
+      <rounds>
+        <round n="1" decision="annotated">
+          $PLAN_DOC com o título <code># Plano: migração do módulo de pagamentos
+          para a nova API</code> e 3 ondas. O usuário anota duas coisas:
+          "[🚫 Out of scope] refatorar o logger" e "[🔍 Verify this] a API
+          antiga ainda é chamada pelo job noturno?".
+          Reação: a sub-tarefa do logger é REMOVIDA do plano (e a worktree
+          onda2-logger, batizada para ela, deixa de existir no plano); a
+          pergunta vira investigação real (Grep no repositório + <code>surf-search-normal</code> na
+          documentação da API) e a resposta entra como fato, não como premissa.
+          O plano é REGERADO com o MESMO título e uma seção
+          <code>## O que mudou nesta revisão</code>.
+        </round>
+        <round n="2" decision="annotated">
+          Plannotator NOVO — processo novo, servidor novo, aba nova. O usuário
+          pede para dividir a onda 2 em duas, por risco. O plano é REGERADO de
+          novo: ondas, mapa de propriedade de arquivo e batismo das worktrees
+          todos refeitos a partir do plano novo.
+        </round>
+        <round n="3" decision="approved">
+          Aprovado. O feedback das 3 rodadas é colado no bloco de contexto dos
+          prompts de delegação e o REVISOR DE PLANO da FASE 3 passa a ser
+          subordinado a este escopo. A FASE 3 começa — daqui em diante, zero
+          interação, salvo REPLAN fora do escopo aprovado e o protocolo
+          PESQUISA-FALHOU (que é incondicional).
+        </round>
+      </rounds>
+      <trail>$PLAN_APPROVAL_DIR/ guarda rev-001.md, rev-002.md, rev-003.md
+        (snapshots imutáveis, um por rodada), rev-001.feedback.md,
+        rev-002.feedback.md e o trail.tsv com a decisão de cada rodada. Tudo
+        vive sob $DO_STATE e some com ele no fim — por isso a tabela de
+        revisões é copiada para o relatório final ANTES da limpeza.</trail>
+      <counter-example>A MESMA tarefa invocada como
+        <code>/deep-orchestrator-agent-skill migre o módulo de pagamentos para a nova API,
+        não me pergunte nada</code> resolve DO_PLAN_APPROVAL=0 pelo gatilho
+        negativo: nenhum navegador abre, a FASE 2.5 é pulada inteira e o
+        comportamento é o autônomo de sempre. E
+        <code>/deep-orchestrator-agent-skill plan=off faça um plano e execute</code>
+        também dá 0 — o prefixo explícito vence o gatilho positivo.</counter-example>
+    </example>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <degradation> (13 casos restantes) (split progressive disclosure)
+     carga: lookup SÓ em falha · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos -->
+
+## ÍNDICE POR SINTOMA
+- `subagent-failure`
+- `gate-red`
+- `merge-conflict`
+- `cleanup-failure`
+- `test-subwave-failure`
+- `validation-subwave-failure`
+- `test-coverage-insufficient`
+- `e2e-runner-unavailable`
+
+  <degradation>
+    <case id="subagent-failure">
+      <symptom>Sub-agente retornou erro, timeout ou resultado vazio —
+        inclusive o VAZIO (rc 4) do <code>integrate</code></symptom>
+      <action>NÃO é este caso: handoff com SEARCH_STATUS BLOCKED_78/FAILED_*
+        (ou sem a seção numa SEARCH_REQUIRED=sim) — isso é o protocolo
+        PESQUISA-FALHOU (FASE 3 passo 4.5): não consome tentativa e a filha
+        NÃO vira BLOCKED.
+        Analise o erro, ajuste o prompt, re-dispare NA MESMA worktree (o
+        estado parcial é contexto útil). Máximo 3 tentativas. Worktree
+        inutilizável → NUNCA apague o branch à mão (o sintoma comum é daemon
+        ou node_modules segurando handles, e o branch guarda o trabalho):
+        <cmd>"$DO_WT" close &lt;nome&gt; --discard "worktree inutilizável: &lt;motivo&gt;"</cmd>
+        (salva restos, ARQUIVA em refs/do-archive/$RUN_ID/&lt;nome&gt;, remove);
+        se o close falhar por file handle, <cmd>"$DO_WT" remove &lt;nome&gt; --artifacts</cmd>
+        (gradle --stop + clean -fdX) e repita o close; a tentativa -r2 nasce
+        de $BASE_BRANCH com linha própria (ex.: onda1-cache-service-r2).
+        Na 3ª falha: <cmd>"$DO_WT" mark &lt;nome&gt; BLOCKED</cmd>, registre
+        BLOQUEIO e prossiga com as outras — a onda NÃO para. BLOCKED vive SÓ
+        dentro da própria onda (R6(a)): ANTES do passo 8,
+        <cmd>"$DO_WT" close &lt;nome&gt; --discard "bloqueada: &lt;motivo&gt;"</cmd>
+        (o assert-clean a acusa) — vai NOMINALMENTE a "Não integrado"
+        (NEVER-MERGED, I-MERGE).</action>
+    </case>
+    <case id="gate-red">
+      <symptom>Gate VERMELHO (rc 4 do <code>gate</code>, "GATE FINAL
+        VERMELHO", ou refutação da revisão adversarial)</symptom>
+      <action><strong>CLASSIFICAÇÃO 4-VIAS antes de agir:</strong> (1) bug →
+        fix (abaixo); (2) spec gap → REPLAN (FASE 3 passo 5); (3) ruído =
+        AMBIENTE (install, deps ausentes) → reinstale deps congeladas /
+        conserte o comando e rode <cmd>"$DO_WT" gate &lt;nome&gt;</cmd> de novo
+        (R9; nunca fix de produção); (4) ambiguidade de contrato → atualize o
+        contrato no TASK_PLAN.md. NUNCA retente às cegas.
+        O VERMELHO NÃO limpa nada: filha, branch e snapshot ficam intactos e a
+        filha segue <code>gate-pending</code>. <strong>FIX (via 1):</strong>
+        sub-agente de FIX NA MESMA worktree, com o prompt: "O gate quebrou
+        após merge. Erro: &lt;ERRO&gt;. PRIMEIRO rode
+        <cmd>git merge &lt;BASE_BRANCH-literal&gt;</cmd> DENTRO desta worktree
+        (EXCEÇÃO à regra anti-merge; &lt;BASE_BRANCH-literal&gt; é o branch da
+        raiz-de-mundo como VALOR LITERAL — nunca main/master, nunca
+        origin/*). SÓ DEPOIS corrija APENAS o necessário e commite. NÃO
+        refatore. Vermelho vindo de TESTE: classifique bug de produção x erro
+        do teste — PROIBIDO apagar, pular ou enfraquecer teste para
+        esverdear." O merge vem ANTES do fix porque o squash da filha já está
+        em $BASE_BRANCH: sem ele o re-integrate conflita ou PERDERIA
+        deleções/reversões do fix — o script confere e RECUSA (rc 1, lista
+        de paths: faça o merge, REAPLIQUE o fix nesses paths, commite e
+        repita). Depois <cmd>"$DO_WT" integrate &lt;nome&gt; "&lt;msg&gt;"</cmd>
+        (snapshot -r2 no SHA novo; veredito antigo descartado) e
+        <cmd>"$DO_WT" gate &lt;nome&gt;</cmd>. TETO: 2 fixes; persistiu →
+        <cmd>"$DO_WT" undo &lt;nome&gt;</cmd> (desfaz TODOS os squashes vivos da
+        filha, arquivando cada um em refs/do-archive/$RUN_ID/undo-&lt;nome&gt;-&lt;k&gt;;
+        prefere revert; reset --hard só quando pre..HEAD é exatamente a
+        lista de squashes e o working tree não tem modificação tracked — NUNCA
+        <cmd>git reset --hard</cmd> à mão) +
+        <cmd>"$DO_WT" close &lt;nome&gt; --discard "gate vermelho persistente: &lt;etapa&gt;"</cmd>
+        (NEVER-MERGED). <code>finish --gate-ok</code> NUNCA destrava
+        vermelho; fechar sem conserto sai MERGED-PARTIAL no purge e vai a "Não
+        integrado".
+        <strong>VÍTIMAS:</strong> o snapshot de todo merge POSTERIOR ao
+        squash culpado fica vermelho pela MESMA falha e não volta a verde
+        sozinho. Depois do conserto, o GATE VERDE de qualquer integrate
+        posterior (o -r2 corrigido ou a próxima filha) nasce de um SHA que já
+        contém o squash das vítimas — o script imprime "covered": feche cada
+        uma com <cmd>"$DO_WT" finish &lt;vítima&gt; --gate-ok</cmd>. Sem integrate
+        posterior (undo sem re-integrar): <cmd>"$DO_WT" new integration int-ondaN-pos-undo</cmd>,
+        rode nele o laço do gate final (FASE 4 passo 3, trocando "$BASE_DIR"
+        pelo path impresso), <cmd>"$DO_WT" close int-ondaN-pos-undo</cmd> e, se
+        verde, o finish --gate-ok das vítimas. É o ÚNICO uso legítimo de
+        --gate-ok aqui.
+        <strong>FALHA TARDIA:</strong> o VERMELHO pode chegar DEPOIS de merges
+        seguintes (HEAD avançado). Antes do undo, confirme que o teste que
+        falha não veio de um squash test-* anterior
+        (<cmd>gwt log --oneline -- &lt;arquivo-do-teste&gt;</cmd>). O undo
+        cobre HEAD avançado (revert exato dos squashes daquela filha; os demais
+        ficam). Gates posteriores já verdes só são re-rodados se o revert tocar
+        os arquivos deles (<cmd>gwt show --name-only --format= &lt;SHA-do-revert&gt;</cmd>;
+        na dúvida, re-rode — caso das vítimas). Filha REVERTED nunca atravessa
+        o passo 8: re-integre (fix na mesma worktree, merge do BASE antes) ou
+        close --discard. Worktree NOVA de fix (<cmd>"$DO_WT" new fix ondaN-fix-&lt;foco&gt;</cmd>)
+        é SÓ para bug achado DEPOIS que a filha fechou (subwaves, FIX-FINAL).</action>
+    </case>
+    <case id="merge-conflict">
+      <symptom><code>"$DO_WT" integrate</code> saiu rc 1 com "CONFLITO"</symptom>
+      <action>Não deveria acontecer com o mapa de propriedade respeitado. O
+        script detectou em memória e RECUSOU sem sujar $BASE_DIR (git antigo:
+        rollback FEITO): NADA a desfazer na raiz — NUNCA
+        <cmd>git merge --abort</cmd>, <cmd>git reset --hard</cmd> ou
+        <cmd>git -C</cmd> fora de $BASE_DIR; confira com
+        <cmd>. '&lt;ENV_FILE&gt;'; gstatus</cmd>. Resolva NA worktree-filha: um
+        sub-agente de RESOLUÇÃO com o diff dos dois lados e a autorização
+        "EXCEÇÃO à regra anti-merge: rode
+        <cmd>git merge &lt;BASE_BRANCH-literal&gt;</cmd> DENTRO desta worktree
+        (VALOR LITERAL; nunca main/master, nunca origin/*), resolva TODOS os
+        conflitos preservando a intenção dos DOIS lados, sem refatorar, e
+        commite no seu branch; não toque no repositório principal nem na
+        worktree-pai." Depois re-execute o MESMO integrate (aplica limpo:
+        $BASE_BRANCH virou ancestral) e o <code>gate</code>.</action>
+    </case>
+    <case id="cleanup-failure">
+      <symptom>"GATE VERDE … mas o fechamento falhou", finish/close com "FALHA
+        ao remover", ou sweep/assert-clean listando sobra</symptom>
+      <action>Toda remoção passa por finish/close, que só aceitam alvos do
+        owned.tsv DESTA execução, sob $CHILD_ROOT e com o lock dela; recusa
+        por path desconhecido = worktree de OUTRA sessão: registre
+        "pré-existente, não tocada" e siga. Sujeira NÃO trava: finish e close
+        --discard salvam os restos e ARQUIVAM antes de forçar. "FALHA ao
+        remover" com branch já arquivado = daemon/handle: pare-o
+        (<cmd>"$DO_WT" remove &lt;nome&gt; --artifacts</cmd>) e REPITA o mesmo
+        finish/close (idempotentes). Restos que parecem trabalho real numa
+        filha gate-pending: sub-agente nela roda
+        <cmd>git merge &lt;BASE_BRANCH-literal&gt;</cmd> e SÓ DEPOIS commita;
+        então integrate (squash incremental, -r2) + gate. NUNCA
+        <cmd>git worktree remove -f -f</cmd> nem <cmd>git worktree prune</cmd>
+        (desregistra terceiros); registro órfão é inofensivo — anote.</action>
+    </case>
+    <!-- caso surf-ausente → references/research-protocol.md -->
+    <!-- caso brave-key-invalida → references/research-protocol.md -->
+    <case id="test-subwave-failure">
+      <symptom>Agente de teste falhou (erro, timeout, vazio)</symptom>
+      <when>$DO_TEST_MODE=full ou e2e (none: N/A).</when>
+      <action>Como subagent-failure (máx 3, mesma worktree). Na 3ª:
+        <cmd>"$DO_WT" close test-ondaN-&lt;foco&gt; --discard "agente de teste falhou 3x: &lt;motivo&gt;"</cmd>
+        (NEVER-MERGED) e prossiga com os outros. Não bloqueia o disparo da
+        próxima onda, mas a linha fecha antes do passo 8 dela. Reporte em "Não
+        integrado" + "Arquivos sem cobertura" (e2e: "Jornadas sem cobertura").
+        Subwave parcial é melhor que nenhuma.</action>
+    </case>
+    <case id="validation-subwave-failure">
+      <symptom>Validador falhou (erro, timeout, vazio) ou gate VERMELHO por
+        código no estado integrado</symptom>
+      <action>Como subagent-failure: re-dispare NA MESMA val-ondaN-gate (máx
+        3; deps já instaladas). Na 3ª: registre BLOQUEIO,
+        <cmd>"$DO_WT" close val-ondaN-gate</cmd> e documente — o COMMIT-FINAL
+        não fecha com validação VERMELHA sem degradação documentada.
+        AMBIENTE → reinstale deps congeladas e re-rode (nunca fix de
+        produção). CÓDIGO → fix-final (FASE 4 passo 0), máx 2 por achado.</action>
+    </case>
+    <case id="test-coverage-insufficient">
+      <symptom>Cobertura abaixo de 80% nos arquivos alvo</symptom>
+      <when>SÓ full. e2e: cobertura é de JORNADAS (% N/A) — jornada sem
+        caminho feliz + 1 erro vai a "Jornadas sem cobertura", nunca agente
+        extra por porcentagem. none: N/A.</when>
+      <action>≥ 60%: aceite com ressalva no handoff. &lt; 60%: UM agente
+        adicional focado nos gaps (mesma worktree); ainda &lt; 60% → BLOQUEIO
+        PARCIAL documentado. O gate não bloqueia por cobertura — registra.</action>
+    </case>
+    <case id="e2e-runner-unavailable">
+      <when>$DO_TEST_MODE=e2e e não há como ter runner: "sem e2e" na FASE 1 E
+        a onda1-e2e-harness não o instalou dentro de R9 (sem rede; exige
+        -g/sudo/--with-deps; sem browser), ou o GATE_E2E não sobe um spec de
+        fumaça por AMBIENTE.</when>
+      <action>NUNCA instale global/sudo e NUNCA troque e2e por
+        unit/integration. (1) Black-box com o runner que JÁ existe, se ele
+        exercita o sistema pela porta do usuário (HTTP, CLI via processo, API
+        pública): specs nele, mesmas regras do modo e2e, e
+        <cmd>"$DO_WT" gate-set e2e "&lt;comando&gt;"</cmd>. (2) Nem isso →
+        <cmd>"$DO_WT" gate-set e2e ""</cmd>, registre "Onda N: e2e
+        INDISPONÍVEL — &lt;motivo&gt;", NÃO crie test-ondaN-e2e-* e leve TODAS
+        as jornadas a "Jornadas sem cobertura" com o comando que o usuário
+        roda para instalar; harness não integrou →
+        <cmd>"$DO_WT" close onda1-e2e-harness --discard "runner e2e indisponível: &lt;motivo&gt;"</cmd>.
+        O resto segue: falta de runner NÃO pausa e NÃO é PESQUISA-FALHOU.</action>
+    </case>
+    <!-- caso plannotator-unavailable → references/plan-approval.md -->
+    <!-- caso plan-not-approved → references/plan-approval.md -->
+    <!-- caso plan-title-drift → references/plan-approval.md -->
+    <!-- caso plan-scope-expanded → references/plan-approval.md -->
+    <!-- caso plan-round-interrupted → references/plan-approval.md -->
+  </degradation>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <final-report-template> (split progressive disclosure)
+     carga: FASE 4 passo 7 (relatório final) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos -->
+
+  <final-report-template>
+    <![CDATA[
+## [Tarefa concluída | Tarefa concluída PARCIALMENTE]
+[Fonte: a linha RESUMO do `"$DO_WT" ledger` (FASE 4 passo 6). "Tarefa concluída"
+SÓ com nunca-integradas=0 e parciais=0; com NEVER-MERGED ou MERGED-PARTIAL
+(PURGE_RC=3), ou na opção [4] do protocolo: PARCIALMENTE.]
+[Resumo em linguagem natural. Se PARCIALMENTE, ou se "Pesquisa" tem pausa,
+opção [3] ou fato NÃO VERIFICADO, a PRIMEIRA frase diz isso.]
+
+## Não integrado
+[OBRIGATÓRIA. Fonte: `"$DO_WT" ledger` + o bloco `PURGE: NUNCA INTEGRADAS /
+PARCIAIS` do purge, LITERAL. Uma linha por filha NEVER-MERGED, MERGED-PARTIAL
+ou EMPTY; nada → "nenhum".]
+| Worktree | Kind | Onda | Destino (NEVER-MERGED:<motivo> / MERGED-PARTIAL:<motivo> / EMPTY) | ARCHIVE_REF | Resgate |
+|----------|------|------|--------------------------------------------------------------------|-------------|---------|
+{{NOT_INTEGRATED_ROWS_OR_NENHUM}}
+[Resgate = `git branch resgate/<nome> refs/do-archive/$RUN_ID/<nome>` (RUN_ID
+literal; refs LOCAIS, não vão no push). EMPTY não tem resgate.]
+- Planejadas e nunca despachadas (fonte: TASK_PLAN.md): [lista | nenhuma]
+
+## O que cada sub-agente fez
+| Onda | Worktree | Tarefa | Arquivos | Status (outcome do ledger) |
+|------|----------|--------|----------|----------------------------|
+{{ROWS}}
+
+## Commits realizados (squash commits, um por sub-tarefa)
+{{COMMITS}}
+
+## Pesquisa
+[OBRIGATÓRIA. Fonte: tabelas "Triagem de pesquisa — Onda N" e linhas
+PAUSA-PESQUISA do TASK_PLAN.md. Nenhuma SEARCH_REQUIRED=sim e nenhuma chamada
+surf → "Pesquisa: não exigida."]
+- Portão (`"$DO_SURF_GATE"`): [SURF_GATE/SURF_CODE na FASE 0, no PORTÃO PÓS-PLANO e no passo 0 de cada onda]
+- Pausas do protocolo PESQUISA-FALHOU: [N — por pausa: onda, sub-tarefas, motivo, opção do usuário ([1]|[2]|[3]|[4])] | nenhuma
+- Decisão do usuário de seguir SEM pesquisa (opção [3]): [sim — a partir da onda N | não]
+| Onda | Sub-tarefa | SEARCH_REQUIRED | SEARCH_STATUS | Comandos surf / exit |
+|------|------------|-----------------|---------------|----------------------|
+{{SEARCH_ROWS}}
+- Premissas e fatos NÃO VERIFICADOS (busca vazia | pesquisa falhou | seguiu sem pesquisa): [lista com a sub-tarefa | nenhum]
+
+## Testes
+[UM bloco, conforme o TEST_MODE — apague os outros.]
+[full]
+### Cobertura de Testes (Testing Subwaves)
+| Testing Subwave | Worktree | Arquivos cobertos | Cobertura | Status |
+|-----------------|----------|-------------------|-----------|--------|
+{{TESTING_SUBWAVE_ROWS}}
+### Arquivos sem cobertura (degradação)
+{{UNCOVERED_FILES_OR_NONE}}
+[none]
+Testes: DESLIGADOS por no-test — testes novos: <N, verificado por `gwt diff --stat <pre-da-1ª-filha>..HEAD -- <globs de teste>`>; gate rodou a suíte existente: <GATE_TEST>
+- Testes EXISTENTES ajustados por mudança intencional de contrato: [lista | nenhum]
+- Arquivos sem cobertura: N/A (no-test)
+[e2e]
+### Testes e2e (only-e2e)
+| Testing Subwave | Worktree | Jornadas cobertas / planejadas | Specs | Runner | Status |
+|-----------------|----------|--------------------------------|-------|--------|--------|
+{{E2E_SUBWAVE_ROWS}}
+### Jornadas sem cobertura
+[Jornadas que nunca fecharam, sem spec, ou com spec fixme/flaky — com o motivo. Ou "nenhuma".]
+
+## Validação de Código (Validation Subwaves)
+| Validation Subwave | Veredito do gate (build/lint/typecheck/testes, + e2e em only-e2e) | Achados adversariais | Fixes gerados | Status |
+|--------------------|-------------------------------------------------------------------|----------------------|---------------|--------|
+{{VALIDATION_SUBWAVE_ROWS}}
+
+## Bugs encontrados
+| Origem (teste/validação) | Descrição (arquivo:linha) | Fix aplicado (sub-tarefa) | Estado (CORRIGIDO / ABERTO — teste segue skip/xfail/fixme) |
+|--------------------------|---------------------------|---------------------------|--------------------------------------------------------------|
+{{BUG_ROWS}}
+
+## Perguntas ao usuário
+[SÓ com DO_QUESTION=1 — sem a flag, OMITA. A pergunta do protocolo vai em "Pesquisa".]
+| Rodada (antes do plano / fim da onda N) | Pergunta | Resposta | Default aceito? |
+|------------------------------------------|----------|----------|-----------------|
+{{QUESTION_ROWS}}
+- Dúvidas devolvidas por sub-agentes que NÃO viraram pergunta: [lista + o que foi inferido | nenhuma]
+
+## Portão de aprovação do plano (FASE 2.5)
+[Omita quando PLAN_APPROVAL=0.]
+- Estado: APROVADO na revisão N / NÃO APROVADO ([recusado|fechado|timeout|orçamento]) · Rodadas: N de {{DO_PLAN_MAX_REVISIONS}} · Trail: [$PLAN_APPROVAL_DIR]
+| Revisão | Decisão | O que o usuário pediu | O que mudou no plano |
+|---------|---------|------------------------|----------------------|
+{{PLAN_APPROVAL_ROWS}}
+- Propostas do REPLAN fora do escopo aprovado: [nenhuma | lista com o veredito]
+
+## Contenção
+- Modo: [contido | normal] · Raiz-de-mundo: [$BASE_DIR] · Branch de integração: [$BASE_BRANCH]
+- Projeto principal ([$MAIN_ROOT]): HEAD e working tree inalterados — [resultado do último `do-wt.sh verify`]
+- Worktrees pré-existentes de terceiros: [N] — NÃO tocadas
+
+## Limpeza
+[Fonte: saída do passo 6 da FASE 4.]
+- Cada filha fechada pelo script no gate verde dela (integrate → gate → finish); as não integradas por close.
+- Purge final: [PURGE OK | PURGE INCOMPLETO — o que sobrou] · PURGE_RC=[0 | 3 — ver "Não integrado"] · [ASSERT-CLEAN OK — tudo fechado]
+- RESUMO do ledger, LITERAL: integradas=N nunca-integradas=N vazias=N descartaveis=N parciais=N abertas=0 sem-destino=0
+- Branches arquivados em refs/do-archive/$RUN_ID/ (refs LOCAIS). Única exceção viva: a worktree wt-root (DO_WT_ROOT=1), fora do owned.tsv.
+
+## Dependências instaladas
+[Por sub-agente: gerenciador, pacotes, versões, lockfile. Ou "Nenhuma".]
+
+## Decisões tomadas autonomamente
+[Premissas inferidas sem perguntar.]
+
+## Convergência (válvula de escape)
+["Convergência declarada pelo REVISOR DE PLANO." ou válvula (teto de ondas — só com DO_NO_STOP=0 | REPLANs estagnados) + propostas não executadas.]
+
+## Bloqueios — causa e o que destrava
+[As linhas de "Não integrado" com a causa e o que o usuário faz para destravar. Ou "nenhum".]
+
+## HTML Explainer
+EXPLAINER.html gerado em $BASE_DIR/EXPLAINER.html pelo fluxo `html-explainer-agent-skill` (brief didático + render `visual-explainer`). Degradação (fallback mínimo, R1-c): [nenhuma | registrar].
+
+## Evolução pós-execução
+- Propostas do agente de evolução: [N (X globais, Y projeto) | nenhuma | não rodou (no-evolve / degradação)]
+- Pergunta: [respondida na mensagem final — códigos "1:b2" | sem candidatos | degradada | DO_EVOLUTION_SURVEY=0 (no-evolve)]
+- Resposta do usuário: [pendente — turno seguinte (FASE 0 passo 0) | salvas/descartadas/pendentes com path]
+- Configs salvas do projeto: [nenhuma | lista]
+- Push: [feito — $BASE_BRANCH | sem remote | falhou (registrar)]
+]]>
+  </final-report-template>
+<!-- MÓDULO v4.2.0 · origem: SKILL.md <examples> (ex1; ex2 em references/plan-approval.md) (split progressive disclosure)
+     carga: opcional (few-shot) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
+     1 HOP: não referenciar outros módulos -->
+
+  <examples>
+    <example id="ex1" task="Adicionar endpoint de busca com cache a uma API REST">
+      <plan>
+        <wave id="1" name="Fundação">
+          <agent id="1.1" worktree="onda1-cache-service" branch="$BRANCH_NS/onda1-cache-service" files="src/cache/">
+            Pesquisar (<code>surf-search-normal "melhores bibliotecas de cache para a linguagem do projeto" --sub-agents=10</code>) as 3 melhores libraries
+            de cache para a linguagem do projeto. Escolher uma. Instalar a dependência
+            DENTRO da worktree (cwd na filha, modo congelado, HUSKY=0 — R9). Criar
+            src/cache/CacheService com interface genérica.
+          </agent>
+          <agent id="1.2" worktree="onda1-schema-busca" branch="$BRANCH_NS/onda1-schema-busca" files="src/search/">
+            Mapear o schema de busca existente: que campos, que filtros,
+            que ordenação. Documentar no handoff.
+          </agent>
+        </wave>
+        <wave id="2" name="Implementação" depends-on="1">
+          <agent id="2.1" worktree="onda2-endpoint-busca" branch="$BRANCH_NS/onda2-endpoint-busca" files="src/search/SearchController.java" depends-on="1.1,1.2">
+            Implementar o endpoint de busca com cache. Usar a interface do 1.1.
+            Seguir o schema mapeado pelo 1.2. Escrever testes de integração
+            (só no modo full: com no-test ou only-e2e essa frase sai —
+            {{TEST_POLICY}}).
+          </agent>
+        </wave>
+      </plan>
+      <lifecycle>Fim da Onda 1: a história de $BASE_BRANCH (o branch da
+        raiz-de-mundo — dentro de uma worktree vinculada, o branch DELA) ganhou
+        exatamente 2 commits ("onda1-cache-service: ..." e
+        "onda1-schema-busca: ..."); as worktrees onda1-* e os branches
+        $BRANCH_NS/onda1-* NÃO existem mais — cada uma foi fechada pelo script
+        no gate verde DELA (integrate → gate → finish), e o
+        <code>assert-clean --wave 2</code> do passo 8 provou que nada sobrou;
+        worktrees pré-existentes de terceiros continuam intactas.
+        As subwaves da Onda 1 são disparadas em background ao fim dela (passo
+        10): Testing Subwave 1 (test-onda1-cache-coverage e
+        test-onda1-schema-tests) e Validation Subwave 1 (val-onda1-gate). Elas
+        rodam ENQUANTO a Onda 2 executa — os features da Onda 2 já foram
+        disparados (passo 3) e as subwaves são processadas no passo 3.5 da
+        Onda 2, em paralelo com a barreira do passo 4.</lifecycle>
+      <testing-subwaves>
+        <tsw for-wave="1" worktrees="test-onda1-cache-coverage, test-onda1-schema-tests"
+             runs-during="Onda 2" delivered-at="Onda 2, passo 3.5 (slot ocioso, após disparo dos features)"/>
+        <tsw for-wave="2" worktrees="test-onda2-endpoint-tests"
+             runs-during="COMMIT-FINAL setup" delivered-at="COMMIT-FINAL (passo 0 — processa as duas subwaves pendentes)"/>
+      </testing-subwaves>
+    </example>
+      <!-- example ex2 (portão de aprovação) → references/plan-approval.md -->
+  </examples>

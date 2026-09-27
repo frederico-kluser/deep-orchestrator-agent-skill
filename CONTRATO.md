@@ -190,6 +190,10 @@ prompts/test-agent.md             # agente de testes (sem no-test)
 prompts/validation-agent.md       # validador (3 modos)
 prompts/explainer-agent.md        # explicador (FASE 4 passo 4)
 prompts/evolution-agent.md        # evolução (sem no-evolve)
+references/plan-approval.md       # R10 + FASE 2.5 + casos plan-* + ex2 (SÓ plan=on)
+references/degradation.md         # 8 casos de degradação (lookup em falha)
+references/final-report.md        # template do relatório final (FASE 4 passo 7)
+references/examples.md            # ex1 (opcional, few-shot)
 # references/*.md restantes entram aqui à medida do split v4.2.0
 ```
 
