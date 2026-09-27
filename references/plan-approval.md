@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · origem: SKILL.md <rule R10> + <phase 2.5> + casos plan-* + example ex2 (split progressive disclosure)
+<!-- MÓDULO v5.0.0 · origem: SKILL.md <rule R10> + <phase 2.5> + casos plan-* + example ex2 (split progressive disclosure)
      carga: SÓ com plan=on · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos -->
 

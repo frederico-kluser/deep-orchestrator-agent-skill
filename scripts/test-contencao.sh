@@ -1242,7 +1242,7 @@ chk "A54 o --e2e segue aceito (etapa roda e fecha)" "$rc54m/$(col test-onda54-ma
 chk "A54 o contador do e2e subiu com --e2e" "$(wc -l < "$LAB/a54-e2e-rodou" | tr -d ' ')" "2"
 
 echo "=== A55: cartões de passo — checklist (FASE 3) e checklist final (FASE 4) = <step order> do SKILL.md ==="
-# v4.2.0: os <step order> vivem nos módulos (lista canónica: CONTRATO.md §6).
+# v5.0.0: os <step order> vivem nos módulos (lista canónica: CONTRATO.md §6).
 sk55="$(mktemp)"
 awk '/^## 6\./{s=1} s&&/^```/{f++; next} s&&f==1&&!/^#/&&NF{print}' "$SKILL/CONTRATO.md" 2>/dev/null \
   | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//' \
@@ -1282,7 +1282,7 @@ chk "A56 o sweep NÃO fecha a filha vermelha (rc != 0, aponta o fix)" \
     "$(test "$rc56s" != 0 && echo sim || echo nao)/$(has "$out56s" "gate VERMELHO")" "sim/sim"
 "$WT" finish onda56-a --gate-ok >/dev/null 2>&1                  # cleanup: fecha filha + snapshot
 
-echo "=== A57: discard-state (v4.2.0) — o descarte do estado virou subcomando testável ==="
+echo "=== A57: discard-state (v5.0.0) — o descarte do estado virou subcomando testável ==="
 newrun
 out57a=$("$WT" discard-state 2>&1); rc57a=$?
 chk "A57 ledger limpo → ESTADO DESCARTADO" "$(test "$rc57a" = 0 && echo sim || echo nao)/$(has "$out57a" "ESTADO DESCARTADO")" "sim/sim"

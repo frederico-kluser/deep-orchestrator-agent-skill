@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · origem: SKILL.md <degradation> (13 casos restantes) (split progressive disclosure)
+<!-- MÓDULO v5.0.0 · origem: SKILL.md <degradation> (13 casos restantes) (split progressive disclosure)
      carga: lookup SÓ em falha · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos -->
 

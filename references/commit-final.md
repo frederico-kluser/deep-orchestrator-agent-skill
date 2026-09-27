@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · origem: SKILL.md <phase 4 COMMIT-FINAL> (split progressive disclosure)
+<!-- MÓDULO v5.0.0 · origem: SKILL.md <phase 4 COMMIT-FINAL> (split progressive disclosure)
      carga: ao ENTRAR na FASE 4 (antes do passo 0) · conteúdo byte-a-byte com a origem (CONTRATO.md §5),
      salvo as correções D-H (modelo único mimo-v2.6-pro, sem tiering) -->
 

@@ -26,6 +26,12 @@
 #   no-stop     → DO_NO_STOP=1          no-evolve   → DO_EVOLUTION_SURVEY=0
 #   no-test     → DO_TEST_MODE=none     only-e2e    → DO_TEST_MODE=e2e
 #   do-question → DO_QUESTION=1
+#   plan-revisions=N → DO_PLAN_MAX_REVISIONS (default 5)
+#   plan-timeout=S → DO_PLAN_TIMEOUT (default 3600 s)
+#   retries=N → DO_DELEGATE_RETRIES (default 3; 0 = sem re-delegação)
+#   fix-retries=N → DO_FIX_RETRIES (default 2; 0 = sem retry de fix)
+#   no-subagent-limit → DO_MAX_PARALLEL=0 (SEM teto de sub-agentes; contradiz
+#                       max-parallel=N)
 # Flag VENCE a variável de ambiente; token ausente → a variável de ambiente
 # segue valendo como fallback (DO_X=1 do-context.sh) → senão o default.
 # Token desconhecido, valor inválido ou no-test+only-e2e → exit 2.
@@ -91,12 +97,14 @@ _env_leaked=""
 if [ -n "${RUN_ID:-}" ] && [ -n "${DO_STATE:-}" ] \
    && [ "$DO_STATE" = "${DO_HOME:-}/run-$RUN_ID" ]; then
   for _v in DO_PLAN_APPROVAL DO_MAX_PARALLEL DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME \
-            DO_NO_STOP DO_EVOLUTION_SURVEY DO_TEST_MODE DO_QUESTION; do
+            DO_NO_STOP DO_EVOLUTION_SURVEY DO_TEST_MODE DO_QUESTION \
+            DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_DELEGATE_RETRIES DO_FIX_RETRIES; do
     [ -n "${!_v:-}" ] && _env_leaked="$_env_leaked $_v"
   done
   _env_leaked="run-$RUN_ID:$_env_leaked"
   unset DO_PLAN_APPROVAL DO_MAX_PARALLEL DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME \
-        DO_NO_STOP DO_EVOLUTION_SURVEY DO_TEST_MODE DO_QUESTION 2>/dev/null || true
+        DO_NO_STOP DO_EVOLUTION_SURVEY DO_TEST_MODE DO_QUESTION \
+        DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_DELEGATE_RETRIES DO_FIX_RETRIES 2>/dev/null || true
 fi
 # CHILD_ROOT/RUN_ID nunca são entrada (nascem em 0.6/0.7): herdados, o rmdir do
 # die() alcançaria o CHILD_ROOT vazio de OUTRA run.
@@ -209,6 +217,9 @@ _flag_alias() {
     e2e-only|e2e)               printf '%s' only-e2e ;;
     mp=*)                       printf '%s' "max-parallel=${1#mp=}" ;;
     ask|question|do-questions)  printf '%s' do-question ;;
+    no-limit|unlimited|sem-limite|nosublimit) printf '%s' no-subagent-limit ;;
+    plan-rev=*)                 printf '%s' "plan-revisions=${1#plan-rev=}" ;;
+    fix-retry=*)                printf '%s' "fix-retries=${1#fix-retry=}" ;;
   esac
 }
 # _flag_suggest <token-cru>: a forma CERTA quando o token, normalizado, é uma flag
@@ -217,9 +228,9 @@ _flag_alias() {
 _flag_suggest() {
   local n; n=$(_flag_norm "$1")
   case "$n" in
-    plan=on|plan=off|no-stop|no-evolve|no-test|only-e2e|do-question) printf '%s' "$n" ;;
+    plan=on|plan=off|no-stop|no-evolve|no-test|only-e2e|do-question|no-subagent-limit) printf '%s' "$n" ;;
     plan=*)                                  printf '%s' 'plan=on|off' ;;
-    max-parallel=?*|surf-sub-agents=?*|wt=?*) printf '%s' "$n" ;;
+    max-parallel=?*|surf-sub-agents=?*|wt=?*|plan-revisions=?*|plan-timeout=?*|retries=?*|fix-retries=?*) printf '%s' "$n" ;;
     *) _flag_alias "$n" ;;
   esac
 }
@@ -236,6 +247,7 @@ for _t in $DO_FLAGS_RAW; do
     plan=off)  _flag_set DO_PLAN_APPROVAL 0 "$_t" ;;
     plan=*)    die 2 "flag inválida: '$_t' — use plan=on ou plan=off" ;;
     max-parallel=*)
+      _saw_maxpar=1
       case "${_t#max-parallel=}" in
         ""|*[!0-9]*) die 2 "flag inválida: '$_t' — max-parallel=N exige N inteiro positivo (ex.: max-parallel=50)" ;;
       esac
@@ -256,15 +268,44 @@ for _t in $DO_FLAGS_RAW; do
     no-test)     _flag_set DO_TEST_MODE none "$_t" ;;
     only-e2e)    _flag_set DO_TEST_MODE e2e "$_t" ;;
     do-question) _flag_set DO_QUESTION 1 "$_t" ;;
+    no-subagent-limit) _saw_nsl=1; _flag_set DO_MAX_PARALLEL 0 "$_t" ;;
+    plan-revisions=*)
+      case "${_t#plan-revisions=}" in
+        ""|*[!0-9]*) die 2 "flag inválida: '$_t' — plan-revisions=N exige N inteiro maior que zero (ex.: plan-revisions=5)" ;;
+      esac
+      [ "${_t#plan-revisions=}" -gt 0 ] 2>/dev/null \
+        || die 2 "flag inválida: '$_t' — plan-revisions=N exige N maior que zero"
+      _flag_set DO_PLAN_MAX_REVISIONS "${_t#plan-revisions=}" "$_t" ;;
+    plan-timeout=*)
+      case "${_t#plan-timeout=}" in
+        ""|*[!0-9]*) die 2 "flag inválida: '$_t' — plan-timeout=S exige S segundos inteiro maior que zero (ex.: plan-timeout=3600)" ;;
+      esac
+      [ "${_t#plan-timeout=}" -gt 0 ] 2>/dev/null \
+        || die 2 "flag inválida: '$_t' — plan-timeout=S exige S maior que zero"
+      _flag_set DO_PLAN_TIMEOUT "${_t#plan-timeout=}" "$_t" ;;
+    retries=*)
+      case "${_t#retries=}" in
+        ""|*[!0-9]*) die 2 "flag inválida: '$_t' — retries=N exige N inteiro >= 0 (0 = sem re-delegação; default 3)" ;;
+      esac
+      _flag_set DO_DELEGATE_RETRIES "${_t#retries=}" "$_t" ;;
+    fix-retries=*)
+      case "${_t#fix-retries=}" in
+        ""|*[!0-9]*) die 2 "flag inválida: '$_t' — fix-retries=N exige N inteiro >= 0 (0 = sem retry de fix; default 2)" ;;
+      esac
+      _flag_set DO_FIX_RETRIES "${_t#fix-retries=}" "$_t" ;;
     # Não casou a tabela: apelido ou flag mal escrita (`--no-test`, `No-Test`,
     # `no_test`, `e2e-only`...) sai com a FORMA CERTA na mensagem — nunca é
     # consertado em silêncio, nem vira texto da tarefa.
     *) _sug=$(_flag_suggest "$_t")
        [ -z "$_sug" ] || _flag_hint "$_t" "$_sug"
-       die 2 "flag desconhecida em --flags: '$_t' — válidas: plan=on|off max-parallel=N surf-sub-agents=N wt=<nome> no-stop no-evolve no-test only-e2e do-question (se era texto da tarefa, separe com um '--' literal antes dele)" ;;
+       die 2 "flag desconhecida em --flags: '$_t' — válidas: plan=on|off max-parallel=N no-subagent-limit surf-sub-agents=N plan-revisions=N plan-timeout=S retries=N fix-retries=N wt=<nome> no-stop no-evolve no-test only-e2e do-question (se era texto da tarefa, separe com um '--' literal antes dele)" ;;
   esac
 done
 set +f
+# Contradição de limites (como no-test+only-e2e): nunca decidir em silêncio.
+if [ "${_saw_maxpar:-0}" = 1 ] && [ "${_saw_nsl:-0}" = 1 ]; then
+  die 2 "combinação contraditória: max-parallel=N + no-subagent-limit — escolha UM teto de sub-agentes"
+fi
 
 # (0.0a) --boundary: o token de FRONTEIRA (FT-01). A zona de prefixo é decidida
 # por regex no SKILL.md e 8 dos 11 apelidos (e `--no-test`, `No-Test`) NÃO casam
@@ -955,10 +996,9 @@ printf 'run_id\tkind\tname\tbranch\tpath\tbase_sha\tpre_merge_sha\tpost_merge_sh
 case "${DO_MAX_PARALLEL:-}" in
   "") DO_MAX_PARALLEL=50 ;;   # ausente → default 50 (CAP protetor)
   *[!0-9]*)
-    die 2 "DO_MAX_PARALLEL inválido: '${DO_MAX_PARALLEL}' — precisa ser um inteiro positivo (ex.: max-parallel=50)" ;;
+    die 2 "DO_MAX_PARALLEL inválido: '${DO_MAX_PARALLEL}' — inteiro >= 0 (0 = SEM teto via no-subagent-limit; default 50)" ;;
 esac
-[ "$DO_MAX_PARALLEL" -gt 0 ] 2>/dev/null \
-  || die 2 "DO_MAX_PARALLEL inválido: '$DO_MAX_PARALLEL' — precisa ser maior que zero"
+# 0 é o valor de no-subagent-limit: SEM teto de sub-agentes in-flight."
 
 # --- (0.9c) PORTÃO DE APROVAÇÃO: aprovação do plano no Plannotator (FASE 2.5) ----
 # ATENÇÃO ao vocabulário: neste projeto "gate" significa o trio
@@ -987,6 +1027,14 @@ case "${DO_PLAN_TIMEOUT:-}" in
 esac
 [ "$DO_PLAN_TIMEOUT" -gt 0 ] 2>/dev/null \
   || die 2 "DO_PLAN_TIMEOUT inválido: '$DO_PLAN_TIMEOUT' — precisa ser maior que zero"
+case "${DO_DELEGATE_RETRIES:-}" in
+  "") DO_DELEGATE_RETRIES=3 ;;
+  *[!0-9]*) die 2 "DO_DELEGATE_RETRIES inválido: '${DO_DELEGATE_RETRIES}' — inteiro >= 0 (0 = sem re-delegação)" ;;
+esac
+case "${DO_FIX_RETRIES:-}" in
+  "") DO_FIX_RETRIES=2 ;;
+  *[!0-9]*) die 2 "DO_FIX_RETRIES inválido: '${DO_FIX_RETRIES}' — inteiro >= 0 (0 = sem retry de fix)" ;;
+esac
 # (0.9d) DO_NO_STOP: controla o teto de ondas por execução. Chega pelo token
 # `no-stop` em --flags (0.0) ou, como fallback, pela variável de ambiente.
 # Ausente → 0, que preserva o teto histórico de 10 ondas; =1 remove o teto
@@ -1079,6 +1127,8 @@ DO_MAX_PARALLEL='$DO_MAX_PARALLEL'
 DO_PLAN_APPROVAL='$DO_PLAN_APPROVAL'
 DO_PLAN_MAX_REVISIONS='$DO_PLAN_MAX_REVISIONS'
 DO_PLAN_TIMEOUT='$DO_PLAN_TIMEOUT'
+DO_DELEGATE_RETRIES='$DO_DELEGATE_RETRIES'
+DO_FIX_RETRIES='$DO_FIX_RETRIES'
 DO_NO_STOP='$DO_NO_STOP'
 DO_EVOLUTION_SURVEY='$DO_EVOLUTION_SURVEY'
 DO_TEST_MODE='$DO_TEST_MODE'
@@ -1103,7 +1153,7 @@ DO_SURVEY='$DO_SURVEY'
 export MODE BASE_DIR BASE_BRANCH BASE_NAME BASE_SLUG MAIN_ROOT MAIN_ROOT_DESC
 export COMMON_DIR PARENT_DIR CHILD_ROOT PLACEMENT RUN_ID BRANCH_NS SKILL_HOME
 export DO_HOME DO_STATE PLAN_FILE OWNED DO_WT DO_MAX_PARALLEL
-export DO_PLAN_APPROVAL DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_NO_STOP PLAN_APPROVAL_DIR PLAN_DOC DO_PLAN_APPROVAL_SH
+export DO_PLAN_APPROVAL DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_DELEGATE_RETRIES DO_FIX_RETRIES DO_NO_STOP PLAN_APPROVAL_DIR PLAN_DOC DO_PLAN_APPROVAL_SH
 export DO_EVOLUTION_SURVEY
 export DO_TEST_MODE DO_QUESTION DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_SURF_GATE
 export PROJECT_PREFS_ROOT PROJECT_PREFS_DIR GLOBAL_PREFS_DIR PROJECT_CONFIG

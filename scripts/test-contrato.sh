@@ -4,7 +4,7 @@
 # -----------------------------------------------------------------------------
 # Verifica que os contratos de máquina documentados em CONTRATO.md existem
 # byte-a-byte nos donos funcionais (scripts/*, SKILL.md e módulos
-# references/+prompts/). É a rede de segurança do split v4.2.0: cada extração
+# references/+prompts/). É a rede de segurança do split v5.0.0: cada extração
 # move conteúdo de dono e esta suíte garante que o conteúdo NÃO muda.
 #
 # Hermeticidade (SG-2): sem rede, sem browser, sem crédito de busca; só greps e
@@ -88,12 +88,12 @@ ok "CONTRATO.md documenta a sequência do checklist final" \
 section "CT6 — as 9 flags da invocação (validador único = do-context.sh)"
 hint="$(sed -n 's/^argument-hint: *//p' "$SKILL_MD" | head -n 1)"
 unk=""
-for tok in 'plan=' 'max-parallel=' 'surf-sub-agents=' 'wt=' 'no-stop' 'no-evolve' 'no-test' 'only-e2e' 'do-question'; do
+for tok in 'plan=' 'max-parallel=' 'no-subagent-limit' 'surf-sub-agents=' 'plan-revisions=' 'plan-timeout=' 'retries=' 'fix-retries=' 'wt=' 'no-stop' 'no-evolve' 'no-test' 'only-e2e' 'do-question'; do
   case "$hint" in *"$tok"*) : ;; *) unk="$unk hint:$tok" ;; esac
   grep -qF -- "$tok" "$DO_CTX"    || unk="$unk ctx:$tok"
   grep -qF -- "$tok" "$CONTRATO"  || unk="$unk contrato:$tok"
 done
-chk "as 9 flags estão no argument-hint, na tabela do do-context.sh e no CONTRATO.md" "$unk" ""
+chk "as 14 flags estão no argument-hint, na tabela do do-context.sh e no CONTRATO.md" "$unk" ""
 ok "CONTRATO.md declara max-parallel como flag ÚNICA de concorrência (D-G)" \
    "$(grep -qF 'flag ÚNICA de concorrência' "$CONTRATO"; echo $?)"
 
@@ -134,7 +134,7 @@ mods="$(awk '/^## 6\./{s=1} s&&/^```/{f++; next} s&&f==1&&!/^#/&&NF{print}' "$CO
 ok "§6 lista pelo menos o SKILL.md router (≥1 módulo)" "$([ "$mods" -ge 1 ]; echo $?)"
 
 
-section "CT9 — ponteiros do router apontam aos módulos certos (split v4.2.0)"
+section "CT9 — ponteiros do router apontam aos módulos certos (split v5.0.0)"
 map_ok=0
 chk_map() { # fase, destino esperado
   grep -qE "<phase id=\"$1\"[^>]* ref=\"$2\"" "$SKILL_ALL" \

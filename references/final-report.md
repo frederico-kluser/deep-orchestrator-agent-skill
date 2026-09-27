@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · origem: SKILL.md <final-report-template> (split progressive disclosure)
+<!-- MÓDULO v5.0.0 · origem: SKILL.md <final-report-template> (split progressive disclosure)
      carga: FASE 4 passo 7 (relatório final) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos -->
 

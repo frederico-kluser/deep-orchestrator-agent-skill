@@ -1,4 +1,4 @@
-# D32 — Split do SKILL.md em arquitetura progressive disclosure (v4.2.0)
+# D32 — Split do SKILL.md em arquitetura progressive disclosure (v5.0.0)
 
 - **Data:** 2026-09-26
 - **Estado:** ACEITE (executada)

@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · origem: SKILL.md <subagent-prompt-template> (split progressive disclosure)
+<!-- MÓDULO v5.0.0 · origem: SKILL.md <subagent-prompt-template> (split progressive disclosure)
      carga: no dispatch do sub-agente feature/fix/prep · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch
      MODELO (D-H): mimo-v2.6-pro (model: inherit) — PROIBIDO flash/downgrade -->

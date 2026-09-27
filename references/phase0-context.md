@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · origem: SKILL.md <phase 0 DELIMITAR-O-MUNDO> (split progressive disclosure)
+<!-- MÓDULO v5.0.0 · origem: SKILL.md <phase 0 DELIMITAR-O-MUNDO> (split progressive disclosure)
      carga: SEMPRE, primeiro passo · conteúdo byte-a-byte com a origem (CONTRATO.md §5),
      salvo as correções D-H (modelo único mimo-v2.6-pro, sem tiering) -->
 
@@ -86,11 +86,17 @@
           TABELA — token → variável no ENV_FILE → default → efeito:
           <substeps>
             <substep><code>plan=on|off</code> → DO_PLAN_APPROVAL=1|0 →
-              decidido no passo 2 → FASE 2.5 (R10). Tetos SÓ do ambiente:
-              <code>DO_PLAN_MAX_REVISIONS</code> (5) e
-              <code>DO_PLAN_TIMEOUT</code> (3600 s).</substep>
+              decidido no passo 2 → FASE 2.5 (R10).</substep>
             <substep><code>max-parallel=N</code> → DO_MAX_PARALLEL → 50 → teto
-              de in-flight por onda (FASE 2 passo 3). Inteiro positivo.</substep>
+              de in-flight por onda (FASE 2 passo 3). Inteiro positivo.
+              <code>no-subagent-limit</code> → DO_MAX_PARALLEL=0 = SEM teto
+              (contradiz max-parallel=N → exit 2).</substep>
+            <substep>LIMITES (todos configuráveis por flag — v5.0.0):
+              <code>plan-revisions=N</code> → DO_PLAN_MAX_REVISIONS (5);
+              <code>plan-timeout=S</code> → DO_PLAN_TIMEOUT (3600 s);
+              <code>retries=N</code> → DO_DELEGATE_RETRIES (3; 0 = sem
+              re-delegação); <code>fix-retries=N</code> → DO_FIX_RETRIES (2;
+              0 = sem retry de fix).</substep>
             <substep><code>surf-sub-agents=N</code> → DO_SURF_SUB_AGENTS → 10
               (1..20) → teto GLOBAL de buscas simultâneas, DIVIDIDO entre as
               sub-tarefas que pesquisam (FASE 2 passo 3) — nunca multiplicado

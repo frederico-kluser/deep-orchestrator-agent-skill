@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · origem: SKILL.md <examples> (ex1; ex2 em references/plan-approval.md) (split progressive disclosure)
+<!-- MÓDULO v5.0.0 · origem: SKILL.md <examples> (ex1; ex2 em references/plan-approval.md) (split progressive disclosure)
      carga: opcional (few-shot) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos -->
 

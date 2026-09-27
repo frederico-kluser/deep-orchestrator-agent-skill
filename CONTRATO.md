@@ -1,4 +1,4 @@
-# CONTRATO.md — contratos de máquina do deep-orchestrator-agent-skill (v4.2.0)
+# CONTRATO.md — contratos de máquina do deep-orchestrator-agent-skill (v5.0.0)
 
 > **Fonte única de especificação dos contratos de máquina.** Os testes
 > (`scripts/test-contrato.sh`, mais G12/B01 do `test-surf-gate.sh`) exigem que
@@ -27,6 +27,11 @@ Flag VENCE variável de ambiente; token ausente → env como fallback → defaul
 | `no-test` | `DO_TEST_MODE=none` | full | contradiz `only-e2e` → exit 2 |
 | `only-e2e` | `DO_TEST_MODE=e2e` | full | — |
 | `do-question` | `DO_QUESTION=1` | — | — |
+| `no-subagent-limit` | `DO_MAX_PARALLEL=0` | — | SEM teto de sub-agentes; contradiz `max-parallel=N` → exit 2 |
+| `plan-revisions=N` | `DO_PLAN_MAX_REVISIONS` | 5 | inteiro > 0 |
+| `plan-timeout=S` | `DO_PLAN_TIMEOUT` | 3600 | segundos, inteiro > 0 |
+| `retries=N` | `DO_DELEGATE_RETRIES` | 3 | inteiro ≥ 0 (0 = sem re-delegação) |
+| `fix-retries=N` | `DO_FIX_RETRIES` | 2 | inteiro ≥ 0 (0 = sem retry de fix) |
 
 `--boundary='<token>'` (opcional, UM argv): primeiro token que fechou a zona de
 prefixo; normaliza (`-` iniciais, minúsculas, `_`→`-`); flag mal escrita → exit 2
@@ -40,6 +45,12 @@ com sugestão; texto de tarefa → ignorado.
 - **`surf-sub-agents=N`** é sub-flag da PESQUISA: teto global de buscas
   simultâneas, dividido entre as sub-tarefas que pesquisam — **nunca**
   multiplicado por `DO_MAX_PARALLEL`.
+- **`no-subagent-limit`** remove o teto (`DO_MAX_PARALLEL=0`) — uso consciente:
+  o paralelismo passa a ser limitado só pelo harness/API.
+- **TODOS os limites são flags (v5.0.0)**: `max-parallel`/`no-subagent-limit`
+  (sub-agentes), `surf-sub-agents` (buscas), `plan-revisions`, `plan-timeout`,
+  `retries` (re-delegação), `fix-retries` (fixes). Nenhum limite vive só em
+  ambiente; ambiente é fallback.
 - Referência de dimensionamento (MiMo-V2.6): 100 RPM / 10M TPM por conta,
   ~46 t/s de saída → **6–12 sub-agentes simultâneos** é o realista; acima disso
   só latência e 429.
@@ -98,8 +109,8 @@ título. `check-plannotator.sh`: `0` disponível · `1` ausente · `2` erro.
 ### 2.6 Política de retries (domínios distintos — NÃO são contradições)
 | Domínio | Teto | Onde |
 |---|---|---|
-| Re-delegação de sub-agente que falhou | **3 tentativas** | R2 + caso `subagent-failure` |
-| Fix de achado (revisão/gate vermelho) | **2 tentativas** | FASE 3 passos 6/7 + caso `gate-red` |
+| Re-delegação de sub-agente que falhou | **3 tentativas** (`retries=N`) | R2 + caso `subagent-failure` |
+| Fix de achado (revisão/gate vermelho) | **2 tentativas** (`fix-retries=N`) | FASE 3 passos 6/7 + caso `gate-red` |
 | Re-rodada de subwave de validação | **2 tentativas** | FASE 4 passo 0 |
 
 ---
@@ -208,7 +219,7 @@ references/analyze-plan.md        # FASE 1 ANALYZE + FASE 2 PLAN (após FASE 0)
 references/execute-wave.md        # FASE 3 EXECUTE-ONDA (ao entrar na F3)
 references/commit-final.md        # FASE 4 COMMIT-FINAL (ao entrar na F4)
 references/placeholders.md        # tabela única dos {{…}} (sob consulta)
-# references/*.md restantes entram aqui à medida do split v4.2.0
+# references/*.md restantes entram aqui à medida do split v5.0.0
 ```
 
 NOTA: os módulos `prompts/ecc-*.md`, `prompts/search-prompts.md`,

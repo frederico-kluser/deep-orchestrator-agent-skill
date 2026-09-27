@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · origem: SKILL.md <adversarial-review-template> (split progressive disclosure)
+<!-- MÓDULO v5.0.0 · origem: SKILL.md <adversarial-review-template> (split progressive disclosure)
      carga: na revisão adversarial (FASE 3 passo 6) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch
      MODELO (D-H): mimo-v2.6-pro (model: inherit) — PROIBIDO flash/downgrade -->

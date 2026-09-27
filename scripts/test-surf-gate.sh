@@ -50,7 +50,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILL_MD="$ROOT/.claude/skills/deep-orchestrator-agent-skill/SKILL.md"
 GATE_SH="$ROOT/scripts/surf-gate.sh"
-# v4.2.0: o conteúdo da skill vive em VÁRIOS módulos (split progressive
+# v5.0.0: o conteúdo da skill vive em VÁRIOS módulos (split progressive
 # disclosure). SKILL_ALL = router + módulos da lista canónica (CONTRATO.md §6);
 # é ele que os checks de CONTEÚDO greppam. Frontmatter/YAML/XML/tamanho
 # continuam a apontar ao SKILL_MD (router).
@@ -731,12 +731,12 @@ chk "todo '\"\$DO_SURF_GATE\" <sub>' citado existe no dispatch do surf-gate.sh" 
 # Toda flag do argument-hint está na tabela do do-context.sh e no README.
 hint="$(sed -n 's/^argument-hint: *//p' "$SKILL_MD" | head -n 1)"
 unk=""
-for tok in 'plan=' 'max-parallel=' 'surf-sub-agents=' 'wt=' 'no-stop' 'no-evolve' 'no-test' 'only-e2e' 'do-question'; do
+for tok in 'plan=' 'max-parallel=' 'no-subagent-limit' 'surf-sub-agents=' 'plan-revisions=' 'plan-timeout=' 'retries=' 'fix-retries=' 'wt=' 'no-stop' 'no-evolve' 'no-test' 'only-e2e' 'do-question'; do
   case "$hint" in *"$tok"*) : ;; *) unk="$unk hint:$tok" ;; esac
   grep -qE "^ +${tok}[^)]*\)" "$ROOT/scripts/do-context.sh" || unk="$unk ctx:$tok"
   grep -qF -- "$tok" "$ROOT/README.md" || unk="$unk readme:$tok"
 done
-chk "as 9 flags do argument-hint estão na tabela do do-context.sh e no README" "$unk" ""
+chk "as 14 flags do argument-hint estão na tabela do do-context.sh e no README" "$unk" ""
 # description <= 1024 (a listagem de skills trunca acima disso e esconde flags/triggers).
 if command -v ruby >/dev/null 2>&1; then
   dl="$(ruby -ryaml -e 't=File.read(ARGV[0]); y=YAML.safe_load(t.split(/^---\s*$/)[1]); puts y["description"].length' "$SKILL_MD" 2>/dev/null)"
@@ -761,11 +761,11 @@ for lit in "--boundary=" "MERGED-PARTIAL" "checklist final"; do
   ok "[DESIGN-2] SKILL.md cita o literal '$lit'" "$(grep -qF -- "$lit" "$SKILL_ALL"; echo $?)"
 done
 if command -v python3 >/dev/null 2>&1; then
-  # ORÇAMENTO v4.2.0 (router magro): <= 500 linhas E <= 60000 caracteres.
+  # ORÇAMENTO v5.0.0 (router magro): <= 500 linhas E <= 60000 caracteres.
   sz="$(python3 -c 'import sys; print(len(open(sys.argv[1],encoding="utf-8").read()))' "$SKILL_MD" 2>/dev/null)"
   nl="$(wc -l < "$SKILL_MD" | tr -d ' ')"
-  ok "[v4.2.0] ORÇAMENTO router: SKILL.md <= 500 linhas (é ${nl:-?})" "$([ -n "$nl" ] && [ "$nl" -le 500 ]; echo $?)"
-  ok "[v4.2.0] ORÇAMENTO router: SKILL.md <= 60000 caracteres (é ${sz:-?})" "$([ -n "$sz" ] && [ "$sz" -le 60000 ]; echo $?)"
+  ok "[v5.0.0] ORÇAMENTO router: SKILL.md <= 500 linhas (é ${nl:-?})" "$([ -n "$nl" ] && [ "$nl" -le 500 ]; echo $?)"
+  ok "[v5.0.0] ORÇAMENTO router: SKILL.md <= 60000 caracteres (é ${sz:-?})" "$([ -n "$sz" ] && [ "$sz" -le 60000 ]; echo $?)"
 else
   printf '  (pulado: sem python3 para medir o SKILL.md em caracteres)\n'
 fi

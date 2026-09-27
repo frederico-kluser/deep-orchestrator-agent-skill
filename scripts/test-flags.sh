@@ -198,12 +198,14 @@ DO_SURF_SUB_AGENTS=0 "$CTX" >/dev/null 2>&1;     chk "FL4 DO_SURF_SUB_AGENTS=0 �
 DO_SURF_SUB_AGENTS=21 "$CTX" >/dev/null 2>&1;    chk "FL4 DO_SURF_SUB_AGENTS=21 → exit 2" "$?" "2"
 DO_SURF_SUB_AGENTS=abc "$CTX" >/dev/null 2>&1;   chk "FL4 DO_SURF_SUB_AGENTS=abc → exit 2" "$?" "2"
 DO_WT_ROOT=banana "$CTX" >/dev/null 2>&1;        chk "FL4 DO_WT_ROOT inválido → exit 2" "$?" "2"
-DO_MAX_PARALLEL=0 "$CTX" >/dev/null 2>&1;        chk "FL4 DO_MAX_PARALLEL=0 → exit 2" "$?" "2"
+DO_MAX_PARALLEL=x "$CTX" >/dev/null 2>&1;        chk "FL4 DO_MAX_PARALLEL não-numérico → exit 2" "$?" "2"
 chk "FL4 nenhum run-* criado pelos aborts" "$(nruns "$REPO")" "$before"
+OUT=$(DO_MAX_PARALLEL=0 "$CTX" --flags='' 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
+chk "FL4 DO_MAX_PARALLEL=0 agora é VÁLIDO (v5.0.0: no-subagent-limit = sem teto)" "$(pval DO_MAX_PARALLEL "$ENVF")" "0"
 # DO_MAX_PARALLEL é validada DEPOIS do mkdir do estado (0.9b): o rollback do die
 # tem que levar junto o container de worktrees que acabou de nascer.
 newrepo fl4b
-DO_MAX_PARALLEL=0 "$CTX" >/dev/null 2>&1
+DO_MAX_PARALLEL=x "$CTX" >/dev/null 2>&1
 chk "FL4 abort tardio (após o mkdir) não deixa resíduo: run-*" "$(nruns "$REPO")" "0"
 chk "FL4 ...nem o container <repo>-worktrees vazio" "$([ -e "$LAB/fl4b/proj-worktrees" ] && echo sim || echo nao)" "nao"
 
@@ -594,5 +596,32 @@ has "FL14 ...e a 2ª invocação REENTRA" "$OUT" "REENTRANDO $LAB/fl14 espaço �
 chk "FL14 ...sem criar com-espaco-2" "$([ -e "$LAB/fl14 espaço é acentuação/proj.worktrees/com-espaco-2" ] && echo criou || echo nao)" "nao"
 
 cd "$LAB"
+echo "=== FL17: limites configuráveis por flag (v5.0.0) — inclui no-subagent-limit ==="
+newrepo fl17
+ctx --flags='no-subagent-limit'
+chk "FL17 no-subagent-limit → DO_MAX_PARALLEL=0 (SEM teto)" "$(pval DO_MAX_PARALLEL "$ENVF")" "0"
+ctx --flags='max-parallel=3 no-subagent-limit'
+chk "FL17 max-parallel + no-subagent-limit → exit 2 (contradição)" "$RC" "2"
+has "FL17 ...anunciado como contraditório" "$OUT" "contraditória"
+ctx --flags='no-subagent-limit max-parallel=3'
+chk "FL17 (ordem inversa) → exit 2" "$RC" "2"
+ctx --flags='plan-revisions=9'
+chk "FL17 plan-revisions=9 → DO_PLAN_MAX_REVISIONS=9" "$(pval DO_PLAN_MAX_REVISIONS "$ENVF")" "9"
+ctx --flags='plan-timeout=120'
+chk "FL17 plan-timeout=120 → DO_PLAN_TIMEOUT=120" "$(pval DO_PLAN_TIMEOUT "$ENVF")" "120"
+ctx --flags='retries=0 fix-retries=5'
+chk "FL17 retries=0 → DO_DELEGATE_RETRIES=0" "$(pval DO_DELEGATE_RETRIES "$ENVF")" "0"
+chk "FL17 fix-retries=5 → DO_FIX_RETRIES=5" "$(pval DO_FIX_RETRIES "$ENVF")" "5"
+ctx --flags='no-limit'
+chk "FL17 apelido no-limit → exit 2 com sugestão (nunca conserta em silêncio)" "$RC" "2"
+has "FL17 ...sugere no-subagent-limit" "$OUT" "no-subagent-limit"
+ctx --flags=''
+chk "FL17 defaults: retries=3 fix-retries=2 plan-revisions=5 plan-timeout=3600" \
+    "$(pval DO_DELEGATE_RETRIES "$ENVF")/$(pval DO_FIX_RETRIES "$ENVF")/$(pval DO_PLAN_MAX_REVISIONS "$ENVF")/$(pval DO_PLAN_TIMEOUT "$ENVF")" "3/2/5/3600"
+for bad in 'retries=x' 'retries=-1' 'fix-retries=1.5' 'plan-revisions=0' 'plan-timeout=abc' 'plan-revisions='; do
+  ctx --flags="$bad"
+  chk "FL17 '$bad' → exit 2" "$RC" "2"
+done
+
 echo; printf 'RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ] || exit 1

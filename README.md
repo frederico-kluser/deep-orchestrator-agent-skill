@@ -1,4 +1,4 @@
-# deep-orchestrator-agent-skill v4.2.0
+# deep-orchestrator-agent-skill v5.0.0
 
 ![Versão](https://img.shields.io/badge/version-4.1.0-00d4ff)
 
@@ -46,7 +46,7 @@ O único vestígio compartilhado aceito é o registro administrativo das filhas 
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
 
-## Novidades na v4.2.0
+## Novidades na v5.0.0
 
 **Split progressive disclosure (D32)** — o SKILL.md monolítico de 3 306 linhas
 (220 KB) virou um ROUTER de ≤500 linhas + módulos carregados SOB DEMANDA.
@@ -502,6 +502,18 @@ export OPENROUTER_API_KEY=<chave>     # recomendada: liga a síntese do surf-ai
 Chave queimada, em cooldown ou com a cota esgotada no meio de uma execução? O orquestrador pausa e pergunta — ver [Quando a pesquisa falha](#quando-a-pesquisa-falha--o-protocolo-pesquisa-falhou).
 
 ## Uso
+### Flags de limite (todas configuráveis por flag — v5.0.0)
+
+`max-parallel=N` (teto de sub-agentes in-flight; default 50) ·
+`no-subagent-limit` (SEM teto; contradiz max-parallel) ·
+`surf-sub-agents=N` (teto de buscas simultâneas; default 10, 1..20) ·
+`plan-revisions=N` (revisões do plano; default 5) ·
+`plan-timeout=S` (segundos por rodada do portão; default 3600) ·
+`retries=N` (re-delegação de sub-agente; default 3) ·
+`fix-retries=N` (retries de fix; default 2).
+Ex.: `plan=on max-parallel=12 retries=2 fix-retries=1 <tarefa>` ou
+`no-subagent-limit <tarefa>`.
+
 
 ```
 /deep-orchestrator-agent-skill <descrição da tarefa>

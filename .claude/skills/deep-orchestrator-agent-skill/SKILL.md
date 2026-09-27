@@ -13,7 +13,7 @@ when_to_use: >-
   Quando o usuário quer uma tarefa resolvida do início ao fim sem interrupções,
   especialmente tarefas complexas que se beneficiam de decomposição em ondas
   paralelas. NUNCA invoque para tarefas triviais de um passo só.
-argument-hint: "[plan=on|off] [max-parallel=N] [surf-sub-agents=N] [wt=<nome>] [no-stop] [no-evolve] [no-test|only-e2e] [do-question] <tarefa>"
+argument-hint: "[plan=on|off] [max-parallel=N|no-subagent-limit] [surf-sub-agents=N] [plan-revisions=N] [plan-timeout=S] [retries=N] [fix-retries=N] [wt=<nome>] [no-stop] [no-evolve] [no-test|only-e2e] [do-question] <tarefa>"
 disable-model-invocation: false
 user-invocable: true
 disallowed-tools:
@@ -38,7 +38,7 @@ allowed-tools:
 model: inherit
 effort: xhigh
 metadata:
-  version: "4.2.0"
+  version: "5.0.0"
   created: "2026-08-02"
   updated: "2026-09-26"
   # skill-home = casa da skill (scripts/, prompts/) — NÃO é o projeto-alvo
@@ -427,22 +427,22 @@ metadata:
 
   </workflow>
 
-  <!-- TEMPLATE EXTERNO (v4.2.0): prompts/subagent-prompt.md — carregar no dispatch -->
+  <!-- TEMPLATE EXTERNO (v5.0.0): prompts/subagent-prompt.md — carregar no dispatch -->
   <subagent-prompt-template href="prompts/subagent-prompt.md"/>
 
-  <!-- TEMPLATE EXTERNO (v4.2.0): prompts/adversarial-review.md — carregar no dispatch -->
+  <!-- TEMPLATE EXTERNO (v5.0.0): prompts/adversarial-review.md — carregar no dispatch -->
   <adversarial-review-template href="prompts/adversarial-review.md"/>
 
-  <!-- TEMPLATE EXTERNO (v4.2.0): prompts/test-agent.md — carregar no dispatch -->
+  <!-- TEMPLATE EXTERNO (v5.0.0): prompts/test-agent.md — carregar no dispatch -->
   <test-agent-template href="prompts/test-agent.md"/>
 
-  <!-- TEMPLATE EXTERNO (v4.2.0): prompts/validation-agent.md — carregar no dispatch -->
+  <!-- TEMPLATE EXTERNO (v5.0.0): prompts/validation-agent.md — carregar no dispatch -->
   <validation-agent-template href="prompts/validation-agent.md"/>
 
-  <!-- TEMPLATE EXTERNO (v4.2.0): prompts/explainer-agent.md — carregar no dispatch -->
+  <!-- TEMPLATE EXTERNO (v5.0.0): prompts/explainer-agent.md — carregar no dispatch -->
   <explainer-agent-template href="prompts/explainer-agent.md"/>
 
-  <!-- TEMPLATE EXTERNO (v4.2.0): prompts/evolution-agent.md — carregar no dispatch -->
+  <!-- TEMPLATE EXTERNO (v5.0.0): prompts/evolution-agent.md — carregar no dispatch -->
   <evolution-agent-template href="prompts/evolution-agent.md"/>
 
   <final-report-template ref="references/final-report.md"/>

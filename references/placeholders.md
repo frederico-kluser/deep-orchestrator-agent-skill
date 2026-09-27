@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · tabela ÚNICA dos placeholders {{…}} da skill
+<!-- MÓDULO v5.0.0 · tabela ÚNICA dos placeholders {{…}} da skill
      carga: sob consulta · regenerar quando um placeholder nascer/morrer -->
 
 # Placeholders (tabela única)

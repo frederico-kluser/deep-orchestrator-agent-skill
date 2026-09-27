@@ -1934,7 +1934,7 @@ cmd_purge() { # COMMIT-FINAL: garantia final — NADA desta execução sobrevive
   return $rc
 }
 
-# v4.2.0 (FASE 5): o DESCARTE DO ESTADO era prosa no SKILL.md — virou subcomando
+# v5.0.0 (FASE 5): o DESCARTE DO ESTADO era prosa no SKILL.md — virou subcomando
 # testável. Comportamento idêntico à sequência original do passo 8 da FASE 4.
 cmd_discard_state() {
   : "${DO_STATE:?ENV_FILE incompleto: DO_STATE}"

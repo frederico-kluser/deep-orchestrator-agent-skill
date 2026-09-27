@@ -125,7 +125,7 @@ do SKILL.md.
 
 ## Testes
 
-- `test-contrato.sh` (v4.2.0) — CONTRATO.md × donos: literais byte-a-byte,
+- `test-contrato.sh` (v5.0.0) — CONTRATO.md × donos: literais byte-a-byte,
   sequências de passos, flags, marcadores, ponteiros do router (CT1–CT9).
 
 | Script | Proposito |

@@ -1,4 +1,4 @@
-<!-- MÓDULO v4.2.0 · origem: SKILL.md <rule R7> + <protocol PESQUISA-FALHOU> + casos surf do <degradation>
+<!-- MÓDULO v5.0.0 · origem: SKILL.md <rule R7> + <protocol PESQUISA-FALHOU> + casos surf do <degradation>
      carga: SÓ quando SEARCH_REQUIRED=sim ou portão surf SURF_GATE != 0 · byte-a-byte com a origem (CONTRATO.md §5)
      CANÓNICO da pesquisa: uma só casa para a tabela SURF_GATE e a pergunta [1]-[4] -->
 
