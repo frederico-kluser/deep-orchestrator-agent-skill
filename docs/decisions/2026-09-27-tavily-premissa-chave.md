@@ -28,6 +28,11 @@ feita pela **tavily-agent-skill** (API Tavily, rotação de chaves interna).
      `TAVILY_CODE=<TavilySkillMissing|TavilyKeyMissing|TavilyQuotaExhausted|
      TavilyAllBanned|TavilyUnknown>`; modo `SEARCH_MODE`);
    - **`tavily-sub-agents=N`** (substituiu a flag do fornecedor removido) (`DO_TAVILY_SUB_AGENTS`);
+   - `scripts/surf-gate.sh` → `scripts/tavily-gate.sh` (novos verbos `gate` e
+     **`premise`**; veredito `TAVILY_GATE=<0|78|127>`,
+     `TAVILY_CODE=<TavilySkillMissing|TavilyKeyMissing|TavilyQuotaExhausted|
+     TavilyAllBanned|TavilyUnknown>`; modo `SEARCH_MODE`);
+   - `surf-sub-agents=N` → **`tavily-sub-agents=N`** (`DO_TAVILY_SUB_AGENTS`);
    - handoff `SEARCH_STATUS: … | BLOCKED_NOKEY` (antes BLOCKED_78);
    - bloco da pergunta PESQUISA-FALHOU reescrito para comandos Tavily
      (CONTRATO.md §5.1 = `print_question` byte-a-byte);
@@ -44,3 +49,4 @@ feita pela **tavily-agent-skill** (API Tavily, rotação de chaves interna).
   `tavily.py` mockado: fail-closed, premise, classify anti-eco, scrub de
   chaves, pausa/retomada, bloco da pergunta byte-a-byte em 3 donos).
 - varrimento por nome do fornecedor removido no repo: **0** (exceto apps não relacionados).
+- `grep -ri 'surf|brave'` no repo: **0** (exceto apps não relacionados).
