@@ -1,4 +1,4 @@
-# deep-orchestrator-agent-skill v4.1.0
+# deep-orchestrator-agent-skill v4.2.0
 
 ![Versão](https://img.shields.io/badge/version-4.1.0-00d4ff)
 
@@ -45,6 +45,33 @@ Se a skill for invocada com o cwd **dentro de uma git worktree vinculada**, ela 
 O único vestígio compartilhado aceito é o registro administrativo das filhas em `$GIT_COMMON_DIR/worktrees/`, que o próprio git cria e é inevitável.
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
+
+## Novidades na v4.2.0
+
+**Split progressive disclosure (D32)** — o SKILL.md monolítico de 3 306 linhas
+(220 KB) virou um ROUTER de ≤500 linhas + módulos carregados SOB DEMANDA.
+Comportamento intocado: 1 120 asserções verdes antes e depois de cada corte.
+
+- `references/` (1 HOP): `phase0-context`, `analyze-plan`, `research-protocol`
+  (canónico da pesquisa), `plan-approval` (SÓ plan=on), `execute-wave`,
+  `commit-final`, `final-report`, `degradation` (lookup em falha), `examples`,
+  `placeholders`
+- `prompts/`: os 6 templates de sub-agente passaram para ficheiros próprios e
+  carregam SÓ no dispatch de cada papel
+- `CONTRATO.md` + `scripts/test-contrato.sh` (52 asserções): fonte única dos
+  contratos de máquina (exit codes, marcadores de stdout, literais congelados,
+  flags, política de retries) — validada byte-a-byte pelos testes
+- **Modelo único `mimo-v2.6-pro` em TODOS os agentes (D-H)**: o TIERING por
+  modelo saiu — PROIBIDO flash/downgrade
+- **`max-parallel=N` é a flag ÚNICA de concorrência (D-G)**, de 1ª classe;
+  `surf-sub-agents=N` é sub-flag de pesquisa (nunca multiplicada). Referência
+  de dimensionamento no MiMo: 6–12 sub-agentes simultâneos
+- `do-wt.sh discard-state`: o descarte do estado (FASE 4 passo 8) virou
+  subcomando testado (A57)
+- Correções: drift `surf v8`→`v9+` na FASE 0; severidades graduadas (FATAL só
+  R1/R8); bug de locale do `sort -n` no teste G12 (decimais)
+- Router com `<navigation>`: mapa FASE→ficheiro, cargas condicionais e índice
+  de sintomas (re-ancoragem pós-compactação)
 
 ## Novidades na v4.1.0
 
@@ -388,6 +415,12 @@ Fontes primárias: [subagents](https://code.claude.com/docs/en/subagents) · [ag
 ```
 deep-orchestrator-agent-skill/
 ├── README.md                    # Este arquivo
+├── CONTRATO.md                  # Fonte única dos contratos de máquina (test-contrato.sh valida byte-a-byte)
+├── references/                  # Módulos carregados SOB DEMANDA (1 HOP) — lista canónica em CONTRATO.md §6
+│   ├── phase0-context.md        # FASE 0 (sempre) · analyze-plan.md (FASE 1+2) · execute-wave.md (FASE 3) · commit-final.md (FASE 4)
+│   ├── research-protocol.md     # R7 + PESQUISA-FALHOU + casos surf (SEARCH_REQUIRED / SURF_GATE != 0)
+│   ├── plan-approval.md         # R10 + FASE 2.5 + casos plan-* (SÓ plan=on)
+│   └── final-report.md · degradation.md · examples.md · placeholders.md
 ├── SKILL.md                     # Definição do skill (frontmatter YAML + XML do orquestrador; a versão vive em metadata.version) — symlink para .claude/skills/deep-orchestrator-agent-skill/SKILL.md
 ├── scripts/
 │   ├── README.md                # Índice de todos os scripts
@@ -408,6 +441,8 @@ deep-orchestrator-agent-skill/
 │   ├── test-evolve.sh           # motor de prefs/pergunta de evolução (81 asserções, F1–F14 · S1–S10 · E1–E6)
 │   └── test-plan-approval.sh    # portão de aprovação do plano (139 asserções, mockado)
 ├── prompts/
+│   ├── subagent-prompt.md       # templates de sub-agente (SÓ no dispatch; modelo único Pro)
+│   ├── adversarial-review.md · test-agent.md · validation-agent.md · explainer-agent.md · evolution-agent.md
 │   ├── ecc-prompts.md           # 7 templates de prompt portados do ECC
 │   ├── ecc-skills.md            # 7 skills ECC portados
 │   ├── search-prompts.md        # Prompts de busca otimizados para dev
@@ -415,7 +450,7 @@ deep-orchestrator-agent-skill/
 │   └── evolution-guide.md       # Framework de decisão da evolução (o que qualifica, project vs global)
 ```
 
-As cinco suítes rodam sem rede, sem navegador e sem gastar crédito de busca
+As seis suítes rodam sem rede, sem navegador e sem gastar crédito de busca
 (tudo mockado ou em repositórios descartáveis de `mktemp -d`), e estão verdes
 no macOS (bash 3.2.57, BSD sed/wc, sem `flock`): `for t in scripts/test-*.sh; do bash "$t"; done`.
 
