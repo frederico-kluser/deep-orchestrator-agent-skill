@@ -234,7 +234,7 @@
           worktrees de terceiros (NUNCA tocadas). Com wt=: a irmã
           <code>&lt;repo&gt;.worktrees/&lt;nome&gt;</code> é a RAIZ-DE-MUNDO e
           MAIN_ROOT é ZONA PROIBIDA.</step>
-        <step order="6"><strong>DEPENDÊNCIA OBRIGATÓRIA — SURF-AGENT-SKILL v8
+        <step order="6"><strong>DEPENDÊNCIA OBRIGATÓRIA — SURF-AGENT-SKILL v9+
           (R7) — AQUI só REGISTRA:</strong>
           <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURF_GATE"</cmd>
           e, só para os blocos de diagnóstico (o exit do doctor NÃO é

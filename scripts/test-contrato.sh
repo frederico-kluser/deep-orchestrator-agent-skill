@@ -133,6 +133,29 @@ chk "todos os módulos listados no CONTRATO.md (§6) existem" "$missing" ""
 mods="$(awk '/^## 6\./{s=1} s&&/^```/{f++; next} s&&f==1&&!/^#/&&NF{print}' "$CONTRATO" | wc -l | tr -d ' ')"
 ok "§6 lista pelo menos o SKILL.md router (≥1 módulo)" "$([ "$mods" -ge 1 ]; echo $?)"
 
+
+section "CT9 — ponteiros do router apontam aos módulos certos (split v4.2.0)"
+map_ok=0
+chk_map() { # fase, destino esperado
+  grep -qE "<phase id=\"$1\"[^>]* ref=\"$2\"" "$SKILL_ALL" \
+    && grep -qE "<phase id=\"$1\"[^>]* ref=\"$2\"" "$ROOT/.claude/skills/deep-orchestrator-agent-skill/SKILL.md"
+  ok "ponteiro FASE $1 → $2" "$([ $? = 0 ]; echo $?)"
+}
+chk_map 0 references/phase0-context.md
+chk_map 1 references/analyze-plan.md
+chk_map 2 references/analyze-plan.md
+chk_map 2.5 references/plan-approval.md
+chk_map 3 references/execute-wave.md
+chk_map 4 references/commit-final.md
+# todo ref=/href= do router resolve para ficheiro existente
+bad=""
+for tgt in $(grep -oE '(ref|href)="[^"]+"' "$ROOT/.claude/skills/deep-orchestrator-agent-skill/SKILL.md" | sed 's/.*="//; s/"//' | sort -u); do
+  [ -e "$ROOT/$tgt" ] || bad="$bad $tgt"
+done
+chk "todo ref=/href= do router resolve para ficheiro existente" "$bad" ""
+ok "nenhum placeholder {DEST} sobrou no router" \
+   "$(! grep -q '{DEST}' "$ROOT/.claude/skills/deep-orchestrator-agent-skill/SKILL.md"; echo $?)"
+
 printf '\n\033[1mRESULTADO: %d PASS, %d FAIL\033[0m\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
 exit 0

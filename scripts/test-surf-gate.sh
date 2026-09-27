@@ -285,7 +285,7 @@ ok "R7 proíbe 'keys list --json' (imprimia as chaves em texto puro)" \
 ok "o template de sub-agente usa {{SURF_SUB_AGENTS}}" \
    "$(grep -q -- '--sub-agents={{SURF_SUB_AGENTS}}' "$SKILL_ALL"; echo $?)"
 ok "FASE 0 tem o passo 6 (dependência obrigatória)" \
-   "$(grep -q 'DEPENDÊNCIA OBRIGATÓRIA — SURF-AGENT-SKILL v8' "$SKILL_ALL"; echo $?)"
+   "$(grep -q 'DEPENDÊNCIA OBRIGATÓRIA — SURF-AGENT-SKILL v9+' "$SKILL_ALL"; echo $?)"
 ok "existem os dois casos de degradação novos" \
    "$(grep -q 'case id="surf-ausente"' "$SKILL_ALL" && grep -q 'case id="brave-key-invalida"' "$SKILL_ALL"; echo $?)"
 # Rodada final (DESIGN-2, SG-1): a escolha [3] é ESTADO do script, e o SKILL.md
@@ -761,9 +761,11 @@ for lit in "--boundary=" "MERGED-PARTIAL" "checklist final"; do
   ok "[DESIGN-2] SKILL.md cita o literal '$lit'" "$(grep -qF -- "$lit" "$SKILL_ALL"; echo $?)"
 done
 if command -v python3 >/dev/null 2>&1; then
-  # ORÇAMENTO: a condensação (DESIGN-2 parte C) mira <= 215.000; o teto duro é 220.000.
+  # ORÇAMENTO v4.2.0 (router magro): <= 500 linhas E <= 60000 caracteres.
   sz="$(python3 -c 'import sys; print(len(open(sys.argv[1],encoding="utf-8").read()))' "$SKILL_MD" 2>/dev/null)"
-  ok "[DESIGN-2] ORÇAMENTO: SKILL.md <= 220000 caracteres (é ${sz:-?})" "$([ -n "$sz" ] && [ "$sz" -le 220000 ]; echo $?)"
+  nl="$(wc -l < "$SKILL_MD" | tr -d ' ')"
+  ok "[v4.2.0] ORÇAMENTO router: SKILL.md <= 500 linhas (é ${nl:-?})" "$([ -n "$nl" ] && [ "$nl" -le 500 ]; echo $?)"
+  ok "[v4.2.0] ORÇAMENTO router: SKILL.md <= 60000 caracteres (é ${sz:-?})" "$([ -n "$sz" ] && [ "$sz" -le 60000 ]; echo $?)"
 else
   printf '  (pulado: sem python3 para medir o SKILL.md em caracteres)\n'
 fi

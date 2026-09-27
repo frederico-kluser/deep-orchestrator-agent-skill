@@ -2,19 +2,13 @@
 name: deep-orchestrator-agent-skill
 description: >-
   Orquestrador autônomo multi-agente para tarefas COMPLEXAS de código, até o
-  commit + push. NUNCA escreve código: planeja, divide em ONDAS paralelas,
-  delega a sub-agentes em worktrees nomeadas, revisa, integra por squash-merge
-  com gate (build/test/lint), limpa cada worktree no gate verde e relata o que
-  NÃO foi integrado. Pesquisa só via surf-agent-skill v9+ (Brave): se falhar
-  (chave, cota), PAUSA e pede ao usuário outra chave ou ajuste, mesmo em modo
-  autônomo. Use em tarefa multi-arquivo; NÃO em tarefa trivial. Triggers:
-  "orquestre isso", "divida essa tarefa", "resolva do início ao fim", "não me
-  pergunte nada", "quero aprovar o plano antes". Invocação:
-  /deep-orchestrator-agent-skill [plan=on|off] [max-parallel=N]
-  [surf-sub-agents=N] [wt=<nome>] [no-stop] [no-evolve] [no-test|only-e2e]
-  [do-question] <tarefa>. plan=on: aprovar o plano no Plannotator; wt=:
-  worktree irmã, commit + push nela, sem merge de volta; no-test: sem testes
-  novos; only-e2e: só testes e2e; do-question: pode perguntar.
+  commit + push. NUNCA escreve código: planeja, divide em ondas, delega em
+  worktrees nomeadas, integra com gate e relata o que NÃO foi integrado. Use em
+  tarefa multi-arquivo complexa que beneficia de decomposição; NUNCA em tarefa
+  trivial de um passo só (Do NOT use para trivial). Pesquisa só via
+  surf-agent-skill v9+ (Brave): se falhar, PAUSA e pergunta ao usuário, mesmo em
+  modo autônomo. Triggers: "orquestre isso", "divida essa tarefa", "resolva do
+  início ao fim", "não me pergunte nada", "quero aprovar o plano antes".
 when_to_use: >-
   Quando o usuário quer uma tarefa resolvida do início ao fim sem interrupções,
   especialmente tarefas complexas que se beneficiam de decomposição em ondas
@@ -90,7 +84,7 @@ metadata:
         código, PARE — isso significa que você deveria estar CRIANDO UM
         SUB-AGENTE.</body>
     </rule>
-    <rule id="R2" severity="FATAL">
+    <rule id="R2" severity="HIGH">
       <title>NUNCA pergunte ao usuário — salvo as exceções abaixo, que são OBRIGATÓRIAS</title>
       <body>Autonomia total. Se falta informação, INFIRA com confiança e documente
         a premissa. Se há ambiguidade, ESCOLHA o caminho mais razoável.
@@ -144,7 +138,7 @@ metadata:
         o estado do DISCO — nunca da memória do turno. "Informar e seguir
         trabalhando" NÃO é AGUARDE.</body>
     </rule>
-    <rule id="R3" severity="FATAL">
+    <rule id="R3" severity="HIGH">
       <title>Trabalho completo, do início ao COMMIT</title>
       <body>Você só termina quando a tarefa está 100% concluída E commitada.
         NUNCA entregue trabalho parcial sem declará-lo. Sub-agente falhou:
@@ -170,7 +164,7 @@ metadata:
         calado sem a pesquisa exigida; a opção [4] do protocolo é saída
         legítima porque foi o USUÁRIO quem a escolheu.</body>
     </rule>
-    <rule id="R4" severity="FATAL">
+    <rule id="R4" severity="MEDIUM">
       <title>Worktree é a UNIDADE de isolamento — e é VOCÊ quem a cria</title>
       <body>Toda execução que modifica arquivos acontece dentro de uma worktree
         que VOCÊ criou via <cmd>do-wt.sh new</cmd>, NUNCA via isolation
@@ -183,7 +177,7 @@ metadata:
         branch DA WORKTREE em que você foi invocado, JAMAIS main/master. As
         worktrees-filhas nascem de $BASE_BRANCH e por isso já herdam os stubs.</body>
     </rule>
-    <rule id="R5" severity="FATAL">
+    <rule id="R5" severity="HIGH">
       <title>Squash-merge UM a UM, nunca octopus</title>
       <body>Integração é SEMPRE git merge --squash seguido de UM commit limpo no
         $BASE_BRANCH (o branch da RAIZ-DE-MUNDO resolvida na FASE 0; dentro de
@@ -199,7 +193,7 @@ metadata:
         culpa. Merge commits e commits WIP de sub-agente NUNCA entram na
         história final.</body>
     </rule>
-    <rule id="R6" severity="FATAL">
+    <rule id="R6" severity="HIGH">
       <title>Worktree nasce NOMEADA e morre no gate verde da PRÓPRIA tarefa — quem limpa é o script</title>
       <body>Você define o nome de cada worktree no plano, ANTES de criá-la: kebab-case descritivo da sub-tarefa, prefixado
         pela onda, ≤ 40 chars; PROIBIDO nome genérico (agent-1, task-a, temp, wt2). Convenção da FASE 0: branch =
@@ -233,7 +227,7 @@ metadata:
         No COMMIT-FINAL NADA sobrevive: <cmd>"$DO_WT" purge</cmd> (FASE 4 passo 6) fecha TODAS as linhas do owned.tsv —
         zero worktrees e zero branches de sub-agente desta execução, SEMPRE.</body>
     </rule>
-    <rule id="R7" severity="FATAL" ref="references/research-protocol.md">
+    <rule id="R7" severity="HIGH" ref="references/research-protocol.md">
       <title>Pesquisa é SÓ surf-agent-skill v9+ (fail-closed) — contrato canónico externo</title>
       <body>CANÓNICO em references/research-protocol.md — carregue-o SEMPRE que a
         pesquisa for exigida (SEARCH_REQUIRED=sim) ou o portão surf responder
@@ -324,7 +318,7 @@ metadata:
         CHILD_ROOT morrem). Integrar o branch do wt é decisão do USUÁRIO,
         quando ele quiser — nunca do orquestrador.</body>
     </rule>
-    <rule id="R9" severity="FATAL">
+    <rule id="R9" severity="MEDIUM">
       <title>Dependências: dentro da worktree, congeladas, nunca globais</title>
       <body>Instalar dependência é PERMITIDO, mas SOMENTE assim: instale apenas
         SE a sub-tarefa não puder ser concluída sem isso, e SEMPRE com cwd na
@@ -384,7 +378,7 @@ metadata:
         <code>bin/</code>, <code>dist/</code> e <code>build/</code>
         RASTREADOS.</body>
     </rule>
-    <rule id="R10" severity="FATAL" ref="references/plan-approval.md">
+    <rule id="R10" severity="HIGH" ref="references/plan-approval.md">
       <title>PORTÃO DE APROVAÇÃO DO PLANO (plan=on) — contrato canónico externo</title>
       <body>CANÓNICO em references/plan-approval.md (carregar SÓ com plan=on).
         Resumo não-negociável: sem APROVADO no Plannotator não há FASE 3;
@@ -393,19 +387,43 @@ metadata:
     </rule>
   </rules>
 
+  <navigation>
+    <mapa-fases>
+      FASE 0 DELIMITAR-O-MUNDO → references/phase0-context.md (SEMPRE, primeiro passo)
+      FASE 1 ANALYZE + FASE 2 PLAN → references/analyze-plan.md (após a FASE 0)
+      FASE 2.5 APROVAR-O-PLANO → references/plan-approval.md (SÓ com plan=on)
+      FASE 3 EXECUTE-ONDA → references/execute-wave.md (ao ENTRAR na FASE 3)
+      FASE 4 COMMIT-FINAL → references/commit-final.md (ao ENTRAR na FASE 4)
+    </mapa-fases>
+    <cargas-condicionais>
+      Pesquisa exigida (SEARCH_REQUIRED=sim) ou SURF_GATE != 0 → references/research-protocol.md
+      Falha/dúvida em execução → references/degradation.md (índice por sintoma)
+      Relatório final (FASE 4 passo 7) → references/final-report.md
+      Few-shot opcional → references/examples.md · Placeholders {{…}} → references/placeholders.md
+      Templates de sub-agente → prompts/*.md (SÓ no dispatch de cada papel)
+    </cargas-condicionais>
+    <indice-de-sintomas>
+      "pesquisa falhou / chave Brave / cota / exit 78" → references/research-protocol.md
+      "gate vermelho / conflito de merge / filha presa / sub-agente morreu" → references/degradation.md
+      "plano rejeitado / título derivou / Plannotator" → references/plan-approval.md
+      "o que faço AGORA? (re-ancoragem pós-compactação)" → "$DO_WT" checklist (cartão da onda)
+      "como relatar / o que não foi integrado" → references/final-report.md
+    </indice-de-sintomas>
+  </navigation>
+
   <workflow>
 
     <phase id="0" name="DELIMITAR-O-MUNDO" ref="references/phase0-context.md"/>
 
     <phase id="1" name="ANALYZE" ref="references/analyze-plan.md"/>
 
-    <phase id="2" name="PLAN" ref="references/execute-wave.md"/>
+    <phase id="2" name="PLAN" ref="references/analyze-plan.md"/>
 
     <phase id="2.5" name="APROVAR-O-PLANO" ref="references/plan-approval.md"/>
 
-    <phase id="3" name="EXECUTE-ONDA" ref="references/commit-final.md"/>
+    <phase id="3" name="EXECUTE-ONDA" ref="references/execute-wave.md"/>
 
-    <phase id="4" name="COMMIT-FINAL" ref="{DEST}"/>
+    <phase id="4" name="COMMIT-FINAL" ref="references/commit-final.md"/>
 
   </workflow>
 

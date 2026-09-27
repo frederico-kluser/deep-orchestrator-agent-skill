@@ -94,6 +94,13 @@ título. `check-plannotator.sh`: `0` disponível · `1` ausente · `2` erro.
 `do-prefs.sh`: `0/2/3` · `evolution-survey.sh`: `0/2` · `check-install.sh`:
 `0` completa · `1` incompleta · `2` erro.
 
+### 2.6 Política de retries (domínios distintos — NÃO são contradições)
+| Domínio | Teto | Onde |
+|---|---|---|
+| Re-delegação de sub-agente que falhou | **3 tentativas** | R2 + caso `subagent-failure` |
+| Fix de achado (revisão/gate vermelho) | **2 tentativas** | FASE 3 passos 6/7 + caso `gate-red` |
+| Re-rodada de subwave de validação | **2 tentativas** | FASE 4 passo 0 |
+
 ---
 
 ## 3. Marcadores de stdout (contrato de leitura do orquestrador)
@@ -198,6 +205,7 @@ references/phase0-context.md      # FASE 0 DELIMITAR-O-MUNDO (sempre)
 references/analyze-plan.md        # FASE 1 ANALYZE + FASE 2 PLAN (após FASE 0)
 references/execute-wave.md        # FASE 3 EXECUTE-ONDA (ao entrar na F3)
 references/commit-final.md        # FASE 4 COMMIT-FINAL (ao entrar na F4)
+references/placeholders.md        # tabela única dos {{…}} (sob consulta)
 # references/*.md restantes entram aqui à medida do split v4.2.0
 ```
 
