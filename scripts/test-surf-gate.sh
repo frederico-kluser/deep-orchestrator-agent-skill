@@ -769,7 +769,7 @@ else
 fi
 # B01: os números de passo do CARTÃO ("$DO_WT" checklist) são os MESMOS dos
 # <step order> da FASE 3 — re-ancorar pelo cartão não pode trocar "passo 7".
-steps3="$(awk '/<phase id="3"/{p=1} p && /<\/phase>/{p=0} p' "$SKILL_ALL" \
+steps3="$(awk '/<phase id="3"/{p=1; if ($0 ~ /\/>/) p=0; next} p && /<\/phase>/{p=0} p' "$SKILL_ALL" \
           | sed -nE 's/.*<step order="([0-9]+(\.[0-9]+)?)".*/\1/p')"
 cardnums() { # lê o cartão no stdin → números de passo (linha que COMEÇA com "N." / "N.N")
   sed -nE 's/^ {0,2}([0-9]+(\.[0-9]+)?)\.?[[:space:]].*/\1/p' | sort -t. -k1,1n -k2,2n -u

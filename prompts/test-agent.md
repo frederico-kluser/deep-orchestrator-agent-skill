@@ -1,6 +1,7 @@
 <!-- MÓDULO v4.2.0 · origem: SKILL.md <test-agent-template> (split progressive disclosure)
      carga: só sem no-test, no dispatch do agente de testes · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
-     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch -->
+     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch
+     MODELO (D-H): mimo-v2.6-pro (model: inherit) — PROIBIDO flash/downgrade -->
 
   <test-agent-template>
     <placeholders>NUNCA usado com <code>$DO_TEST_MODE=none</code> (no-test: o

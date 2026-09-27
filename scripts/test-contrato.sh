@@ -74,7 +74,7 @@ ok "dono funcional: 'MERGED-PARTIAL' no do-wt.sh (outcome)" "$(grep -qF 'MERGED-
 ok "dono funcional: '--boundary=' no do-context.sh" "$(grep -qF -- '--boundary=' "$DO_CTX"; echo $?)"
 
 section "CT5 — sequências de passos congeladas (ordem de ficheiro, sem sort)"
-steps3="$(awk '/<phase id="3"/{p=1} p && /<\/phase>/{p=0} p' "$SKILL_ALL" \
+steps3="$(awk '/<phase id="3"/{p=1; if ($0 ~ /\/>/) p=0; next} p && /<\/phase>/{p=0} p' "$SKILL_ALL" \
           | sed -nE 's/.*<step order="([0-9]+(\.[0-9]+)?)".*/\1/p' | tr '\n' ' ')"
 chk "FASE 3: 13 <step order> em ordem canónica" "$steps3" "0 1 2 3 3.5 4 4.5 5 6 7 8 9 10 "
 f4="$(bash "$DO_WT" checklist final 2>/dev/null \

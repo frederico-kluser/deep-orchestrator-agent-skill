@@ -194,6 +194,10 @@ references/plan-approval.md       # R10 + FASE 2.5 + casos plan-* + ex2 (SÓ pla
 references/degradation.md         # 8 casos de degradação (lookup em falha)
 references/final-report.md        # template do relatório final (FASE 4 passo 7)
 references/examples.md            # ex1 (opcional, few-shot)
+references/phase0-context.md      # FASE 0 DELIMITAR-O-MUNDO (sempre)
+references/analyze-plan.md        # FASE 1 ANALYZE + FASE 2 PLAN (após FASE 0)
+references/execute-wave.md        # FASE 3 EXECUTE-ONDA (ao entrar na F3)
+references/commit-final.md        # FASE 4 COMMIT-FINAL (ao entrar na F4)
 # references/*.md restantes entram aqui à medida do split v4.2.0
 ```
 

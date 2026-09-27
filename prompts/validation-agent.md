@@ -1,6 +1,7 @@
 <!-- MÓDULO v4.2.0 · origem: SKILL.md <validation-agent-template> (split progressive disclosure)
      carga: no dispatch do validador (roda nos 3 modos) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
-     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch -->
+     1 HOP: não referenciar outros módulos; templates carregam SÓ no dispatch
+     MODELO (D-H): mimo-v2.6-pro (model: inherit) — PROIBIDO flash/downgrade -->
 
   <validation-agent-template>
     <placeholders>Roda nos TRÊS modos de teste (no-test = não criar, e não

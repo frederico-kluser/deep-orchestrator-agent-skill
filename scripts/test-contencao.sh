@@ -1242,10 +1242,14 @@ chk "A54 o --e2e segue aceito (etapa roda e fecha)" "$rc54m/$(col test-onda54-ma
 chk "A54 o contador do e2e subiu com --e2e" "$(wc -l < "$LAB/a54-e2e-rodou" | tr -d ' ')" "2"
 
 echo "=== A55: cartões de passo — checklist (FASE 3) e checklist final (FASE 4) = <step order> do SKILL.md ==="
-sk55="$SKILL/SKILL.md"
-steps3=$(awk '/<phase id="3"/{p=1} p && /<\/phase>/{p=0} p' "$sk55" \
+# v4.2.0: os <step order> vivem nos módulos (lista canónica: CONTRATO.md §6).
+sk55="$(mktemp)"
+awk '/^## 6\./{s=1} s&&/^```/{f++; next} s&&f==1&&!/^#/&&NF{print}' "$SKILL/CONTRATO.md" 2>/dev/null \
+  | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//' \
+  | while IFS= read -r m; do [ -f "$SKILL/$m" ] && cat "$SKILL/$m"; done > "$sk55"
+steps3=$(awk '/<phase id="3"/{p=1; if ($0 ~ /\/>/) p=0; next} p && /<\/phase>/{p=0} p' "$sk55" \
          | sed -nE 's/.*<step order="([0-9]+(\.[0-9]+)?)".*/\1/p' | LC_ALL=C sort -u | LC_ALL=C sort -n | tr '\n' ' ')
-steps4=$(awk '/<phase id="4"/{p=1} p && /<\/phase>/{p=0} p' "$sk55" \
+steps4=$(awk '/<phase id="4"/{p=1; if ($0 ~ /\/>/) p=0; next} p && /<\/phase>/{p=0} p' "$sk55" \
          | sed -nE 's/.*<step order="([0-9]+(\.[0-9]+)?)".*/\1/p' | LC_ALL=C sort -u | LC_ALL=C sort -n | tr '\n' ' ')
 card55=$(env -i PATH="$PATH" bash "$WT" checklist 2>&1)
 fin55=$(env -i PATH="$PATH" bash "$WT" checklist final 2>&1)
@@ -1260,6 +1264,7 @@ chk "A55 cartão e checklist final <= 30 linhas" \
 q55=$(env -i PATH="$PATH" DO_QUESTION=1 bash "$WT" checklist 2>&1)
 chk "A55 DO_QUESTION=1 acrescenta a linha da rodada de pergunta (+1 linha, sem número de passo)" \
     "$(test "$(printf '%s\n' "$q55" | wc -l | tr -d ' ')" = $(( $(printf '%s\n' "$card55" | wc -l | tr -d ' ') + 1 )) && echo +1)/$(has "$q55" "do-question")" "+1/sim"
+rm -f "$sk55"
 
 echo "=== A56: gate sobre filha MERGED com snapshot LEGADO vivo → vira gate-pending (o vermelho não é mais ignorado) ==="
 newrun
