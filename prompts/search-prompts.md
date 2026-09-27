@@ -4,28 +4,27 @@
 > COMO as buscas são formuladas, refinadas e avaliadas — nunca como são
 > executadas.
 >
-> **A execução é 100% surf-agent-skill v9+, e nada mais.** Esta skill não tem
-> sistema de busca: `search.sh`, `search-parallel.sh`, `brave-search.sh`,
-> `check-search-credits.sh` e `check-brave-credits.sh` foram REMOVIDOS na
-> v4.0.0 (decisão D23). O backend é **Brave Search e só ele** — não há Tavily,
+> **A execução é 100% tavily-agent-skill v9+, e nada mais.** Esta skill não tem
+> sistema de busca próprio foi REMOVIDO na v4.0.0 (decisão D23). O backend é
+> **API Tavily e só ela** (via tavily-agent-skill, v6.0.0) — não há outro
 > Parallel, Wikipedia, DuckDuckGo, provedor de reserva nem tier sem chave.
 >
-> Binários: `surf-search-normal` (uma onda) · `surf-search-unlimit` (várias) ·
-> `surf-research-skill search|search-parallel` (cru, sem síntese).
+> Binários: `tavily.py` (uma onda) · `tavily.py search --depth advanced` (várias) ·
+> `tavily.py search|search-parallel` (cru, sem síntese).
 > `--sub-agents=N` (1..20) é o ÚNICO orçamento de simultaneidade, e vem
 > NEGOCIADO pelo orquestrador — é proibido aumentá-lo, e é proibido envolver a
-> chamada em `sleep`, jitter, backoff ou retry: o surf já ritma cada requisição
-> pelo limite real do plano Brave, num token bucket compartilhado por todos os
-> processos surf da máquina.
+> chamada em `sleep`, jitter, backoff ou retry: o tavily.py já gere a rotação
+> pelo limite real do pool Tavily, num token bucket compartilhado por todos os
+> processos de busca da máquina.
 >
 > Códigos de saída: **0** funcionou · **1** terminou com 0 fontes — são DUAS
-> causas OPOSTAS que só o `surf-gate.sh classify` separa (seção 4): `EMPTY`,
+> causas OPOSTAS que só o `tavily-gate.sh classify` separa (seção 4): `EMPTY`,
 > rodou e não achou (registre o vazio e siga; NUNCA troque de ferramenta), ou
 > `FAILED_QUOTA`/`FAILED_OTHER`, a pesquisa NÃO funcionou (cota, 429, billing,
 > todas as chaves falharam) — aí PARE e reporte · **2** o comando está errado
-> (corrija) · **78** não há chave Brave válida — é CONFIGURAÇÃO, retentar é
+> (corrija) · **78** não há chave Tavily válida — é CONFIGURAÇÃO, retentar é
 > inútil e não há de onde mais buscar: PARE e reporte · **143** o harness
-> matou a chamada por timeout (refaça com `surf-search-normal`).
+> matou a chamada por timeout (refaça com `tavily.py`).
 
 ## Filosofia de Busca para Dev
 
@@ -43,8 +42,8 @@ Diferente de busca genérica, busca para desenvolvimento precisa de:
 - **Consciência de frescor** (tecnologia de 2022 pode já estar obsoleta) — em
   software, obsoleto se mede em anos, às vezes meses (ecossistemas JS e de LLMs)
 
-Princípio extra, herdado do brief do surf (`--insights` de
-`surf-search-normal`/`surf-search-unlimit`): **estado o que julgo saber e busco o que o
+Princípio extra, herdado do brief estruturado da pesquisa (`--insights` de
+`tavily.py`/`tavily.py search --depth advanced`): **estado o que julgo saber e busco o que o
 FALSIFICARIA.** Uma busca que só confirma o que o agente já acredita não é
 pesquisa; é viés. Toda rodada de evolução deve incluir pelo menos uma query de
 falsificação quando existirem crenças prévias.
@@ -240,8 +239,8 @@ Princípios:
    falha; buscar cada critério separado funciona.
 3. **Convergência é alcançada, não presumida.** O loop só para por critério
    explícito (seção 2.3) ou esgotamento do orçamento de evoluções
-   (o loop é do surf: `--max-rounds N` em `surf-search-unlimit`, default 6,
-   teto 50; `surf-search-normal` é UMA onda por design).
+   (o loop multi-round é interno de `tavily.py search --depth advanced`,
+   teto 50; `tavily.py` é UMA onda por design).
 4. **Não redescobrir.** Ângulos já explorados ficam registrados (seção 5 —
    Handoff) para que as evoluções vão mais fundo em vez de re-buscar o mesmo
    fato; caminhos sem resultado viram "explorado, sem achado", nunca
@@ -401,9 +400,9 @@ mais de broadening (mais resultados para avaliar) do que de narrowing
    confiança ≥ Média (avaliadas na seção 2.4).
 2. **Rendimentos decrescentes:** 2 evoluções consecutivas não produziram
    ângulo novo (query evoluída devolveu URLs já vistos).
-3. **Orçamento esgotado:** em `surf-search-unlimit`, as ondas atingiram
-   `--max-rounds`; em `surf-search-normal` o critério é sempre "1 onda", e o
-   budget de tempo resolvido pelo próprio surf pode encerrá-la antes.
+3. **Orçamento esgotado:** em `tavily.py search --depth advanced`, as ondas atingiram
+   `--max-rounds`; em `tavily.py` o critério é sempre "1 onda", e o
+   budget de tempo resolvido pelo próprio tavily.py pode encerrá-la antes.
    Convergência forçada: relatar qualidade parcial.
 4. **Saturação:** novas buscas retornam apenas duplicatas deduplicáveis.
 
@@ -525,9 +524,9 @@ convergiu, retorne `"converged": true`, `"evolved_query": null` e
 ## 3. Prompts de Busca por Domínio
 
 Termos, fontes e armadilhas específicos por área. O domínio é escolhido
-pelo sub-agente ao formular as queries — `surf-search-normal` e
-`surf-search-unlimit` não têm flag de domínio (ver seção 4). O domínio tempera
-o BRIEF (`--task`/`--goal`/`--insights`/`--deliverable`) que o LLM do surf usa
+pelo sub-agente ao formular as queries — `tavily.py` e
+`tavily.py search --depth advanced` não têm flag de domínio (ver seção 4). O domínio tempera
+o BRIEF estruturado (`--task`/`--goal`/`--insights`/`--deliverable`) que a
 para planejar as queries, e a avaliação de qualidade (ex.: Freshness pesa mais
 em ML/AI que em security).
 
@@ -644,208 +643,55 @@ em ML/AI que em security).
 
 ---
 
-## 4. Integração com o surf (v8)
+## 4. Integração com a tavily-agent-skill (v6.0.0)
 
-> **Precedência:** este documento é a camada de ESTRATÉGIA (como formular e
-> avaliar). A execução é do surf, e o surf vence qualquer divergência: se o
-> `--help` de um binário contradisser esta seção, o binário está certo e este
-> documento deve ser corrigido na onda de skill-update.
+> **Backend único: API Tavily**, via `python3 <tavily-agent-skill>/scripts/tavily.py`.
+> Não há outro provedor, fallback nem caminho alternativo. A execução é do
+> `tavily.py`, e ele vence qualquer divergência (rotação de chaves, bans e
+> retentativas são internas dele).
 
-**Não existe verificação pré-onda de crédito.** O portão é o script
-`"$DO_SURF_GATE"` (`scripts/surf-gate.sh`, fail-closed) e é responsabilidade
-do ORQUESTRADOR (R7), não sua. Você recebe o veredito já resolvido em
-`{{SURF_STATUS}}` — se ele começa com "NÃO PESQUISE —" (ou se
-`{{SURF_SUB_AGENTS}}` veio como "0 — não pesquise"), não chame binário surf
-nenhum. O portão é grátis e só prova que existe chave VÁLIDA: ele **não
-enxerga cota**. Cota esgotada, 429 e billing só aparecem na hora da busca, e
-como exit **1** — por isso a detecção é reativa e passa por VOCÊ: classifique
-toda chamada (4.1) e reporte o `SEARCH_STATUS` (seção 5). A única verificação
-de crédito que existe é a sonda `"$DO_SURF_GATE" resume --probe` — UMA busca
-real, 1 crédito — e ela é do ORQUESTRADOR, só na retomada do protocolo
-PESQUISA-FALHOU, depois que o usuário disse que ajustou a chave ou a cota.
-Você nunca a roda.
+### 4.1 Chamadas canónicas
 
-### 4.1 Os três caminhos
-
-```bash
-# Uma pergunta que fecha numa rajada — o caminho padrão.
-surf-search-normal "<pergunta>" \
-  --task "<o que você está construindo>" \
-  --goal "<o que precisa saber>" \
-  --insights "<o que você já acredita — vai ser VERIFICADO, não assumido>" \
-  --deliverable "<formato exato da resposta>" \
-  --sub-agents={{SURF_SUB_AGENTS}}
-
-# Pergunta genuinamente aberta, que precisa DESCER em várias ondas.
-surf-search-unlimit "<pergunta>" --sub-agents={{SURF_SUB_AGENTS}} --max-depth 3
-
-# Lote de perguntas CRUAS e independentes, sem síntese. UMA vez, nunca em laço.
-surf-research-skill search-parallel "q1" "q2" "q3" \
-  --sub-agents={{SURF_SUB_AGENTS}} --json
-```
-
-O brief é o que transforma "me fale sobre X" numa resposta utilizável:
-`--insights` em particular é tratado como HIPÓTESE A FALSIFICAR, que é
-exatamente o princípio declarado na Filosofia de Busca acima.
-
-**Toda chamada é CLASSIFICADA** (regra 2 do template do sub-agente, bloco COMO
-RODAR): stdout e stderr vão para arquivo dentro da sua worktree e o veredito
-sai na MESMA chamada Bash — o exit code sozinho engana, porque cota esgotada,
-429 e billing saem **1**, igual a "não achei":
-
-```bash
-S="{{WORKTREE_PATH}}/.deep-orchestrator/surf"; mkdir -p "$S"
-surf-search-normal "<pergunta>" <flags> >"$S/q1.out" 2>"$S/q1.err"; rc=$?
-echo "EXIT=$rc"
-"{{SKILL_HOME}}/scripts/surf-gate.sh" classify "$rc" "$S/q1.out" "$S/q1.err"
-```
-
-| Classe | O que é | O que você faz |
-|---|---|---|
-| `OK` | exit 0, houve fontes | Cite as URLs que o surf devolveu. |
-| `EMPTY` | exit 1: a busca FUNCIONOU e veio vazia | Reformule UMA vez (mais ampla); se continuar vazio, registre "não encontrado", marque o fato NÃO VERIFICADO (motivo "busca vazia") e siga. |
-| `FAILED_QUOTA` | exit 1: 429, cota mensal esgotada, billing | **PESQUISA FALHOU** — pare de pesquisar, NÃO use WebSearch no lugar, termine só o que não depende do fato, commite o wip e reporte. |
-| `FAILED_OTHER` | exit 1: todas as chaves falharam sem 429, sem provedor, timeout do agente | idem `FAILED_QUOTA`. |
-| `BLOCKED_78` | exit 78: sem chave Brave válida (ausente, queimada, em cooldown, inválida, inalcançável) | idem `FAILED_QUOTA`. Retentar é inútil. |
-| `USAGE_2` | exit 2: comando errado | Corrija o comando. Não vira status. |
-| `KILLED_143` | exit 143: o harness matou por timeout | Refaça com `surf-search-normal`. Não vira status. |
-
-Em PESQUISA FALHOU você NÃO inventa o fato para "completar" a tarefa: chave e
-cota são ambiente do USUÁRIO, quem fala com ele é o orquestrador (protocolo
-PESQUISA-FALHOU), e você será re-disparado NA MESMA worktree quando a pesquisa
-voltar. `.deep-orchestrator/` da worktree é rascunho seu — nunca entra no
-commit.
-
-### 4.2 `--sub-agents` é o único botão, e ele vem negociado
-
-`--sub-agents=N` (1..20; fora disso o surf sai **2**) é ao mesmo tempo a
-largura da onda e a largura do pool de workers do surf — os dois nunca
-multiplicam. O orquestrador já dividiu o teto global entre os sub-agentes desta
-onda e colou o resultado em `{{SURF_SUB_AGENTS}}`.
-
-- **É PROIBIDO aumentá-lo.**
-- **É PROIBIDO** envolver a chamada em `sleep`, jitter, backoff ou retry. O
-  surf aprende o requests-per-second real do plano Brave nos headers da
-  resposta e o aplica num token bucket CROSS-PROCESS, compartilhado por todos
-  os processos surf da máquina. Um ritmo seu por cima briga com o limitador e
-  provoca justamente o 429 que ele evita.
-- Se o surf avisar que `--sub-agents` excede o que o plano serve, isso é
-  informação, não erro: a onda roda mesmo assim, enfileirada.
-
-### 4.3 O que o surf faz internamente (e você não precisa refazer)
-
-A "evolução de perguntas" das seções 2 e 2.5 deste documento agora acontece
-DENTRO do surf, e melhor: o LLM planeja um conjunto de queries priorizadas, e
-os follow-ups entram numa **fronteira de prioridade** como nós de árvore que
-sabem seu pai e sua profundidade (`--max-depth`). Ramos saturados fecham
-sozinhos; queries duplicadas são rejeitadas e REGISTRADAS. O ledger deduplica
-as fontes canonicamente por URL.
-
-As seções 2 e 3 continuam valendo para o que é SEU: escolher o ângulo, os
-termos do domínio e as fontes de que desconfiar — ou seja, escrever o brief.
-
-### 4.4 Flags que não existem
-
-`--count`, `--max-evolutions`, `--dev-mode` e `--domain` **não existem em
-binário nenhum do surf**. Equivalentes:
-
-| Queria | Use |
+| Caso | Comando |
 |---|---|
-| `--count N` | `--max N` (1..20) ou `--search-mode fast\|normal\|slow` (5/10/20) |
-| `--max-evolutions N` | `--max-rounds N` (só em `surf-search-unlimit`) |
-| `--dev-mode` | escreva no `--task`/`--goal` que o alvo é documentação técnica |
-| `--domain` | tempere o brief; a seção 3 é o insumo |
+| pergunta fechada | `tavily.py search "<pergunta>" --depth fast --max-results 8` |
+| pergunta que desce em ondas | `tavily.py search "<pergunta>" --depth advanced --max-results 10` |
+| lote cru, sem síntese | N chamadas `tavily.py search ... --json` em paralelo (≤ {{TAVILY_SUB_AGENTS}}) |
 
-`--freshness`, `--country`, `--search-lang`, `--offset`, `--result-filter` e
-`--timeout` **existem**, mas só em `surf-research-skill search` — o caminho
-cru, sem síntese. Não existem em `surf-search-normal`/`surf-search-unlimit`.
+`{{TAVILY_SUB_AGENTS}}` (1..20; fora disso o `do-context.sh` sai **2**) é o teto
+de chamadas de busca SIMULTÂNEAS do sub-agente — nunca o multiplique por
+`{{DO_MAX_PARALLEL}}`.
 
-### 4.5 Verbos removidos na v8 (saem 2)
+### 4.2 Disciplina (o que você NÃO precisa refazer)
 
-`extract` · `crawl` · `map` · `research` · `research-start` · `research-poll` ·
-`usage`.
+- PROIBIDO envolver chamadas em `sleep`, jitter, backoff ou retry: o `tavily.py`
+  já ritma cada requisição e gere o pool de chaves (round-robin + ban de 24 h)
+  num token bucket cross-processo. Um ritmo seu por cima briga com o limitador
+  e provoca os 429 que ele tenta evitar.
+- O orçamento de tempo é do próprio `tavily.py` (`--timeout`, `--max-wait`):
+  um budget de tempo resolvido por ele pode encerrar a chamada antes.
 
-A Brave `/web/search` devolve **título, URL e trecho — nunca o corpo da
-página**. Para LER uma página, abra com `Read`/`WebFetch` do seu harness uma
-URL **que o surf devolveu** e diga isso no handoff. Usar WebSearch (ou qualquer
-outro buscador) para DESCOBRIR fontes é proibido: fonte que não veio pelo surf
-não é citável.
+### 4.3 O que é interno do tavily.py (e você não precisa refazer)
 
-### 4.6 Da saída do surf para o handoff (seção 5)
+Planejamento de queries, rotação entre chaves, retentativas por falha
+(429/432/401/5xx), ban automático, deduplicação e síntese final (com
+`--depth advanced`) acontecem DENTRO do `tavily.py`. Você formula a pergunta
+com as secções 1–3 deste ficheiro e lê o resultado.
 
-`--json` devolve `plan`, `ledger`, `sources` e `diagnostics`;
-`--ledger` acrescenta a tabela de cobertura por query (com profundidade e nó
-pai) e a lista de candidatos que a fronteira recusou, com o motivo. Use
-`sources` para a seção "Resultados consolidados" e `ledger`/`plan` para
-"Ângulos explorados sem resultado" e "Lacunas restantes".
+### 4.4 O que o tavily.py devolve (e o que você faz com isso)
 
-## 5. Handoff de Pesquisa (formato)
+A API devolve **título, URL e trecho — nunca o corpo da página**. Para ler o
+corpo, abra a URL com Read/WebFetch. Cite sempre as URLs **que a busca
+devolveu** e diga isso no handoff. Usar WebSearch (ou qualquer outro buscador)
+para DESCOBRIR fontes é proibido: fonte que não veio pela busca não entra como
+evidência verificada.
 
-O formato do handoff é UM só: o do template do sub-agente (`SKILL.md`, FORMATO
-DE RESPOSTA). Ele ABRE com a seção `## SEARCH_STATUS` — é lá que mora o
-estado da pesquisa, não num bloco à parte. O orquestrador extrai a linha
-`SEARCH_STATUS:` de CADA handoff antes de revisar ou integrar (FASE 3, passo
-4.5 — TRIAGEM DE PESQUISA); handoff sem ela, numa sub-tarefa que exigia
-pesquisa, é tratado como pesquisa que FALHOU.
+### 4.5 Saída da busca para o handoff (seção 5)
 
-```markdown
-## SEARCH_STATUS
-SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78
-- Comandos surf rodados, com o exit code e o veredito do classify de cada um
-  [ou "nenhum"]
-- Linha de erro do surf, VERBATIM — nunca uma chave [só em FAILED_* / BLOCKED_78]
-- Fatos NÃO VERIFICADOS [lista, com o motivo: busca vazia | pesquisa falhou |
-  NÃO PESQUISE — ou "nenhum"]
-```
-
-A linha traz EXATAMENTE UM valor, e ele é o veredito do
-`surf-gate.sh classify` (4.1), nunca o exit code cru. Não pesquisou =
-`NOT_NEEDED`. Várias chamadas = reporte o PIOR resultado: `BLOCKED_78` >
-`FAILED_QUOTA` > `FAILED_OTHER` > `EMPTY` > `OK`. `USAGE_2` e `KILLED_143`
-você mesmo corrige — não são status.
-
-Quando a sub-tarefa É uma pesquisa, o corpo da busca entra DENTRO de
-`## O que fiz`, neste formato (as demais seções do handoff seguem o template):
-
-```markdown
-### Proveniência
-- Ferramenta: surf-search-normal | surf-search-unlimit | surf-research-skill search-parallel
-- --sub-agents usado: [o valor colado pelo orquestrador — nunca aumentado]
-- Toda URL abaixo veio do surf. Página aberta FORA do surf (Read/WebFetch),
-  se houver: [qual URL, e que ela foi devolvida pelo surf antes]
-
-### Query original
-[query inicial]
-
-### Evoluções aplicadas
-1. [query evoluída 1] — Narrowing: adicionado "TypeScript 5.6"
-2. [query evoluída 2] — Lateral: explorado "alternatives to X"
-
-### Resultados consolidados
-[resultados, deduplicados por URL, ranqueados por relevância]
-
-### Qualidade da busca
-- Precision: Alta
-- Diversity: 4 domínios
-- Freshness: 80% de 2025-2026
-- Authority: 60% fontes primárias
-
-### Confiança
-[Alta/Média/Baixa] — justificativa
-```
-
-Campos adicionais recomendados quando o loop não convergiu:
-
-```markdown
-### Lacunas restantes
-- [pergunta aberta que justificaria uma nova onda de evolução]
-
-### Ângulos explorados sem resultado
-- [caminho tentado e falho — marcado para NÃO ser re-buscado
-  (UNFILLABLE: motivo)]
-```
-
-O bloco "Evoluções aplicadas" é o rastro da seção 2 (estratégia usada +
-operação concreta), e "Ângulos explorados sem resultado" evita que o
-próximo round — ou o próximo sub-agente — re-descoberta o que já se sabe
-ser beco sem saída.
+- Linha canónica do handoff (byte-a-byte com CONTRATO.md §5):
+  SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_NOKEY
+- Classifique cada chamada com `"\$DO_TAVILY_GATE" classify <exit> <out> <err>`.
+- Comandos de busca rodados, com o exit code e o veredito do classify de cada um.
+- Linha de erro da busca, VERBATIM — nunca uma chave [só em FAILED_* / BLOCKED_NOKEY].
+- Toda URL abaixo veio da busca. Página aberta FORA da busca (Read/WebFetch),
+  se houver: [qual URL, e que ela foi devolvida pela busca antes].

@@ -110,7 +110,7 @@ elas; ignorá-las é responder metade do feedback.
 | No feedback | O que significa | O que fazer |
 |---|---|---|
 | `[🚫 Out of scope]` | "isso não é parte da tarefa" | **REMOVER** a sub-tarefa do plano — não reduzir, tirar. E remover a worktree batizada para ela. |
-| `[🔍 Verify this]` | "você assumiu isso" | Voltar ao código (`Read`/`Grep`) ou pesquisar — com o comando da seção 2.1, que CLASSIFICA o resultado — e trocar a premissa por fato **antes** de reescrever. `EMPTY` (a busca funcionou e veio vazia): premissa **NÃO VERIFICADA**, motivo "busca vazia", sem pergunta. `BLOCKED_78` (exit 78), `FAILED_QUOTA`, `FAILED_OTHER` ou binário ausente (127): execute o protocolo PESQUISA-FALHOU — NUNCA marque NÃO VERIFICADA por conta própria. |
+| `[🔍 Verify this]` | "você assumiu isso" | Voltar ao código (`Read`/`Grep`) ou pesquisar — com o comando da seção 2.1, que CLASSIFICA o resultado — e trocar a premissa por fato **antes** de reescrever. `EMPTY` (a busca funcionou e veio vazia): premissa **NÃO VERIFICADA**, motivo "busca vazia", sem pergunta. `BLOCKED_NOKEY` (exit 78), `FAILED_QUOTA`, `FAILED_OTHER` ou binário ausente (127): execute o protocolo PESQUISA-FALHOU — NUNCA marque NÃO VERIFICADA por conta própria. |
 | `[👍 Looks good]` | aprovação parcial | Não mexer nesse trecho. Mudá-lo mesmo assim custa uma rodada. |
 | `Remove this` | bloco a apagar | Apagar o trecho citado. |
 | `General feedback` | comentário global | Costuma ser sobre abordagem, não sobre um item — pode implicar redesenhar as ondas. |
@@ -122,21 +122,21 @@ aprova, lê-se como item ignorado — e vira mais uma rodada.
 
 ### 2.1 A busca do `[🔍 Verify this]` (mesma regra da FASE 2.5, passo 5)
 
-É o ÚNICO ponto do fluxo em que o ORQUESTRADOR roda uma busca surf ele mesmo
+É o ÚNICO ponto do fluxo em que o ORQUESTRADOR roda uma busca ele mesmo
 (fora a sonda `resume --probe` do protocolo PESQUISA-FALHOU). Aqui ele está
 sozinho, R=1, então fica com o teto inteiro de `--sub-agents`. O exit code cru
 engana — cota esgotada, 429 e billing saem **1**, igual a "não achei" —, por
 isso a saída vai para arquivo e é CLASSIFICADA na mesma chamada Bash:
 
 ```bash
-. '<ENV_FILE>'; surf-search-normal "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL" --sub-agents="${DO_SURF_SUB_AGENTS:-10}" > "$DO_STATE/verify.out" 2> "$DO_STATE/verify.err"; rc=$?; "$DO_SURF_GATE" classify "$rc" "$DO_STATE/verify.out" "$DO_STATE/verify.err"
+. '<ENV_FILE>'; tavily.py "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL" --sub-agents="${DO_TAVILY_SUB_AGENTS:-10}" > "$DO_STATE/verify.out" 2> "$DO_STATE/verify.err"; rc=$?; "$DO_TAVILY_GATE" classify "$rc" "$DO_STATE/verify.out" "$DO_STATE/verify.err"
 ```
 
 | Classe impressa | O que fazer |
 |---|---|
 | `OK` | Ler `$DO_STATE/verify.out` e trocar a premissa por FATO com URL. |
 | `EMPTY` (exit 1: a busca FUNCIONOU e veio vazia) | Manter a premissa marcada **NÃO VERIFICADA**, motivo "busca vazia". SEM pergunta. |
-| `BLOCKED_78` (exit 78) · `FAILED_QUOTA` · `FAILED_OTHER` (inclui o exit 127 do binário ausente) | O usuário PEDIU a verificação, logo a pesquisa é EXIGIDA: executar o protocolo **PESQUISA-FALHOU** (`SKILL.md`, logo após a R7; onda = 0; sub-tarefas bloqueadas = `"[Verify this] <premissa>"`) e NÃO abrir outro Plannotator antes da resposta. |
+| `BLOCKED_NOKEY` (exit 78) · `FAILED_QUOTA` · `FAILED_OTHER` (inclui o exit 127 do binário ausente) | O usuário PEDIU a verificação, logo a pesquisa é EXIGIDA: executar o protocolo **PESQUISA-FALHOU** (`SKILL.md`, logo após a R7; onda = 0; sub-tarefas bloqueadas = `"[Verify this] <premissa>"`) e NÃO abrir outro Plannotator antes da resposta. |
 | `USAGE_2` | O comando montado está errado: corrigir e rodar de novo. |
 | `KILLED_143` | Estourou o timeout do Bash: refazer com timeout maior. |
 
@@ -175,10 +175,10 @@ Faça, nesta ordem:
    (Reference Images / Attached images): leia a imagem com Read antes.
 2. Para cada [🔍 Verify this]: investigue de verdade (Read/Grep no repositório;
    se o código não responde, a busca CLASSIFICADA da FASE 2.5, passo 5:
-   `. '<ENV_FILE>'; surf-search-normal "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL" --sub-agents="${DO_SURF_SUB_AGENTS:-10}" > "$DO_STATE/verify.out" 2> "$DO_STATE/verify.err"; rc=$?; "$DO_SURF_GATE" classify "$rc" "$DO_STATE/verify.out" "$DO_STATE/verify.err"`)
+   `. '<ENV_FILE>'; tavily.py "<pergunta>" --insights "<a premissa>" --deliverable "fato + URL" --sub-agents="${DO_TAVILY_SUB_AGENTS:-10}" > "$DO_STATE/verify.out" 2> "$DO_STATE/verify.err"; rc=$?; "$DO_TAVILY_GATE" classify "$rc" "$DO_STATE/verify.out" "$DO_STATE/verify.err"`)
    e substitua a premissa por fato. Aja pela CLASSE impressa: OK = fato com
    URL. EMPTY (a busca funcionou e veio vazia) = mantenha a premissa marcada
-   **NÃO VERIFICADA**, motivo "busca vazia" — sem pergunta. BLOCKED_78 (exit
+   **NÃO VERIFICADA**, motivo "busca vazia" — sem pergunta. BLOCKED_NOKEY (exit
    78), FAILED_QUOTA ou FAILED_OTHER (inclui o 127 do binário ausente) = a
    verificação foi PEDIDA pelo usuário, logo a pesquisa é EXIGIDA: execute o
    protocolo PESQUISA-FALHOU e NÃO abra outro Plannotator antes da resposta.

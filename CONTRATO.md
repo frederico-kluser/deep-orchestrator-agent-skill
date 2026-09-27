@@ -1,7 +1,7 @@
-# CONTRATO.md — contratos de máquina do deep-orchestrator-agent-skill (v5.0.0)
+# CONTRATO.md — contratos de máquina do deep-orchestrator-agent-skill (v6.0.0)
 
 > **Fonte única de especificação dos contratos de máquina.** Os testes
-> (`scripts/test-contrato.sh`, mais G12/B01 do `test-surf-gate.sh`) exigem que
+> (`scripts/test-contrato.sh`, mais G12/B01 do `test-tavily-gate.sh`) exigem que
 > os donos reais (`scripts/*`, `SKILL.md` e módulos `references/`+`prompts/`)
 > contenham estes literais **byte-a-byte**. Mudou um lado? Muda o contrato e o
 > teste no MESMO commit. Nunca crie uma segunda casa para o que já está aqui.
@@ -20,7 +20,7 @@ Flag VENCE variável de ambiente; token ausente → env como fallback → defaul
 |---|---|---|---|
 | `plan=on\|off` | `DO_PLAN_APPROVAL` | off | — |
 | `max-parallel=N` | `DO_MAX_PARALLEL` | 50 | inteiro > 0 |
-| `surf-sub-agents=N` | `DO_SURF_SUB_AGENTS` | 10 | inteiro 1..20 |
+| `tavily-sub-agents=N` | `DO_TAVILY_SUB_AGENTS` | 10 | inteiro 1..20 |
 | `wt=<nome>` | `DO_WT_ROOT=1` + `DO_WT_NAME` | — | cria/reentra worktree irmã |
 | `no-stop` | `DO_NO_STOP=1` | — | — |
 | `no-evolve` | `DO_EVOLUTION_SURVEY=0` | — | — |
@@ -42,13 +42,13 @@ com sugestão; texto de tarefa → ignorado.
 - **`max-parallel=N`** é a flag ÚNICA de concorrência global: teto de
   sub-agentes *in-flight* por onda (features + subwaves + revisores + revisor de
   plano ≤ `DO_MAX_PARALLEL`).
-- **`surf-sub-agents=N`** é sub-flag da PESQUISA: teto global de buscas
+- **`tavily-sub-agents=N`** é sub-flag da PESQUISA: teto global de buscas
   simultâneas, dividido entre as sub-tarefas que pesquisam — **nunca**
   multiplicado por `DO_MAX_PARALLEL`.
 - **`no-subagent-limit`** remove o teto (`DO_MAX_PARALLEL=0`) — uso consciente:
   o paralelismo passa a ser limitado só pelo harness/API.
-- **TODOS os limites são flags (v5.0.0)**: `max-parallel`/`no-subagent-limit`
-  (sub-agentes), `surf-sub-agents` (buscas), `plan-revisions`, `plan-timeout`,
+- **TODOS os limites são flags (v6.0.0)**: `max-parallel`/`no-subagent-limit`
+  (sub-agentes), `tavily-sub-agents` (buscas), `plan-revisions`, `plan-timeout`,
   `retries` (re-delegação), `fix-retries` (fixes). Nenhum limite vive só em
   ambiente; ambiente é fallback.
 - Referência de dimensionamento (MiMo-V2.6): 100 RPM / 10M TPM por conta,
@@ -89,12 +89,17 @@ branch.
 | `checklist [final]` | 0; funciona SEM ENV_FILE (igual `--help`) |
 | `discard-state` | 0 sempre (veredito na mensagem): "ESTADO DESCARTADO" ou "DESCARTE RECUSADO …" |
 
-### 2.3 `surf-gate.sh`
-`gate` **SEMPRE exit 0** — o veredito vem na linha `SURF_GATE=<0|78|127>`
-(fail-closed: qualquer exit ≠ 0 do binário do portão → 78).
-`classify` → `OK|EMPTY|FAILED_QUOTA|FAILED_OTHER|BLOCKED_78|KILLED_143|USAGE_2`.
+### 2.3 `tavily-gate.sh`
+`gate` **SEMPRE exit 0** — o veredito vem na linha `TAVILY_GATE=<0|78|127>`
+(fail-closed: 127 = skill ausente; 78 = sem chave ativa/erro; 0 = ≥1 chave ativa).
+`premise` (v6.0.0 — a PREMISSA de trabalho): skill presente + chave registrada +
+chave VÁLIDA ao vivo (`status --check`, sem créditos). Imprime
+`TAVILY_PREMISE=ok|skill-missing|key-missing|key-invalid|unknown` + `NEXT=…`.
+Não-ok → o orquestrador NÃO inicia: PEDE UMA CHAVE AO USUÁRIO (bloco
+PREMISSA-KEY) e só segue após `keys add` + `premise` ok.
+`classify` → `OK|EMPTY|FAILED_QUOTA|FAILED_OTHER|BLOCKED_NOKEY|KILLED_143|USAGE_2`.
 `resume [--probe]` → `RESUME=OK|STILL_BLOCKED`.
-`choose no-search|search` → grava `search-mode` (`SURF_MODE=no-search`).
+`choose no-search|search` → grava `search-mode` (`SEARCH_MODE=no-search`).
 `pause` → grava `$DO_STATE/search-pause.md` + imprime o bloco da pergunta (§5).
 
 ### 2.4 Portão do plano
@@ -125,9 +130,10 @@ título. `check-plannotator.sh`: `0` disponível · `1` ausente · `2` erro.
 | `PURGE: NUNCA INTEGRADAS / PARCIAIS` | `do-wt.sh purge` (rc 3) | bloco obrigatório no relatório final |
 | `ASSERT-CLEAN OK` / `ASSERT-CLEAN FALHOU` | `do-wt.sh assert-clean` | portão inter-onda |
 | `RESUMO:` (tabela do ledger) | `do-wt.sh ledger` | fonte da seção "## Não integrado" |
-| `SURF_GATE=<rc>` [`SURF_CODE=<code>`] | `surf-gate.sh gate` | veredito fail-closed |
-| `RESUME=OK\|STILL_BLOCKED` | `surf-gate.sh resume` | retomada da pesquisa |
-| `SURF_MODE=no-search` | `surf-gate.sh choose` | modo sem pesquisa escolhido |
+| `TAVILY_GATE=<rc>` [`TAVILY_CODE=<code>`] | `tavily-gate.sh gate` | veredito fail-closed |
+| `RESUME=OK\|STILL_BLOCKED` | `tavily-gate.sh resume` | retomada da pesquisa |
+| `SEARCH_MODE=no-search` | `tavily-gate.sh choose` | modo sem pesquisa escolhido |
+| `TAVILY_PREMISE=<estado>` | `tavily-gate.sh premise` | premissa de trabalho (key validada?) |
 | ÚLTIMA linha de stdout = caminho do ENV_FILE | `do-context.sh` | contrato de captura |
 | `ESTADO DESCARTADO` / `DESCARTE RECUSADO …` | `do-wt.sh discard-state` | descarte do estado (FASE 4 passo 8) |
 
@@ -139,8 +145,8 @@ título. `check-plannotator.sh`: `0` disponível · `1` ausente · `2` erro.
 Linhas `VAR='valor'` + funções `gwt`/`gch`/`gstatus`/`gassert` embutidas.
 Anti-stale: o trio `DO_STATE = $DO_HOME/run-$RUN_ID` identifica a execução;
 ENV_FILE de outra execução é rejeitado. Carrega ≥35 variáveis (RUN_ID, DO_STATE,
-DO_WT, DO_SURF_GATE, DO_PLAN_APPROVAL_SH, DO_PREFS, DO_SURVEY, DO_TEST_MODE,
-DO_QUESTION, DO_SURF_SUB_AGENTS, DO_MAX_PARALLEL, ...).
+DO_WT, DO_TAVILY_GATE, DO_PLAN_APPROVAL_SH, DO_PREFS, DO_SURVEY, DO_TEST_MODE,
+DO_QUESTION, DO_TAVILY_SUB_AGENTS, DO_MAX_PARALLEL, ...).
 
 ### 4.2 `owned.tsv` — 11 colunas TSV (fonte ÚNICA de alvos; nunca varredura)
 `1 run_id · 2 kind · 3 name · 4 branch · 5 path · 6 base_sha · 7 pre_merge_sha ·
@@ -151,7 +157,7 @@ NEVER-MERGED:<motivo>`. Serialização por lock (`flock` ou `mkdir` — macOS).
 
 ### 4.3 Layout de `$DO_STATE`
 `gate/<etapa>.cmd` · `gates/<nome>.log|.rc|.tip` · `squashes/<nome>` ·
-`partial/<nome>` · `search-mode` · `search-pause.md` · `surf-gate.last` ·
+`partial/<nome>` · `search-mode` · `search-pause.md` · `tavily-gate.last` ·
 `plan-approval/rev-NNN.md` + `trail.tsv` · `question/pendente.md` ·
 `evolution/` · `env`.
 
@@ -161,8 +167,8 @@ NEVER-MERGED:<motivo>`. Serialização por lock (`flock` ou `mkdir` — macOS).
 
 | Literal | Dono funcional | Vistas que têm de casar |
 |---|---|---|
-| `SEARCH_STATUS: NOT_NEEDED \| OK \| EMPTY \| FAILED_QUOTA \| FAILED_OTHER \| BLOCKED_78` | handoff do sub-agente | SKILL.md/módulos + `prompts/search-prompts.md` |
-| Bloco da pergunta PESQUISA-FALHOU (título `===== PESQUISA-FALHOU — …`, opções `  [1]`–`  [4]`, adendos `Rode os comandos…` / `Outros: remover chave morta…`) | `surf-gate.sh print_question` | protocolo em `references/research-protocol.md` |
+| `SEARCH_STATUS: NOT_NEEDED \| OK \| EMPTY \| FAILED_QUOTA \| FAILED_OTHER \| BLOCKED_NOKEY` | handoff do sub-agente | SKILL.md/módulos + `prompts/search-prompts.md` |
+| Bloco da pergunta PESQUISA-FALHOU (título `===== PESQUISA-FALHOU — …`, opções `  [1]`–`  [4]`, adendos `Rode os comandos…` / `Outros: remover chave morta…`) | `tavily-gate.sh print_question` | protocolo em `references/research-protocol.md` |
 | `PURGE_RC` | SKILL.md/módulos | cartão da FASE 4 |
 | `## Não integrado` | template do relatório final | `references/final-report.md` |
 | `Tarefa concluída PARCIALMENTE` | template do relatório final | `references/final-report.md` |
@@ -175,24 +181,23 @@ NEVER-MERGED:<motivo>`. Serialização por lock (`flock` ou `mkdir` — macOS).
 ### 5.0 Linha SEARCH_STATUS (verbatim — byte-a-byte; os `\|` da tabela acima são só escapagem de renderização)
 
 ```
-SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78
+SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_NOKEY
 ```
 
 ### 5.1 Bloco da pergunta PESQUISA-FALHOU (verbatim)
 
-Gerado por `surf-gate.sh print_question` (dono funcional). O protocolo em
+Gerado por `tavily-gate.sh print_question` (dono funcional). O protocolo em
 `references/research-protocol.md` (hoje, o CDATA `question-text` do SKILL.md)
 tem de conter estas linhas byte-a-byte:
 
 ```
 ===== PESQUISA-FALHOU — a pesquisa exigida não pôde ser feita; a decisão é SUA =====
-  [1] Adicionei/troquei a chave Brave — tente de novo  (`surf-research-skill keys add --provider brave <CHAVE>` | terminal separado: `surf add`)
-  [2] Ajustei o plano/cota ou esperei o cooldown — tente de novo  (`surf-research-skill keys reset --provider brave` limpa burn/cooldown em cache)
+  [1] Registrei uma chave Tavily nova — tente de novo  (`python3 <tavily-agent-skill>/scripts/tavily.py keys add "<CHAVE>" --label conta-N`)
+  [2] Readmiti/recarreguei as chaves ou esperei o cooldown — tente de novo  (`tavily.py keys unban --all` | `tavily.py status --check`)
   [3] Seguir SEM pesquisa — premissas ficam marcadas NÃO VERIFICADAS no plano, handoffs e relatório
   [4] Abortar — fecho o que está aberto (purge) e entrego relatório parcial
-Rode os comandos no SEU terminal e NÃO cole a chave no chat (iria para o transcript). `surf` e `surf add` exigem TTY.
-Outros: remover chave morta `surf remove brave <i>` · revalidar `surf validate brave` · painel de cota https://api-dashboard.search.brave.com
-```
+Rode os comandos no SEU terminal e NÃO cole a chave no chat (iria para o transcript). `keys add` exige TTY.
+Outros: remover chave morta `tavily.py keys remove <seletor>` · ver o pool `tavily.py status` · próxima da rotação `tavily.py keys next````
 
 ---
 
@@ -203,7 +208,7 @@ de qualquer extração — os testes G12/B01 resolvem o conteúdo através dela)
 
 ```
 .claude/skills/deep-orchestrator-agent-skill/SKILL.md   # router (sempre)
-references/research-protocol.md   # R7 + PESQUISA-FALHOU + casos surf (SEARCH_REQUIRED / SURF_GATE != 0)
+references/research-protocol.md   # R7 + PESQUISA-FALHOU + casos de pesquisa (SEARCH_REQUIRED / TAVILY_GATE != 0)
 prompts/subagent-prompt.md        # template feature/fix/prep (dispatch)
 prompts/adversarial-review.md     # revisor adversarial (FASE 3 passo 6)
 prompts/test-agent.md             # agente de testes (sem no-test)
@@ -219,7 +224,7 @@ references/analyze-plan.md        # FASE 1 ANALYZE + FASE 2 PLAN (após FASE 0)
 references/execute-wave.md        # FASE 3 EXECUTE-ONDA (ao entrar na F3)
 references/commit-final.md        # FASE 4 COMMIT-FINAL (ao entrar na F4)
 references/placeholders.md        # tabela única dos {{…}} (sob consulta)
-# references/*.md restantes entram aqui à medida do split v5.0.0
+# references/*.md restantes entram aqui à medida do split v6.0.0
 ```
 
 NOTA: os módulos `prompts/ecc-*.md`, `prompts/search-prompts.md`,

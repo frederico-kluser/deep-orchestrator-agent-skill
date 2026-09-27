@@ -1,4 +1,4 @@
-<!-- MÓDULO v5.0.0 · origem: SKILL.md <phase 3 EXECUTE-ONDA> (split progressive disclosure)
+<!-- MÓDULO v6.0.0 · origem: SKILL.md <phase 3 EXECUTE-ONDA> (split progressive disclosure)
      carga: ao ENTRAR na FASE 3 (antes do passo 0) · conteúdo byte-a-byte com a origem (CONTRATO.md §5),
      salvo as correções D-H (modelo único mimo-v2.6-pro, sem tiering) -->
 
@@ -24,25 +24,25 @@
         Termina quando o REVISOR DE PLANO declara CONVERGÊNCIA ou uma válvula
         a força.</repeat>
       <steps>
-        <step order="0"><strong>RE-ANCORAGEM + PORTÃO DA SURF (R7) — antes de
+        <step order="0"><strong>RE-ANCORAGEM + PORTÃO DA PESQUISA (R7) — antes de
           criar qualquer worktree da onda:</strong>
           <cmd>. '&lt;ENV_FILE&gt;'; "$DO_WT" checklist; "$DO_WT" status</cmd>
           (o CARTÃO DA ONDA e o ledger: siga-os, nunca a memória) e
-          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURF_GATE"</cmd>
-          O veredito é a linha <code>SURF_GATE=&lt;0|78|127&gt;</code> (+
-          <code>SURF_MODE=no-search</code> quando o usuário escolheu [3]):
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_TAVILY_GATE"</cmd>
+          O veredito é a linha <code>TAVILY_GATE=&lt;0|78|127&gt;</code> (+
+          <code>SEARCH_MODE=no-search</code> quando o usuário escolheu [3]):
           <substeps>
-            <substep><code>SURF_MODE=no-search</code> (confira ANTES dos
-              demais) → NÃO pause por g1–g3 nesta execução: {{SURF_STATUS}} =
+            <substep><code>SEARCH_MODE=no-search</code> (confira ANTES dos
+              demais) → NÃO pause por g1–g3 nesta execução: {{SEARCH_STATUS}} =
               "NÃO PESQUISE — usuário autorizou seguir sem busca" em TODOS os
               prompts (passo 3) e prossiga.</substep>
-            <substep><code>SURF_GATE=0</code> → prossiga.</substep>
+            <substep><code>TAVILY_GATE=0</code> → prossiga.</substep>
             <substep><code>78|127</code> E há sub-tarefa PENDENTE (desta onda
               ou futuras) com SEARCH_REQUIRED=sim → NÃO crie worktree nem
               dispare pesquisadora: protocolo PESQUISA-FALHOU (g1; &lt;onda&gt;
               = N). O passo A do protocolo AQUI é concluir ANTES o passo 3.5
               (subwaves da onda N-1 em voo) — nunca pause com filha integrada
-              por limpar. Com <code>SURF_CODE=BraveKeyCooling</code> vale a
+              por limpar. Com <code>TAVILY_CODE=TavilyAllBanned</code> vale a
               regra &lt;cooling&gt;: crie e dispare SÓ as SEARCH_REQUIRED=nao,
               processe o 3.5 e rerode o portão (até 3x, sem sleep) antes de
               criar as pesquisadoras; persistiu → protocolo.</substep>
@@ -53,7 +53,7 @@
           </substeps>
           Repete-se por onda porque a chave pode queimar ou entrar em cooldown
           no meio da execução, e o REPLAN pode introduzir pesquisa; é também
-          onde {{SURF_SUB_AGENTS}} é recalculado para o R desta onda.</step>
+          onde {{TAVILY_SUB_AGENTS}} é recalculado para o R desta onda.</step>
         <step order="1"><strong>COMMIT PREP (se necessário):</strong> onda com
           recursos compartilhados (singletons) → commit preparatório com
           stubs/contratos ANTES das worktrees, escrito via Bash em $BASE_DIR e
@@ -82,14 +82,14 @@
           eles — mitiga 429; a barreira do passo 4 continua esperando TODOS):
           <field name="prompt">o TEMPLATE DE PROMPT com TODOS os placeholders
             preenchidos com valores LITERAIS: {{WORKTREE_PATH}}, {{BRANCH_NAME}},
-            {{BASE_DIR}}, {{BASE_BRANCH}}, {{SKILL_HOME}}; {{SURF_SUB_AGENTS}}
+            {{BASE_DIR}}, {{BASE_BRANCH}}, {{SKILL_HOME}}; {{TAVILY_SUB_AGENTS}}
             (o inteiro max(1, floor(N/R)) desta onda, nunca expressão;
             SEARCH_REQUIRED=nao — e TODAS quando R=0 — recebem "0 — não
-            pesquise"); {{SURF_STATUS}} — UM de: "pesquisa disponível" ·
+            pesquise"); {{SEARCH_STATUS}} — UM de: "pesquisa disponível" ·
             "pesquisa disponível sem síntese — sem chave OpenRouter" · "NÃO
             PESQUISE — usuário autorizou seguir sem busca" (OBRIGATÓRIO em
-            todos os prompts com SURF_MODE=no-search: o sub-agente não chama
-            binário surf e devolve cada premissa externa NÃO VERIFICADA) ·
+            todos os prompts com SEARCH_MODE=no-search: o sub-agente não chama
+            binária busca e devolve cada premissa externa NÃO VERIFICADA) ·
             "NÃO PESQUISE — pesquisa indisponível e esta sub-tarefa não a
             exige" (portão != 0 e SEARCH_REQUIRED=nao); {{TEST_POLICY}} (texto
             FIXO do modo em vigor, FASE 2 passo 4.5 — em TODO agente que
@@ -191,8 +191,8 @@
         <step order="4.5"><strong>TRIAGEM DE PESQUISA — entre a barreira e o
           REPLAN, ANTES de revisar ou integrar:</strong> todo handoff abre com
           <code>## SEARCH_STATUS</code> e a linha
-          <code>SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78</code>
-          (+ comandos surf/exit codes, erro VERBATIM, fatos NÃO VERIFICADOS).
+          <code>SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_NOKEY</code>
+          (+ comandos de busca/exit codes, erro VERBATIM, fatos NÃO VERIFICADOS).
           Falha de pesquisa NÃO é premissa a inferir:
           <substeps>
             <substep>EXTRAIA a linha de CADA handoff. Seção ausente numa
@@ -204,9 +204,9 @@
             <substep><code>OK</code> | <code>NOT_NEEDED</code> → fluxo normal.
               <code>EMPTY</code> → fato NÃO VERIFICADO ("busca vazia"), fluxo
               normal, SEM pergunta; ≥ 2 EMPTY na onda → g3:
-              <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURF_GATE" resume --probe</cmd>
+              <cmd>. '&lt;ENV_FILE&gt;'; "$DO_TAVILY_GATE" resume --probe</cmd>
               (RESUME=OK → vazios reais, siga; STILL_BLOCKED → protocolo).</substep>
-            <substep><code>BLOCKED_78</code> | <code>FAILED_*</code> → g2: a
+            <substep><code>BLOCKED_NOKEY</code> | <code>FAILED_*</code> → g2: a
               sub-tarefa fica ACTIVE (fora dos passos 6–7; não é
               subagent-failure nem vira BLOCKED). UNKNOWN → 1 re-disparo NA
               MESMA worktree exigindo a seção; voltou sem ela →
@@ -216,8 +216,8 @@
               e concluir o 3.5; só então B–D. O passo 8 roda DEPOIS da
               retomada (E) — até lá o sweep acusa a bloqueada como "ACTIVE —
               NÃO INTEGRADA", estado correto de onda pausada.</substep>
-            <substep>Sob <code>SURF_MODE=no-search</code>: NÃO pause; handoff
-              FAILED_*/BLOCKED_78 → re-delegue NA MESMA worktree com "NÃO
+            <substep>Sob <code>SEARCH_MODE=no-search</code>: NÃO pause; handoff
+              FAILED_*/BLOCKED_NOKEY → re-delegue NA MESMA worktree com "NÃO
               PESQUISE", NUNCA integre o parcial; cada fato sai NÃO VERIFICADO
               no handoff e no relatório.</substep>
           </substeps></step>

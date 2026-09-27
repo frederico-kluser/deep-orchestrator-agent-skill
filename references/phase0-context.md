@@ -1,4 +1,4 @@
-<!-- MÓDULO v5.0.0 · origem: SKILL.md <phase 0 DELIMITAR-O-MUNDO> (split progressive disclosure)
+<!-- MÓDULO v6.0.0 · origem: SKILL.md <phase 0 DELIMITAR-O-MUNDO> (split progressive disclosure)
      carga: SEMPRE, primeiro passo · conteúdo byte-a-byte com a origem (CONTRATO.md §5),
      salvo as correções D-H (modelo único mimo-v2.6-pro, sem tiering) -->
 
@@ -91,13 +91,13 @@
               de in-flight por onda (FASE 2 passo 3). Inteiro positivo.
               <code>no-subagent-limit</code> → DO_MAX_PARALLEL=0 = SEM teto
               (contradiz max-parallel=N → exit 2).</substep>
-            <substep>LIMITES (todos configuráveis por flag — v5.0.0):
+            <substep>LIMITES (todos configuráveis por flag — v6.0.0):
               <code>plan-revisions=N</code> → DO_PLAN_MAX_REVISIONS (5);
               <code>plan-timeout=S</code> → DO_PLAN_TIMEOUT (3600 s);
               <code>retries=N</code> → DO_DELEGATE_RETRIES (3; 0 = sem
               re-delegação); <code>fix-retries=N</code> → DO_FIX_RETRIES (2;
               0 = sem retry de fix).</substep>
-            <substep><code>surf-sub-agents=N</code> → DO_SURF_SUB_AGENTS → 10
+            <substep><code>tavily-sub-agents=N</code> → DO_TAVILY_SUB_AGENTS → 10
               (1..20) → teto GLOBAL de buscas simultâneas, DIVIDIDO entre as
               sub-tarefas que pesquisam (FASE 2 passo 3) — nunca multiplicado
               por DO_MAX_PARALLEL.</substep>
@@ -203,7 +203,7 @@
               igual, MAIN_ROOT vazio.</substep>
             <substep><strong>CONFERÊNCIA OBRIGATÓRIA:</strong> as linhas
               <code>TEST_MODE</code>, <code>QUESTION</code>, NO_STOP,
-              EVOLUTION, PLAN_APPROVAL, DO_MAX_PARALLEL, SURF_SUB_AGENTS e
+              EVOLUTION, PLAN_APPROVAL, DO_MAX_PARALLEL, TAVILY_SUB_AGENTS e
               WT_ROOT do resumo batem com o que o USUÁRIO DIGITOU? Divergiu →
               o comando foi montado errado: rode o MESMO comando do passo 3
               corrigido, SEM <code>--new-run</code>, e apague o
@@ -240,26 +240,26 @@
           worktrees de terceiros (NUNCA tocadas). Com wt=: a irmã
           <code>&lt;repo&gt;.worktrees/&lt;nome&gt;</code> é a RAIZ-DE-MUNDO e
           MAIN_ROOT é ZONA PROIBIDA.</step>
-        <step order="6"><strong>DEPENDÊNCIA OBRIGATÓRIA — SURF-AGENT-SKILL v9+
+        <step order="6"><strong>DEPENDÊNCIA OBRIGATÓRIA — TAVILY-AGENT-SKILL v9+
           (R7) — AQUI só REGISTRA:</strong>
-          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURF_GATE"</cmd>
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_TAVILY_GATE"</cmd>
           e, só para os blocos de diagnóstico (o exit do doctor NÃO é
-          interpretado; o veredito é a linha <code>SURF_GATE=</code>):
-          <cmd>. '&lt;ENV_FILE&gt;'; command -v surf-search-normal || echo "SURF_AUSENTE"; surf doctor || true</cmd>
-          Registre no TASK_PLAN.md: binário, SURF_GATE, SURF_CODE, a mensagem
-          do portão VERBATIM e os blocos "## Brave key gate" e "## surf-ai".
-          SURF_GATE=0 → pesquisa disponível. 78/127 → REGISTRE e PROSSIGA: sem
+          interpretado; o veredito é a linha <code>TAVILY_GATE=</code>):
+          <cmd>. '&lt;ENV_FILE&gt;'; command -v tavily.py || echo "TAVILY_AUSENTE"; tavily.py status || true</cmd>
+          Registre no TASK_PLAN.md: binário, TAVILY_GATE, TAVILY_CODE, a mensagem
+          do portão VERBATIM e os o bloco de estado `tavily.py status`.
+          TAVILY_GATE=0 → pesquisa disponível. 78/127 → REGISTRE e PROSSIGA: sem
           plano não há como saber se alguma sub-tarefa exige pesquisa — a
           decisão é do PORTÃO PÓS-PLANO (FASE 2 passo 9), o ÚNICO ponto de
           decisão antes da FASE 3, e depois do passo 0 de CADA onda (inclusive
-          sub-tarefa nascida de REPLAN). "## surf-ai" sem chave OpenRouter →
+          sub-tarefa nascida de REPLAN). O relatório de estado sem chave ativa →
           buscas reais sem síntese: registre "pesquisa sem síntese" e siga (não
-          é R7). PROIBIDO instalar a surf você mesmo (R9): quem instala é o
+          é R7). PROIBIDO instalar a tavily-agent-skill você mesmo (R9): quem instala é o
           USUÁRIO, pela pergunta do protocolo.</step>
       </steps>
       <output>Estados pendentes resolvidos; ENV_FILE com as flags VALIDADAS
         pelo script e conferidas no resumo; execuções órfãs purgadas;
-        fronteira conhecida; portão da surf registrado; baselines de contenção
+        fronteira conhecida; portão de pesquisa registrado; baselines de contenção
         (sujeira do usuário, config local, HEAD e status do checkout principal)
         capturados para a prova ao fim de cada onda.</output>
     </phase>

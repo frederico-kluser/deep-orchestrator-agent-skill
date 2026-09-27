@@ -34,9 +34,9 @@ O deep-orchestrator-agent-skill (v3.1.0) já entrega o pacote raro de **worktree
 
 ## D2 — Busca multi-provider: Adapter + RRF + circuit breaker + cache
 
-- **Decisão:** Generalizar a busca interna atual (que hoje é Brave-only em `scripts/brave-search.sh`) para um Adapter pattern com Tavily, Brave e Exa, fusão por **Reciprocal Rank Fusion (RRF k=60)**, circuit breaker por provider e cache de 24h para dev. **Não fixar provider primário em código** — a primária sai de benchmark próprio com queries do domínio dev.
-- **Evidência:** AIMultiple: Brave 14.89 > Exa 14.39 > Tavily 13.67 [3]; Tavily é RAG-native com SimpleQA 93,3% mas foi adquirida pela Nebius ($275M, fev/2026) — free tier 1K/mês sob risco [2]; Exa é a mais rápida (<425ms) com MCP server oficial [4]. Custo alvo: $0-30/mês para uso dev (10-100 queries/dia) [19].
-- **Ação concreta:** extrair interface `search-provider` (search + credits-check) de `brave-search.sh`; adapters Tavily/Exa; fusão RRF k=60; cache 24h; harness de benchmark (`bench/query-set-dev.yaml` com ~50 queries de dev) rodado trimestralmente; generalizar `check-brave-credits.sh` para credits-check multi-provider; **correção de informação (aplicada em 2026-08-14, migração F4-05):** a Brave é METERED — o "plano gratuito ~$5/mês" (afirmação que o README do repo ainda carrega, hoje na linha 111) foi encerrado em fev/2026, e o uso que excede a cota gratuita gera cobrança real (pay-as-you-go) [3].
+- **Decisão:** Generalizar a busca interna atual (que hoje é o provedor de busca removido-only em `scripts/o provedor de busca removido-search.sh`) para um Adapter pattern com Tavily, o provedor de busca removido e Exa, fusão por **Reciprocal Rank Fusion (RRF k=60)**, circuit breaker por provider e cache de 24h para dev. **Não fixar provider primário em código** — a primária sai de benchmark próprio com queries do domínio dev.
+- **Evidência:** AIMultiple: o provedor de busca removido 14.89 > Exa 14.39 > Tavily 13.67 [3]; Tavily é RAG-native com SimpleQA 93,3% mas foi adquirida pela Nebius ($275M, fev/2026) — free tier 1K/mês sob risco [2]; Exa é a mais rápida (<425ms) com MCP server oficial [4]. Custo alvo: $0-30/mês para uso dev (10-100 queries/dia) [19].
+- **Ação concreta:** extrair interface `search-provider` (search + credits-check) de `o provedor de busca removido-search.sh`; adapters Tavily/Exa; fusão RRF k=60; cache 24h; harness de benchmark (`bench/query-set-dev.yaml` com ~50 queries de dev) rodado trimestralmente; generalizar `check-o provedor de busca removido-credits.sh` para credits-check multi-provider; **correção de informação (aplicada em 2026-08-14, migração F4-05):** a o provedor de busca removido é METERED — o "plano gratuito ~$5/mês" (afirmação que o README do repo ainda carrega, hoje na linha 111) foi encerrado em fev/2026, e o uso que excede a cota gratuita gera cobrança real (pay-as-you-go) [3].
 - **Esforço:** 2-4 dias (médio).
 - **Timeline:** **v3.2** — junto com D1 (compartilham circuit breaker e métricas).
 
@@ -110,11 +110,11 @@ O deep-orchestrator-agent-skill (v3.1.0) já entrega o pacote raro de **worktree
 | Risco | Trigger / métrica | Mitigação | Frequência |
 |-------|-------------------|-----------|------------|
 | Volatilidade DeepSeek (preços/modelos) | V4-Flash a 1/90 do preço; preços e benchmarks mudam rápido [5] | Router 100% externalizado em config (D1); alerta se fallback rate L1 > 20% ou custo/onda sobe >30% | Mensal |
-| Tavily pós-aquisição Nebius | Free tier 1K/mês sob risco; Brave já matou o free tier em fev/2026 [2][3] | Adapter multi-provider (D2) torna a troca uma mudança de config; benchmark trimestral | Trimestral (benchmark) |
+| Tavily pós-aquisição Nebius | Free tier 1K/mês sob risco; o provedor de busca removido já matou o free tier em fev/2026 [2][3] | Adapter multi-provider (D2) torna a troca uma mudança de config; benchmark trimestral | Trimestral (benchmark) |
 | Qwen3-Coder indisponível | Uptime ~72,4%, erro tool-call ~2,63%, latência ~20,9s [7] | Fallback L1→L2→L3 **obrigatório** e testado; métricas de disponibilidade por provider | Contínuo (automatizado) |
 | Fragmentação SKILL.md/AGENTS.md | 7/20 skills com problemas de portabilidade; 25-30+ produtos sem consenso total [14][15] | Lint de frontmatter em CI; dual SKILL.md+AGENTS.md; workaround `@AGENTS.md` no CLAUDE.md | A cada skill nova |
 | A2A imaturo | Spec v1.0 de mar/2026 com 150+ orgs, mas ecossistema em consolidação [13] | Adiar para v4; reavaliar a cada 6 meses com decision gate (latência, custo, confiabilidade) | Semestral |
-| Viés de benchmark de busca | Ranking Brave 14.89 > Exa 14.39 > Tavily 13.67 depende do conjunto de queries [3][2] | Benchmark próprio com queries reais de dev; provider primário nunca fixo em código | Trimestral |
+| Viés de benchmark de busca | Ranking o provedor de busca removido 14.89 > Exa 14.39 > Tavily 13.67 depende do conjunto de queries [3][2] | Benchmark próprio com queries reais de dev; provider primário nunca fixo em código | Trimestral |
 | Regressão na migração de handoff | Migração backward-compat em 3 fases (Expand-Migrate-Contract) [17] | Fase Expand antes de tocar leitores; parser com fallback; testes de golden handoffs | Durante D4 |
 
 ---
@@ -125,7 +125,7 @@ O deep-orchestrator-agent-skill (v3.1.0) já entrega o pacote raro de **worktree
 |---|-------|------------|
 | [1] | "Handoff Debt" — arXiv 2606.02875 | https://arxiv.org/abs/2606.02875 |
 | [2] | Tavily — SimpleQA 93,3%, free tier 1K/mês | tavily.com |
-| [3] | Brave Search — $5/1K, free tier encerrado fev/2026; AIMultiple benchmark | api.search.brave.com |
+| [3] | o provedor de busca removido Search — $5/1K, free tier encerrado fev/2026; AIMultiple benchmark | api.search.o provedor de busca removido.com |
 | [4] | Exa — $7/1K, <425ms, MCP server oficial | exa.ai |
 | [5] | DeepSeek V4-Flash-0731 (31/jul/2026) — DeepSWE 54.4 vs Opus 4.8 (58.0) | deepseek.com |
 | [6] | Claude Sonnet 5 — 85,2% SWE-bench a $2/$10 | anthropic.com |

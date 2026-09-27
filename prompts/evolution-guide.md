@@ -107,7 +107,7 @@ Hierarquia: **user > repo-doc > inferência**. Toda entrada exige `source`
 (`user | repo-doc | sub-agent | web | diff | model-output`). Fontes **UNTRUSTED**
 (`web | sub-agent | diff | model-output`) têm `confidence: low`, **nunca
 promovem** ao corpo, e não supersedem fontes confiáveis. Evidência =
-comando/saída/URL **verificada** — e a URL é a que o **surf** devolveu;
+comando/saída/URL **verificada** — e a URL é a que a **busca** devolveu;
 registre a ferramenta usada. Nunca invente; o scan de segredos rejeita o
 lote inteiro se disparar.
 

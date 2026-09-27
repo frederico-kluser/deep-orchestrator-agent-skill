@@ -15,7 +15,7 @@ carregado INTEIRO por invocação — ~11× o orçamento recomendado para o corp
 uma skill (<5k tokens; agentskills.io + guia oficial Anthropic). Auditoria com
 7 subagentes (3 internas + 4 pesquisas Tavily) confirmou: ~60% do conteúdo só
 servia em modos específicos (plan=on, no-test, only-e2e), a pesquisa tinha 3
-encarnações, e havia drift factual (surf "v8" vs "v9+") — sintomas de "rule
+encarnações, e havia drift factual (o fornecedor removido "v8" vs "v9+") — sintomas de "rule
 soup" (Curse of Instructions).
 
 ## Decisão
@@ -46,7 +46,7 @@ transbordar 1% da janela). Layout:
 | D-C/D-D | Passos condicionais ficam nos módulos inteiros; cartão do `do-wt.sh checklist` mantém briefing autónomo, sincronizado por teste (A55/B01) |
 | D-E | Bug de locale do `sort -n` (decimais) no G12 → comparação em ordem de ficheiro |
 | D-F | Conteúdo extraído **verbatim** (muda de dono, não de texto) |
-| D-G | `max-parallel=N` (→ `DO_MAX_PARALLEL`) é a flag ÚNICA de concorrência, de 1ª classe; `surf-sub-agents=N` sub-flag de pesquisa (nunca multiplicada) |
+| D-G | `max-parallel=N` (→ `DO_MAX_PARALLEL`) é a flag ÚNICA de concorrência, de 1ª classe; `o fornecedor removido-sub-agents=N` sub-flag de pesquisa (nunca multiplicada) |
 | D-H | **Modelo único `mimo-v2.6-pro` em TUDO** (`model: inherit`): TIERING por modelo removido (FASE 3 passo 3) e "modelo FORTE" removido (FASE 4); proibido flash/downgrade |
 
 ## Alternativas rejeitadas
@@ -66,7 +66,7 @@ transbordar 1% da janela). Layout:
   ~45 KB; com `plan=off` + `no-test` o material carregado cai ~60%.
 - Toda a extração foi verbatim e está coberta por 1 120 asserções verdes
   (6 suítes: contencao 312, contrato 52, evolve 81, flags 307, plan-approval
-  139, surf-gate 229).
+  139, o fornecedor removido-gate 229).
 - Novos pontos de sincronização CONGELADOS em `CONTRATO.md`: lista canónica de
   módulos (§6), ponteiros `<phase ref=...>` (validados pelo CT9), literais
   byte-a-byte (CT2–CT7).

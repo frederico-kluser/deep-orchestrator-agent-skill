@@ -187,8 +187,8 @@ FIM
   # pode trocar "passo 7" (os números do SKILL.md estão congelados nesta rodada).
   cat <<'CARTAO'
 CARTÃO DA ONDA N — FASE 3 (troque N; `. '<ENV_FILE>'` antes de cada comando; siga o cartão e o ledger, nunca a memória)
- 0. Re-ancoragem + portão surf:  "$DO_WT" checklist ; "$DO_WT" status ; "$DO_SURF_GATE"
-      SURF_GATE != 0 com SEARCH_REQUIRED=sim => protocolo PESQUISA-FALHOU (a pesquisa é pré-condição, não dispensável)
+ 0. Re-ancoragem + portão de pesquisa:  "$DO_WT" checklist ; "$DO_WT" status ; "$DO_TAVILY_GATE"
+      TAVILY_GATE != 0 com SEARCH_REQUIRED=sim => protocolo PESQUISA-FALHOU (a pesquisa é pré-condição, não dispensável)
  1. COMMIT PREP (se a onda tem singleton): stubs/contratos commitados em $BASE_BRANCH ANTES de criar as worktrees
  2. Portão inter-onda + criar:   "$DO_WT" assert-clean --wave N        rc != 0 => conserte pelo comando impresso
       em seguida: "$DO_WT" new feature ondaN-<nome>     rc 6 = sobra de onda anterior (mesma tabela do assert-clean)
@@ -196,7 +196,7 @@ CARTÃO DA ONDA N — FASE 3 (troque N; `. '<ENV_FILE>'` antes de cada comando; 
  3.5. Subwaves da onda N-1 (gatilho = LEDGER: "$DO_WT" status):
       test-onda(N-1)-* => integrate + gate, como feature        val-onda(N-1)-* => "$DO_WT" close <nome>
  4. BARREIRA: esperar TODOS os sub-agentes (nunca prosseguir antes)
- 4.5. Triagem de pesquisa: SEARCH_STATUS de CADA handoff — BLOCKED_78/FAILED_*/ausente => protocolo ANTES de integrar
+ 4.5. Triagem de pesquisa: SEARCH_STATUS de CADA handoff — BLOCKED_NOKEY/FAILED_*/ausente => protocolo ANTES de integrar
  5. REPLAN: revisor de plano em BACKGROUND ao fim da triagem (recalcula a onda seguinte)
  6. Revisão adversarial por sub-tarefa concluída — o veredito é PRECONDIÇÃO do passo 7; fix NA MESMA worktree
  7. INTEGRAR UM A UM: "$DO_WT" integrate <nome> "<msg>" e logo "$DO_WT" gate <nome> (background)

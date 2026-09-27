@@ -1,10 +1,10 @@
-# deep-orchestrator-agent-skill v5.0.0
+# deep-orchestrator-agent-skill v6.0.0
 
 ![Versão](https://img.shields.io/badge/version-4.1.0-00d4ff)
 
-Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas (com recálculo dinâmico; **até 10 ondas por padrão, ilimitadas com `no-stop`**), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-<nome>`, fora da seção crítica), **limpa cada worktree no instante do gate verde dela — quem limpa é o script, não a memória do LLM** —, verifica a dependência de pesquisa antes de cada onda (**surf-agent-skill v8** — Brave é o único backend) e commita + pusha tudo ao final **sem perguntar nada sobre a tarefa**.
+Orquestrador autônomo multi-agente para Claude Code — planeja, divide em ondas (com recálculo dinâmico; **até 10 ondas por padrão, ilimitadas com `no-stop`**), cria worktrees isoladas, delega, revisa adversarialmente, integra via squash-merge um a um com gate em snapshot de integração (worktree efêmera `int-<nome>`, fora da seção crítica), **limpa cada worktree no instante do gate verde dela — quem limpa é o script, não a memória do LLM** —, verifica a dependência de pesquisa antes de cada onda (**tavily-agent-skill v8** — o provedor de busca removido é o único backend) e commita + pusha tudo ao final **sem perguntar nada sobre a tarefa**.
 
-Durante a execução, três interações existem, e só estas. Duas só quando você pede: o **PORTÃO DE APROVAÇÃO DO PLANO** (FASE 2.5) — quando a invocação pede um plano, o plano vai para o [Plannotator](https://github.com/backnotprop/plannotator) e você aprova ou anota; cada anotação **regera o plano e abre um Plannotator NOVO**, até a aprovação, e nenhuma worktree nasce antes dela — e a flag **`do-question`**, que autoriza o orquestrador a levantar as dúvidas reais num bloco único em vez de inferir. A terceira é **incondicional**: quando a pesquisa exigida **não funciona** (sem chave Brave válida, cota esgotada, surf ausente), o orquestrador **pausa e pergunta** — trocar a chave, ajustar o plano/cota, seguir sem pesquisa ou abortar —, **mesmo com "não me pergunte nada"**: chave e cota são configuração do SEU ambiente, não ambiguidade da tarefa. Sem pedido de plano, sem `do-question` e com a pesquisa funcionando, a autonomia total continua exatamente como sempre foi.
+Durante a execução, três interações existem, e só estas. Duas só quando você pede: o **PORTÃO DE APROVAÇÃO DO PLANO** (FASE 2.5) — quando a invocação pede um plano, o plano vai para o [Plannotator](https://github.com/backnotprop/plannotator) e você aprova ou anota; cada anotação **regera o plano e abre um Plannotator NOVO**, até a aprovação, e nenhuma worktree nasce antes dela — e a flag **`do-question`**, que autoriza o orquestrador a levantar as dúvidas reais num bloco único em vez de inferir. A terceira é **incondicional**: quando a pesquisa exigida **não funciona** (sem chave Tavily válida, cota esgotada, o fornecedor removido ausente), o orquestrador **pausa e pergunta** — trocar a chave, ajustar o plano/cota, seguir sem pesquisa ou abortar —, **mesmo com "não me pergunte nada"**: chave e cota são configuração do SEU ambiente, não ambiguidade da tarefa. Sem pedido de plano, sem `do-question` e com a pesquisa funcionando, a autonomia total continua exatamente como sempre foi.
 
 Ao FIM da execução — depois de TUDO (commit, push e relatório) — a evolução vem como **UMA PERGUNTA EM TEXTO no terminal** (v3.9.0, nunca mais um site): cada proposta numerada com opções e escopo, e você responde com códigos (ex.: `1:b2` — opção b, fix global), ou `nada` para pular (tudo fica pendente, nada é aplicado). A flag `no-evolve` na invocação pula a pergunta **e** a análise do histórico.
 
@@ -46,7 +46,7 @@ O único vestígio compartilhado aceito é o registro administrativo das filhas 
 
 Em MODO NORMAL (invocação na árvore principal) valem as mesmas invariantes, com `$CHILD_ROOT` em `<pai>/<repo>-worktrees/<RUN_ID>/`.
 
-## Novidades na v5.0.0
+## Novidades na v6.0.0
 
 **Split progressive disclosure (D32)** — o SKILL.md monolítico de 3 306 linhas
 (220 KB) virou um ROUTER de ≤500 linhas + módulos carregados SOB DEMANDA.
@@ -64,44 +64,44 @@ Comportamento intocado: 1 120 asserções verdes antes e depois de cada corte.
 - **Modelo único `mimo-v2.6-pro` em TODOS os agentes (D-H)**: o TIERING por
   modelo saiu — PROIBIDO flash/downgrade
 - **`max-parallel=N` é a flag ÚNICA de concorrência (D-G)**, de 1ª classe;
-  `surf-sub-agents=N` é sub-flag de pesquisa (nunca multiplicada). Referência
+  `tavily-sub-agents=N` é sub-flag de pesquisa (nunca multiplicada). Referência
   de dimensionamento no MiMo: 6–12 sub-agentes simultâneos
 - `do-wt.sh discard-state`: o descarte do estado (FASE 4 passo 8) virou
   subcomando testado (A57)
-- Correções: drift `surf v8`→`v9+` na FASE 0; severidades graduadas (FATAL só
+- Correções: drift `o fornecedor removido v8`→`v9+` na FASE 0; severidades graduadas (FATAL só
   R1/R8); bug de locale do `sort -n` no teste G12 (decimais)
 - Router com `<navigation>`: mapa FASE→ficheiro, cargas condicionais e índice
   de sintomas (re-ancoragem pós-compactação)
 
-## Novidades na v4.1.0
+## Novidades na (histórico v4.x)
 
-Release de **conserto**, não de reescrita. O defeito de fundo era um só: regras escritas em prosa que o LLM esquecia no meio de uma execução longa — worktrees que não eram limpas conforme o trabalho avançava, filhas que nunca chegavam a ser mergeadas e ninguém ficava sabendo, e uma pesquisa que falhava sem que o usuário fosse chamado para trocar a chave Brave. A v4.1.0 move o enforcement **da prosa para o script** (determinístico) e absorve o commit `fe3a1c2`, que tinha mudado o contrato (`wt=` termina em commit + push; purge final) sem versão.
+Release de **conserto**, não de reescrita. O defeito de fundo era um só: regras escritas em prosa que o LLM esquecia no meio de uma execução longa — worktrees que não eram limpas conforme o trabalho avançava, filhas que nunca chegavam a ser mergeadas e ninguém ficava sabendo, e uma pesquisa que falhava sem que o usuário fosse chamado para trocar a chave Tavily. A (histórico v4.x) move o enforcement **da prosa para o script** (determinístico) e absorve o commit `fe3a1c2`, que tinha mudado o contrato (`wt=` termina em commit + push; purge final) sem versão.
 
 - **LIMPEZA POR TAREFA, FEITA PELO SCRIPT (invariante I-CLEAN)**: integrar uma filha passou a ser **dois comandos** — `do-wt.sh integrate <nome> "<msg>"` (squash-merge + snapshot `int-<nome>` no SHA pós-merge + status `gate-pending`) e `do-wt.sh gate <nome>` em background (install → build → test → lint, no snapshot, com `HUSKY=0 CI=1`). **Gate verde → o próprio `gate` chama `finish`** e imprime `GATE VERDE — <nome> fechado`: salva restos da árvore da filha, arquiva o branch em `refs/do-archive/$RUN_ID/<nome>`, remove a worktree, apaga o branch e fecha **todos** os snapshots dela. A limpeza acontece no instante do verde, mesmo que ele chegue depois dos merges seguintes — **sem depender de o LLM lembrar**. Gate vermelho (rc 4) → nada é limpo: o branch segue como backup para o fix. Os comandos do gate são gravados **uma vez** na FASE 1 (`do-wt.sh gate-set build|test|lint|install|e2e "<comando>"`). Quem **não** será integrado fecha com `do-wt.sh close <nome> [--discard "<motivo>"]`. Os antigos 5 comandos manuais (`mark`/`remove`/`drop-branch`) ficam só como ferramenta de reparo — e o `drop-branch` não apaga mais trabalho não integrado depois de um `mark MERGED` manual.
 - **PORTÃO INTER-ONDA**: o fim de onda virou `do-wt.sh sweep && do-wt.sh assert-clean --wave <N+1>; do-wt.sh verify`, e o rc **não é ignorável** — cada sobra sai listada com o **comando exato de conserto**. O `sweep` agora falha com `feature`/`fix` ainda `ACTIVE` (não integrada), `gate-pending` ou `REVERTED`, e fecha sozinho snapshot órfão. E, de qualquer jeito, o `do-wt.sh new` **recusa (rc 6)** criar `feature|fix|prep` da onda N enquanto houver sobra de onda anterior — inclusive `test-`/`val-` de duas ondas atrás: teste de onda intermediária esquecido não existe mais. `do-wt.sh checklist` imprime o **CARTÃO DA ONDA** (a sequência com os comandos exatos), para re-ancorar depois de uma compactação de contexto.
 - **"NUNCA EM SILÊNCIO" (invariante I-MERGE)**: toda filha `feature|fix|test` termina a execução **integrada** ou **listada no relatório final com o motivo**. O ledger `owned.tsv` ganhou duas colunas (11 no total): `parent` (de qual filha é o snapshot) e `outcome` (`MERGED` · `EMPTY` · `DISPOSABLE` · `NEVER-MERGED:<motivo>`); `do-wt.sh ledger` imprime a tabela `NOME KIND ONDA STATUS OUTCOME ARCHIVE_REF`, fonte da seção **"Não integrado"** — agora **obrigatória** no relatório ("nenhum" quando vazia) — e o título deixa de ser fixo: **"Tarefa concluída"** ou **"Tarefa concluída PARCIALMENTE"**. O `purge` só imprime `PURGE OK` se o ledger **e a realidade** (diretórios em `$CHILD_ROOT`, refs em `$BRANCH_NS/`) fecharam, e sai **rc 3** com o bloco `PURGE: NUNCA INTEGRADAS / PARCIAIS` quando algo foi arquivado sem integrar — inclusive **`MERGED-PARTIAL:<motivo>`**: o squash está em `$BASE_BRANCH`, mas a filha fechou com gate vermelho ou com fix commitado e nunca integrado (cauda só no arquivo). Squash **vazio** não vira mais `MERGED` (rc 4, `VAZIO: ...`). Conflito de squash é detectado **antes de tocar a raiz** (`git merge-tree`, git ≥ 2.38): a raiz-de-mundo fica intacta e a resolução acontece dentro da filha. **Re-integração** (fix após gate vermelho) que perderia deleção/reversão do fix — o 3-way parte do `base_sha` antigo e ficava com a versão que já estava em `$BASE_BRANCH`, dizendo "sem delta novo" — agora é **recusada** (rc 1, com a lista de paths): merge de `$BASE_BRANCH` na filha **antes** do fix. Execução anterior abandonada com worktrees vivas sai anunciada na FASE 0 (`DO_ORPHAN_RUNS:`) com o comando exato de purge de cada uma.
 - **`wt=` TERMINA EM COMMIT + PUSH (R8j) + PURGE FINAL** (retroativo — é o `fe3a1c2`, que saíra sem versão): com `wt=<nome>`, o COMMIT-FINAL é commit + push no branch do próprio wt (`do/wt/<nome>`), **nunca** merge de volta para o branch de origem — integrar o wt é decisão exclusiva do usuário. E toda execução termina em `do-wt.sh purge`, agora como **rede de segurança** da limpeza por tarefa (ver [Uso](#uso)).
-- **PERGUNTA DA CHAVE BRAVE — INCONDICIONAL (protocolo PESQUISA-FALHOU)**: quando a pesquisa **exigida** não funciona, o orquestrador **pausa e pergunta** em vez de parar mudo ou seguir calado — e isso **vence** "não me pergunte nada", "autônomo", `no-stop` e `plan=off`, e **não depende** de `do-question`. O portão passa a ser o novo `scripts/surf-gate.sh`, **fail-closed** (`SURF_GATE=0|78|127` + `SURF_CODE` + a mensagem do surf **verbatim**; o antigo `surf doctor … >/dev/null` jogava a mensagem fora e lia exit 1 como "prossiga"). Cota esgotada/429 **não** sai 78 no surf — sai exit 1, igual a "busca vazia" —, então toda chamada é classificada (`surf-gate.sh classify` → `OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78 | …`). O plano marca cada sub-tarefa com `SEARCH_REQUIRED=sim|nao`, todo handoff abre com `## SEARCH_STATUS`, e a **TRIAGEM DE PESQUISA** (FASE 3, passo 4.5) lê isso **antes** de integrar. A pergunta tem 4 opções — troquei a chave · ajustei plano/cota ou esperei o cooldown · seguir **sem** pesquisa (premissas marcadas NÃO VERIFICADAS) · abortar —, o estado fica em disco (`search-pause.md`) e a retomada é na mensagem seguinte. Detalhes em [Quando a pesquisa falha](#quando-a-pesquisa-falha--o-protocolo-pesquisa-falhou).
+- **PERGUNTA DA CHAVE o provedor de busca removido — INCONDICIONAL (protocolo PESQUISA-FALHOU)**: quando a pesquisa **exigida** não funciona, o orquestrador **pausa e pergunta** em vez de parar mudo ou seguir calado — e isso **vence** "não me pergunte nada", "autônomo", `no-stop` e `plan=off`, e **não depende** de `do-question`. O portão passa a ser o novo `scripts/tavily-gate.sh`, **fail-closed** (`TAVILY_GATE=0|78|127` + `TAVILY_CODE` + a mensagem do o fornecedor removido **verbatim**; o antigo `tavily.py status … >/dev/null` jogava a mensagem fora e lia exit 1 como "prossiga"). Cota esgotada/429 **não** sai 78 na busca — sai exit 1, igual a "busca vazia" —, então toda chamada é classificada (`tavily-gate.sh classify` → `OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_NOKEY | …`). O plano marca cada sub-tarefa com `SEARCH_REQUIRED=sim|nao`, todo handoff abre com `## SEARCH_STATUS`, e a **TRIAGEM DE PESQUISA** (FASE 3, passo 4.5) lê isso **antes** de integrar. A pergunta tem 4 opções — troquei a chave · ajustei plano/cota ou esperei o cooldown · seguir **sem** pesquisa (premissas marcadas NÃO VERIFICADAS) · abortar —, o estado fica em disco (`search-pause.md`) e a retomada é na mensagem seguinte. Detalhes em [Quando a pesquisa falha](#quando-a-pesquisa-falha--o-protocolo-pesquisa-falhou).
 - **FLAG `no-test`** (`DO_TEST_MODE=none`): **não cria** testes — nenhuma sub-tarefa de teste, Testing Subwave desligada, e o `do-wt.sh new` recusa worktree de teste. **Não criar ≠ não rodar**: o gate (com a suíte existente) e a Validation Subwave continuam.
 - **FLAG `only-e2e`** (`DO_TEST_MODE=e2e`): as Testing Subwaves criam **apenas testes end-to-end**, por **jornada** do usuário (cobertura de jornadas no lugar de cobertura de linha). Mutuamente exclusiva com `no-test`.
-- **FLAG `do-question`** (`DO_QUESTION=1`): autoriza o orquestrador a **perguntar** — uma RODADA DE DÚVIDAS única antes do plano e no máximo uma por onda, ao fim dela. A pergunta da chave Brave **não** depende desta flag.
-- **`--flags` E ZONA DE PREFIXO**: os prefixos da invocação viajam num único argumento, `do-context.sh --flags='<tokens>'`, e o **script é o único validador**. Typo (`no-tests`, `e2e-only`, `mp=8`) sai **exit 2 com a sugestão** em vez de virar texto da tarefa e inverter o pedido em silêncio; `no-test` + `only-e2e` sai exit 2. `surf-sub-agents=N` agora é validado (1..20) e gravado no ENV_FILE. `wt=<nome>` repetido **reentra** na mesma worktree (antes criava `<nome>-2`).
+- **FLAG `do-question`** (`DO_QUESTION=1`): autoriza o orquestrador a **perguntar** — uma RODADA DE DÚVIDAS única antes do plano e no máximo uma por onda, ao fim dela. A pergunta da chave Tavily **não** depende desta flag.
+- **`--flags` E ZONA DE PREFIXO**: os prefixos da invocação viajam num único argumento, `do-context.sh --flags='<tokens>'`, e o **script é o único validador**. Typo (`no-tests`, `e2e-only`, `mp=8`) sai **exit 2 com a sugestão** em vez de virar texto da tarefa e inverter o pedido em silêncio; `no-test` + `only-e2e` sai exit 2. `tavily-sub-agents=N` agora é validado (1..20) e gravado no ENV_FILE. `wt=<nome>` repetido **reentra** na mesma worktree (antes criava `<nome>-2`).
 - **macOS / bash 3.2**: o lock do `owned.tsv` tem fallback `mkdir` atômico para máquinas sem `flock(1)` (com quebra de lock velho); saíram os `sed -i` GNU, as comparações de `wc -l` cru, `${var^^}` e a iteração de array vazio sob `set -u` (que derrubava `do-prefs.sh` e `evolution-survey.sh`). As cinco suítes rodam **verdes no macOS** (bash 3.2.57, BSD sed/wc, git 2.39) — antes, `test-contencao.sh` dava 75/10 ali.
 - **Estruturais**: a `description` do frontmatter coube em ≤ 1024 caracteres (eram 2421 — a listagem de skills truncava e escondia flags e triggers); a FASE 0 foi reordenada (passo 0 **ESTADOS PENDENTES** → 1 parse de prefixos → 2 portão do plano → 3 comando único); "AGUARDE" passou a ter definição única (grava estado, a pergunta é a última coisa da resposta, encerra o turno); e o `<orchestrator>` do SKILL.md voltou a parsear como XML inteiro.
-- **REVISÃO ADVERSARIAL DA PRÓPRIA v4.1.0 (rodada final)**: uma revisão com céticos por achado, reproduzidos em lab, corrigiu o que a primeira implementação errou — (1) filha cujo sub-agente saiu do branch registrado (`git switch -c`, HEAD destacado) era arquivada **vazia** e o trabalho ficava dangling: agora `integrate` **recusa** (rc 1, com o conserto) e `close`/`finish`/`purge` arquivam também o HEAD em `refs/do-archive/$RUN_ID/<nome>-HEAD`; (2) `undo` só desfazia o **último** squash de uma filha re-integrada: agora desfaz **todos** (`undo-<nome>-<k>`) e o `pre` do 1º squash é preservado (`wave-files` volta a ver a onda inteira); (3) `purge`/`finish --gate-ok` fechavam como `MERGED` uma filha com gate vermelho e fix nunca integrado: agora é `MERGED-PARTIAL` e vai ao relatório; (4) o snapshot de `test-onda(N-1)` travava `new fix ondaN-*` (rc 6): a guarda passou a seguir o kind do parent; (5) dois `gate` no mesmo nome se atropelavam: o 2º sai rc 3 e o veredito fica amarrado ao squash; (6) `gate` de `test-*` em `only-e2e` ligava o e2e só com `--e2e`: agora liga sozinho; (7) `do-wt.sh checklist` usa a numeração exata dos passos da FASE 3 e ganhou `checklist final` (FASE 4); (8) a opção [3] do protocolo ("seguir sem pesquisa") não valia nas ondas seguintes quando a falha era de cota: `surf-gate.sh choose no-search` grava o estado e o portão imprime `SURF_MODE=no-search`; (9) typo de flag fora da regex da zona (`e2e-only`, `--no-test`) virava texto da tarefa: o token de fronteira vai em `--boundary='<token>'` e o script decide; (10) reuso de execução anterior à v4.1.0 vinha sem `DO_SURF_GATE`: o script completa o env antigo. E o **SKILL.md foi condensado de 304k para 215k caracteres** (a primeira implementação o tinha inchado a partir dos 192k da v4.0.0): cada regra tem **uma casa canônica** e o que o script já imprime (sobra + comando de conserto) não é reexplicado.
-- **Testes**: `test-contencao.sh` 85 → **309** asserções (A35–A56: integrate/gate/finish/close, purge, sweep, assert-clean, lock sem flock, ledger, re-integração, HEAD fora do branch, undo de todos os squashes, MERGED-PARTIAL, reentrância do gate, e2e automático, cartões); nova suíte `test-flags.sh` (**307**, FL1–FL16: `--boundary`, env antigo completado, órfãs com `wt=`); `test-surf-gate.sh` 46 → **228** (G0, G9–G12: classify, pause/resume, `choose`, fail-closed, contrato cruzado SKILL.md × scripts × prompts, orçamento ≤ 220k chars); `test-plan-approval.sh` **139**; `test-evolve.sh` **81** — **1064 asserções, todas verdes**. Decisões D24–D31 em `docs/decisions/2026-09-20-limpeza-por-tarefa-pergunta-pesquisa-flags.md`.
+- **REVISÃO ADVERSARIAL DA PRÓPRIA (histórico v4.x) (rodada final)**: uma revisão com céticos por achado, reproduzidos em lab, corrigiu o que a primeira implementação errou — (1) filha cujo sub-agente saiu do branch registrado (`git switch -c`, HEAD destacado) era arquivada **vazia** e o trabalho ficava dangling: agora `integrate` **recusa** (rc 1, com o conserto) e `close`/`finish`/`purge` arquivam também o HEAD em `refs/do-archive/$RUN_ID/<nome>-HEAD`; (2) `undo` só desfazia o **último** squash de uma filha re-integrada: agora desfaz **todos** (`undo-<nome>-<k>`) e o `pre` do 1º squash é preservado (`wave-files` volta a ver a onda inteira); (3) `purge`/`finish --gate-ok` fechavam como `MERGED` uma filha com gate vermelho e fix nunca integrado: agora é `MERGED-PARTIAL` e vai ao relatório; (4) o snapshot de `test-onda(N-1)` travava `new fix ondaN-*` (rc 6): a guarda passou a seguir o kind do parent; (5) dois `gate` no mesmo nome se atropelavam: o 2º sai rc 3 e o veredito fica amarrado ao squash; (6) `gate` de `test-*` em `only-e2e` ligava o e2e só com `--e2e`: agora liga sozinho; (7) `do-wt.sh checklist` usa a numeração exata dos passos da FASE 3 e ganhou `checklist final` (FASE 4); (8) a opção [3] do protocolo ("seguir sem pesquisa") não valia nas ondas seguintes quando a falha era de cota: `tavily-gate.sh choose no-search` grava o estado e o portão imprime `SEARCH_MODE=no-search`; (9) typo de flag fora da regex da zona (`e2e-only`, `--no-test`) virava texto da tarefa: o token de fronteira vai em `--boundary='<token>'` e o script decide; (10) reuso de execução anterior à (histórico v4.x) vinha sem `DO_TAVILY_GATE`: o script completa o env antigo. E o **SKILL.md foi condensado de 304k para 215k caracteres** (a primeira implementação o tinha inchado a partir dos 192k da v4.0.0): cada regra tem **uma casa canônica** e o que o script já imprime (sobra + comando de conserto) não é reexplicado.
+- **Testes**: `test-contencao.sh` 85 → **309** asserções (A35–A56: integrate/gate/finish/close, purge, sweep, assert-clean, lock sem flock, ledger, re-integração, HEAD fora do branch, undo de todos os squashes, MERGED-PARTIAL, reentrância do gate, e2e automático, cartões); nova suíte `test-flags.sh` (**307**, FL1–FL16: `--boundary`, env antigo completado, órfãs com `wt=`); `test-tavily-gate.sh` 46 → **228** (G0, G9–G12: classify, pause/resume, `choose`, fail-closed, contrato cruzado SKILL.md × scripts × prompts, orçamento ≤ 220k chars); `test-plan-approval.sh` **139**; `test-evolve.sh` **81** — **1064 asserções, todas verdes**. Decisões D24–D31 em `docs/decisions/2026-09-20-limpeza-por-tarefa-pergunta-pesquisa-flags.md`.
 
 ## Novidades na v4.0.0
 
 A skill deixou de ter um sistema de busca. O gatilho foi um bug: `search.sh`
-tratava **todo** exit code não-zero do `surf` como falha transitória, então o
-`exit 78` da v8 — "não há chave Brave válida" — ficava indistinguível de um
-timeout, e o wrapper respondia a mesma pergunta pelo cliente Brave interno ou
+tratava **todo** exit code não-zero do `o fornecedor removido` como falha transitória, então o
+`exit 78` da v8 — "não há chave Tavily válida" — ficava indistinguível de um
+timeout, e o wrapper respondia a mesma pergunta pelo cliente o provedor de busca removido interno ou
 pelo DuckDuckGo. A skill reproduzia, uma camada acima, exatamente o defeito que
-o surf v8 acabara de eliminar: uma resposta confiante vinda de um provedor que
+o o fornecedor removido v8 acabara de eliminar: uma resposta confiante vinda de um provedor que
 o usuário não escolheu, sem nenhum sinal de que a chave estava quebrada.
 
-Manter um "shim fino" em volta do surf não resolveria: um shim **é** um sistema
+Manter um "shim fino" em volta do o fornecedor removido não resolveria: um shim **é** um sistema
 de busca (mapeamento de flags, envelope próprio, códigos de saída próprios), e
 é exatamente onde o próximo mantenedor reintroduz um fallback. Por isso os seis
 scripts foram apagados, e o SKILL.md manda o sub-agente chamar os binários
@@ -110,10 +110,10 @@ globais direto.
 O que se perdeu de propósito: o piso keyless (uma resposta de Instant Answer
 apresentada com a mesma confiança de uma pesquisa real), a dedup por URL entre
 queries de um lote e o cache intra-run — todos substituídos por **uma** chamada
-`surf-search-normal` com brief, que planeja o conjunto de queries por LLM, roda
+`tavily.py` com brief, que planeja o conjunto de queries por LLM, roda
 até `--sub-agents` delas em paralelo e dedupa canonicamente no ledger.
 
-Ver `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md`.
+Ver `docs/decisions/2026-08-29-tavily-agent-skill-obrigatorio.md`.
 
 ## Novidades na v3.9.0
 
@@ -163,7 +163,7 @@ Ver `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md`.
 ## Novidades na v3.4.0
 
 - **PORTÃO DE APROVAÇÃO DO PLANO (FASE 2.5, R10)**: quando a invocação **pede um plano**, o plano vai para o [Plannotator](https://github.com/backnotprop/plannotator) e o usuário aprova ou anota, no navegador. **Cada anotação REGERA o plano e abre um Plannotator inteiramente NOVO** (processo novo, servidor novo, aba nova) — nunca um remendo na sessão anterior — até a aprovação ou até o orçamento de revisões acabar. Nenhuma worktree, branch ou commit existe antes do APROVADO, e é justamente por isso que o portão fica aqui: recusar o plano não custa rollback nenhum.
-- **Ligado só quando pedido**: `DO_PLAN_APPROVAL` é resolvido uma vez na FASE 0 (passo 2 desde a v4.1.0; era o 0.5) por precedência — prefixo `plan=on`/`plan=off` > variável de ambiente > gatilhos negativos ("não me pergunte nada", "autônomo", "toca o barco") > gatilhos positivos ("faça um plano", "quero aprovar antes", "revisar o plano") > **default OFF**. Quem nunca falou em plano tem exatamente o comportamento autônomo de sempre: nenhum navegador abre.
+- **Ligado só quando pedido**: `DO_PLAN_APPROVAL` é resolvido uma vez na FASE 0 (passo 2 desde a (histórico v4.x); era o 0.5) por precedência — prefixo `plan=on`/`plan=off` > variável de ambiente > gatilhos negativos ("não me pergunte nada", "autônomo", "toca o barco") > gatilhos positivos ("faça um plano", "quero aprovar antes", "revisar o plano") > **default OFF**. Quem nunca falou em plano tem exatamente o comportamento autônomo de sempre: nenhum navegador abre.
 - **Instalação automática do Plannotator**: `scripts/check-plannotator.sh --install` resolve o executável (`$DO_PLANNOTATOR_BIN` → PATH → `~/.local/bin`, que quase nunca está no PATH de um shell não-interativo), confere a versão (mínima 0.19.1) e **sonda a capacidade** rodando `annotate` sem argumento — que só imprime o usage, sem abrir navegador. Ausente, instala com `--minimal`: **só o binário**, sem encostar em `~/.claude`, `~/.codex`, `~/.gemini`, `~/.kiro` ou `~/.config/opencode`. Uma instalação existente nunca é sobrescrita. Nunca `sudo`, nunca `npm -g`.
 - **Independente do agente**: o portão é **uma chamada Bash** — o menor denominador comum entre Claude Code, pi coding agent, jcode e opencode. Nada de hook de plan-mode, `ExitPlanMode` ou plugin de um agente específico, porque nada disso existe nos quatro. O harness é detectado (Claude Code > pi > jcode > opencode) só para carimbar `PLANNOTATOR_ORIGIN` na UI; a detecção jamais bloqueia o portão.
 - **Título imutável**: o Plannotator rastreia revisões do **mesmo** plano pelo primeiro `#` do documento. `plan-approval.sh` **recusa** (exit 2) a rodada cujo título mudou, com o título travado na mensagem — é a mesma regra que o próprio Plannotator impõe (*"Do NOT change the plan title"*).
@@ -172,32 +172,32 @@ Ver `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md`.
 - **O plano nunca sai da máquina sozinho** — duas travas independentes, ambas ligadas por default:
   - `PLANNOTATOR_SHARE=disabled` impede o **upload** do texto do plano para o serviço de paste, que o Plannotator faria em sessão remota. Libere com `DO_PLAN_SHARE=1`.
   - `PLANNOTATOR_REMOTE=0` mantém o servidor em **127.0.0.1**. Sem isso, qualquer shell com `SSH_TTY`/`SSH_CONNECTION` no ambiente — o caso normal de um servidor de desenvolvimento — faria o Plannotator escutar em `0.0.0.0:19432`; e como `/api/approve` **não tem autenticação**, qualquer pessoa que alcançasse a máquina leria o plano e poderia **aprová-lo por você**, levando o orquestrador a criar worktrees e commitar. Para revisar por SSH, use um túnel: `ssh -L 19432:127.0.0.1:19432 <host>`. `DO_PLAN_REMOTE=1` expõe na rede de propósito, com aviso em voz alta.
-- **Testes**: `scripts/test-plan-approval.sh` — 133 asserções na época (**139** na v4.1.0, todas verdes na máquina de referência: macOS, bash 3.2.57, com o `timeout` do coreutils instalado — o caso P4 depende de um `timeout(1)` no PATH), tudo mockado (binário e instalador falsos num PATH temporário), **sem rede, sem navegador e sem instalar nada**.
+- **Testes**: `scripts/test-plan-approval.sh` — 133 asserções na época (**139** na (histórico v4.x), todas verdes na máquina de referência: macOS, bash 3.2.57, com o `timeout` do coreutils instalado — o caso P4 depende de um `timeout(1)` no PATH), tudo mockado (binário e instalador falsos num PATH temporário), **sem rede, sem navegador e sem instalar nada**.
 
 ## Novidades na v3.3.0
 
-- **Sistema de busca 3-tier (F1-03)** — **SUPERADO na v4.0.0**: o sistema de busca interno foi REMOVIDO; a pesquisa é 100% surf-agent-skill v8 (ver `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md`). Descrição histórica: `scripts/search.sh` — surf-agent-skill (Tier 1, multi-provider AI-powered) → Brave Search API (Tier 2, via `search_brave_api()` do `brave-search.sh`) → DuckDuckGo keyless (Tier 3, Instant Answer, cobertura limitada). Verificação de tiers antes de cada onda via `scripts/check-search-credits.sh` (exit 0 = Tier 1/2 disponível; exit 1 = só Tier 3, degradado; exit 2 = nada disponível) e lotes paralelos via `scripts/search-parallel.sh` (uma chamada por lote, nunca loop). O surf-agent-skill voltou como Tier 1 — a busca Brave interna da v3.0.0 não o substitui mais.
+- **Sistema de busca 3-tier (F1-03)** — **SUPERADO na v4.0.0**: o sistema de busca interno foi REMOVIDO; a pesquisa é 100% tavily-agent-skill v8 (ver `docs/decisions/2026-08-29-tavily-agent-skill-obrigatorio.md`). Descrição histórica: `scripts/search.sh` — tavily-agent-skill (Tier 1, multi-provider AI-powered) → o provedor de busca removido Search API (Tier 2, via `search_brave_api()` do `o provedor de busca removido-search.sh`) → DuckDuckGo keyless (Tier 3, Instant Answer, cobertura limitada). Verificação de tiers antes de cada onda via `scripts/check-search-credits.sh` (exit 0 = Tier 1/2 disponível; exit 1 = só Tier 3, degradado; exit 2 = nada disponível) e lotes paralelos via `scripts/search-parallel.sh` (uma chamada por lote, nunca loop). O tavily-agent-skill voltou como Tier 1 — a busca o provedor de busca removido interna da v3.0.0 não o substitui mais.
 - **Subwaves duplas (F2-02/F2-04)**: TESTING (`test-ondaN-*`, máximo 3 worktrees de teste por onda — contam no teto DO_MAX_PARALLEL) e VALIDATION (`val-ondaN-*`, gate completo + revisão adversarial do diff integrado) rodam em background após cada onda e são integradas na onda seguinte (passo 3.5) ou no COMMIT-FINAL — nunca bloqueiam o disparo das ondas de feature.
-- **Correções críticas da Fase 1 (F1-01 a F1-03)**: `do-wt.sh undo` seguro (reset --hard só com working tree exclusivamente untracked; o commit desfeito é arquivado em `refs/do-archive/$RUN_ID/undo-<nome>`), baseline de ignorados na FASE 0 + `clean-ignored-delta` no lugar do `git clean -fdXq` genérico (nunca apaga ignorados pré-existentes do usuário), `stage-delta` com `-uall` nos dois lados (arquivos novos dentro de dirs untracked do usuário entram no commit; a sujeira preexistente continua fora) e `--budget-ms` no Tier 1 do search.sh (`--timeout` em segundos vira milissegundos para o surf-search-normal — o `--budget-ms` do surf continua em MILISSEGUNDOS, e na v8 o `--timeout` também).
-- **Gate em snapshot de integração (F3-01)**: o squash-merge é atômico e o gate (build + testes + linter) sai da seção crítica — roda em background numa worktree efêmera `int-ondaN-<nome>` (kind=integration, registrada no owned.tsv) criada no SHA pós-merge. Merges seguem em sequência; a limpeza de cada filha e o fim da onda aguardam o respectivo gate de snapshot (`status=gate-pending` no owned.tsv; o `do-wt.sh sweep` detecta gate-pending, avisa e sai != 0). Falha tardia: `do-wt.sh undo <nome>` reverte exatamente aquele squash com HEAD avançado, arquivando o commit em `refs/do-archive/$RUN_ID/undo-<nome>`. **Decisão D1**: builds duplicados (snapshot + validação + gate final) são esperados. **Na v4.1.0** esse ritual manual (criar o snapshot, `mark gate-pending`, limpar no verde) virou dois comandos do script — `do-wt.sh integrate` + `do-wt.sh gate` —, e o snapshot se chama `int-<nome>`.
+- **Correções críticas da Fase 1 (F1-01 a F1-03)**: `do-wt.sh undo` seguro (reset --hard só com working tree exclusivamente untracked; o commit desfeito é arquivado em `refs/do-archive/$RUN_ID/undo-<nome>`), baseline de ignorados na FASE 0 + `clean-ignored-delta` no lugar do `git clean -fdXq` genérico (nunca apaga ignorados pré-existentes do usuário), `stage-delta` com `-uall` nos dois lados (arquivos novos dentro de dirs untracked do usuário entram no commit; a sujeira preexistente continua fora) e `--budget-ms` no Tier 1 do search.sh (`--timeout` em segundos vira milissegundos para o tavily.py — o `--budget-ms` do o fornecedor removido continua em MILISSEGUNDOS, e na v8 o `--timeout` também).
+- **Gate em snapshot de integração (F3-01)**: o squash-merge é atômico e o gate (build + testes + linter) sai da seção crítica — roda em background numa worktree efêmera `int-ondaN-<nome>` (kind=integration, registrada no owned.tsv) criada no SHA pós-merge. Merges seguem em sequência; a limpeza de cada filha e o fim da onda aguardam o respectivo gate de snapshot (`status=gate-pending` no owned.tsv; o `do-wt.sh sweep` detecta gate-pending, avisa e sai != 0). Falha tardia: `do-wt.sh undo <nome>` reverte exatamente aquele squash com HEAD avançado, arquivando o commit em `refs/do-archive/$RUN_ID/undo-<nome>`. **Decisão D1**: builds duplicados (snapshot + validação + gate final) são esperados. **Na (histórico v4.x)** esse ritual manual (criar o snapshot, `mark gate-pending`, limpar no verde) virou dois comandos do script — `do-wt.sh integrate` + `do-wt.sh gate` —, e o snapshot se chama `int-<nome>`.
 - **DO_MAX_PARALLEL (F3-02)**: prefixo `max-parallel=N` na invocação (`/deep-orchestrator-agent-skill max-parallel=N <tarefa>`) — o orquestrador exporta `DO_MAX_PARALLEL` antes da FASE 0; ausente, default 50. Orçamento: features por onda ≤ DO_MAX_PARALLEL; in-flight total ≤ DO_MAX_PARALLEL (features + worktrees de teste/validação das subwaves + revisores + REVISOR DE PLANO — tudo no mesmo teto); ondas maiores viram batches sequenciais com a própria barreira.
 - **Gate definido uma vez (F3-03)**: a FASE 1 detecta e registra no TASK_PLAN.md o trio exato `GATE_BUILD`/`GATE_TEST`/`GATE_LINT` do projeto-alvo (package.json/Makefile/pyproject.toml/Cargo.toml/go.mod); toda invocação de gate referencia esse trio, com cwd conforme o contexto (snapshot, validação ou `$BASE_DIR` no gate final).
 - **Lockfile como singleton (F3-04)**: manifesto + lockfile entram no mapa de propriedade como recurso singleton — no máximo 1 agente por onda adiciona dependências; os demais registram "deps pendentes: <pacote@versão>" no handoff e a adição acontece no COMMIT PREP da onda seguinte.
 - **Tiering de modelos por papel (F3-09)**: quando o harness permite, agentes de teste e revisores adversariais rodam em modelo médio, REVISOR DE PLANO e síntese final em modelo forte, features no padrão; regra de escala: ≤2 sub-tarefas pequenas e independentes não geram fan-out extra.
-- **Testes**: `scripts/test-contencao.sh` — 85 asserções na época, 309 na v4.1.0 (A33: falha tardia de gate com undo de HEAD avançado; A34: gate-pending bloqueia o fim de onda).
+- **Testes**: `scripts/test-contencao.sh` — 85 asserções na época, 309 na (histórico v4.x) (A33: falha tardia de gate com undo de HEAD avançado; A34: gate-pending bloqueia o fim de onda).
 
 ## Novidades na v3.2.0
 
 - **MODO CONTIDO** (acima) + **FASE 0 — DELIMITAR O MUNDO**: `scripts/do-context.sh` detecta worktree vinculada, resolve a fronteira e grava o arquivo de estado que toda chamada Bash sourceia.
 - **Guardas em código, não em prosa**: `scripts/do-wt.sh` concentra criação, merge, undo, remoção, limpeza e prova de contenção. Cada operação destrutiva recusa alvos que não estejam registrados nesta execução.
 - **Regra de dependências (R9)**: instalação permitida se necessária, sempre com cwd na worktree-filha, em modo congelado e com `HUSKY=0` (um postinstall de husky grava `core.hooksPath` no `.git` compartilhado). Cache global do usuário é permitido; escopo global de instalação é proibido.
-- **Testes de regressão**: `scripts/test-contencao.sh` — 85 asserções na época (309 na v4.1.0) cobrindo detecção de modo, colocação, limpeza segura, worktrees de terceiros, preservação da sujeira do usuário, paths com acento e espaço, guarda de índice sujo, distinção entre vazamento nosso e trabalho do usuário no projeto principal, conflito e re-merge (A23), exits da FASE 0 (A28/A29), flock (A30), kind=validation (A31), falha tardia de gate (A33) e gate-pending (A34).
+- **Testes de regressão**: `scripts/test-contencao.sh` — 85 asserções na época (309 na (histórico v4.x)) cobrindo detecção de modo, colocação, limpeza segura, worktrees de terceiros, preservação da sujeira do usuário, paths com acento e espaço, guarda de índice sujo, distinção entre vazamento nosso e trabalho do usuário no projeto principal, conflito e re-merge (A23), exits da FASE 0 (A28/A29), flock (A30), kind=validation (A31), falha tardia de gate (A33) e gate-pending (A34).
 
 ## Novidades na v3.0.0
 
 - **Ondas ilimitadas** com recálculo dinâmico — após cada onda, um sub-agente REVISOR DE PLANO analisa os handoffs e o TASK_PLAN.md, propõe novas sub-tarefas ou declara CONVERGÊNCIA. O ciclo só termina por convergência declarada, nunca por um número fixo de ondas.
-- **Busca interna Brave** (`$SKILL_HOME/scripts/brave-search.sh`) — CLI próprio sobre a Brave Search API que substituía o `surf-search-normal` e não dependia mais do `surf-research-skill` nem do CLI `surf-ai`. **SUPERADA na v3.3.0**: o surf-agent-skill voltou como **Tier 1** do sistema de busca 3-tier (`search.sh`); a Brave API virou o Tier 2 e o DuckDuckGo keyless o Tier 3.
-- **Verificação de créditos** antes de cada onda (`$SKILL_HOME/scripts/check-brave-credits.sh`) — sem créditos, o orquestrador para e informa o usuário (única exceção à autonomia total). **SUPERADA na v3.3.0**: o verificador agora é `check-search-credits.sh` (3 tiers; exit 2 = TODOS os tiers fora) — `check-brave-credits.sh` está DEPRECATED.
+- **Busca interna o provedor de busca removido** (`$SKILL_HOME/scripts/o provedor de busca removido-search.sh`) — CLI próprio sobre a o provedor de busca removido Search API que substituía o `tavily.py` e não dependia mais do `tavily.py` nem do CLI `o fornecedor removido-ai`. **SUPERADA na v3.3.0**: o tavily-agent-skill voltou como **Tier 1** do sistema de busca 3-tier (`search.sh`); a o provedor de busca removido API virou o Tier 2 e o DuckDuckGo keyless o Tier 3.
+- **Verificação de créditos** antes de cada onda (`$SKILL_HOME/scripts/check-o provedor de busca removido-credits.sh`) — sem créditos, o orquestrador para e informa o usuário (única exceção à autonomia total). **SUPERADA na v3.3.0**: o verificador agora é `check-search-credits.sh` (3 tiers; exit 2 = TODOS os tiers fora) — `check-o provedor de busca removido-credits.sh` está DEPRECATED.
 - **ECC Prompts integrados** — 7 templates de prompt (`$SKILL_HOME/prompts/ecc-prompts.md`) + 7 skills portados do ECC (`$SKILL_HOME/prompts/ecc-skills.md`), incluindo Security Review (AgentShield), Planning Prompt (Plan First) e Prompt Defense Baseline.
 - **Prompts de busca para dev** (`$SKILL_HOME/prompts/search-prompts.md`) — 8 categorias de busca, sistema de evolução de perguntas (question evolution) e prompts por domínio.
 - **HTML Explainer** automático ao final de cada execução (pelo template próprio da época — removido na v3.6.0) — de-para de todas as mudanças em 6 abas, salvo como `EXPLAINER.html` na raiz da worktree em que a skill foi invocada (mecânica substituída na v3.6.0 — ver Novidades na v3.6.0).
@@ -214,22 +214,22 @@ DELIMITAR  →  ANALYZE  →  PLAN  →  (APROVAR)  →  EXECUTE-ONDA (repeat �
 
 | Fase | Nome | O que faz |
 |------|------|-----------|
-| 0 | **DELIMITAR O MUNDO** | Passo 0 — **ESTADOS PENDENTES**: retoma, do disco, uma pausa de pesquisa (`search-pause.md`), uma rodada `do-question` ou uma pergunta de evolução que ficou esperando resposta. Depois separa a **zona de prefixo** da invocação, resolve o portão do plano e roda, num comando único, `$SKILL_HOME/scripts/do-context.sh --flags='<tokens>'`: o script **valida as flags** (token desconhecido ou contraditório = exit 2, com sugestão), detecta se o cwd está numa worktree vinculada, resolve `$BASE_DIR`, `$BASE_BRANCH`, `$MAIN_ROOT`, `$CHILD_ROOT`, `$BRANCH_NS` e `$SKILL_HOME`, captura os baselines de contenção e grava o ENV_FILE. O orquestrador **confere o resumo** (`TEST_MODE = …`, `QUESTION = …`, `NO_STOP = …`) contra o que foi digitado, roda o purge de cada execução abandonada que o script anunciar (`DO_ORPHAN_RUNS:`) e **registra** o veredito do portão da surf (`scripts/surf-gate.sh`) — sem parar aqui: ainda não há plano. Aborta com mensagem acionável se não houver branch de integração |
+| 0 | **DELIMITAR O MUNDO** | Passo 0 — **ESTADOS PENDENTES**: retoma, do disco, uma pausa de pesquisa (`search-pause.md`), uma rodada `do-question` ou uma pergunta de evolução que ficou esperando resposta. Depois separa a **zona de prefixo** da invocação, resolve o portão do plano e roda, num comando único, `$SKILL_HOME/scripts/do-context.sh --flags='<tokens>'`: o script **valida as flags** (token desconhecido ou contraditório = exit 2, com sugestão), detecta se o cwd está numa worktree vinculada, resolve `$BASE_DIR`, `$BASE_BRANCH`, `$MAIN_ROOT`, `$CHILD_ROOT`, `$BRANCH_NS` e `$SKILL_HOME`, captura os baselines de contenção e grava o ENV_FILE. O orquestrador **confere o resumo** (`TEST_MODE = …`, `QUESTION = …`, `NO_STOP = …`) contra o que foi digitado, roda o purge de cada execução abandonada que o script anunciar (`DO_ORPHAN_RUNS:`) e **registra** o veredito do portão da o fornecedor removido (`scripts/tavily-gate.sh`) — sem parar aqui: ainda não há plano. Aborta com mensagem acionável se não houver branch de integração |
 | 1 | **ANALYZE** | Lê o prompt, mapeia a estrutura do repositório, identifica subsistemas, classifica greenfield/brownfield, localiza golden masters, consulta as prefs do projeto e **grava o gate uma única vez** (`do-wt.sh gate-set build\|test\|lint\|install "<comando>"`). Com `only-e2e`, detecta o runner e2e (`gate-set e2e`). Com `do-question`, fecha com a **RODADA DE DÚVIDAS** (um bloco numerado, opções a/b/c, um default por dúvida) |
-| 2 | **PLAN** | Decompõe a tarefa em sub-tarefas atômicas, identifica o grafo de dependências, organiza em ondas topológicas (número NÃO fixo — o plano é um ponto de partida), marca cada sub-tarefa com **`SEARCH_REQUIRED=sim\|nao`**, planeja os testes conforme o `TEST_MODE` (com `only-e2e`: o MAPA DE JORNADAS), define o mapa de propriedade de arquivos, batiza cada worktree, escreve os prompts de delegação e publica o TASK_PLAN.md. Fecha no **PORTÃO PÓS-PLANO**: portão da surf != 0 **e** alguma sub-tarefa exige pesquisa → protocolo PESQUISA-FALHOU (pergunta ao usuário) **antes** de qualquer worktree |
+| 2 | **PLAN** | Decompõe a tarefa em sub-tarefas atômicas, identifica o grafo de dependências, organiza em ondas topológicas (número NÃO fixo — o plano é um ponto de partida), marca cada sub-tarefa com **`SEARCH_REQUIRED=sim\|nao`**, planeja os testes conforme o `TEST_MODE` (com `only-e2e`: o MAPA DE JORNADAS), define o mapa de propriedade de arquivos, batiza cada worktree, escreve os prompts de delegação e publica o TASK_PLAN.md. Fecha no **PORTÃO PÓS-PLANO**: portão da o fornecedor removido != 0 **e** alguma sub-tarefa exige pesquisa → protocolo PESQUISA-FALHOU (pergunta ao usuário) **antes** de qualquer worktree |
 | 2.5 | **APROVAR O PLANO** | *Só quando `PLAN_APPROVAL=1`.* Garante o Plannotator na máquina (`check-plannotator.sh --install`), escreve o plano legível em `$PLAN_DOC` e roda `plan-approval.sh round`: aprovado → FASE 3; anotado → **regera o plano e abre um Plannotator NOVO** (até `DO_PLAN_MAX_REVISIONS`); fechado/timeout/orçamento → para limpo, sem nenhuma worktree criada. Desligado (o default), a fase é pulada inteira |
-| 3 | **EXECUTE-ONDA** | Para cada onda: re-ancoragem (`do-wt.sh checklist`) + portão da surf (`surf-gate.sh`) → commit prep (se necessário) → **portão inter-onda** (`assert-clean --wave N`) + cria worktrees (`new` recusa, rc 6, se sobrou algo de onda anterior) → dispara agentes em paralelo (escalonado) → fecha as subwaves da onda anterior (o gatilho é o ledger: `test-*` integra como feature, `val-*` fecha com `close`) → barreira → **TRIAGEM DE PESQUISA** (o `SEARCH_STATUS` de cada handoff; falhou → pergunta ao usuário **antes** de integrar as bloqueadas) → **recálculo dinâmico (REVISOR DE PLANO)** → revisão adversarial → por tarefa aprovada, `integrate` + `gate` em background (**gate verde = o script fecha filha, branch e snapshot**; vermelho = nada é limpo, fix na mesma worktree e re-integrate) → **fim de onda**: `sweep && assert-clean --wave N+1; verify` (rc != 0 não é ignorável) → handoff → subwaves pós-onda conforme o `TEST_MODE`. Repete até o REVISOR DE PLANO declarar CONVERGÊNCIA, o teto de 10 ondas (sem `no-stop`) ou a válvula anti-loop |
+| 3 | **EXECUTE-ONDA** | Para cada onda: re-ancoragem (`do-wt.sh checklist`) + portão da o fornecedor removido (`tavily-gate.sh`) → commit prep (se necessário) → **portão inter-onda** (`assert-clean --wave N`) + cria worktrees (`new` recusa, rc 6, se sobrou algo de onda anterior) → dispara agentes em paralelo (escalonado) → fecha as subwaves da onda anterior (o gatilho é o ledger: `test-*` integra como feature, `val-*` fecha com `close`) → barreira → **TRIAGEM DE PESQUISA** (o `SEARCH_STATUS` de cada handoff; falhou → pergunta ao usuário **antes** de integrar as bloqueadas) → **recálculo dinâmico (REVISOR DE PLANO)** → revisão adversarial → por tarefa aprovada, `integrate` + `gate` em background (**gate verde = o script fecha filha, branch e snapshot**; vermelho = nada é limpo, fix na mesma worktree e re-integrate) → **fim de onda**: `sweep && assert-clean --wave N+1; verify` (rc != 0 não é ignorável) → handoff → subwaves pós-onda conforme o `TEST_MODE`. Repete até o REVISOR DE PLANO declarar CONVERGÊNCIA, o teto de 10 ondas (sem `no-stop`) ou a válvula anti-loop |
 | 4 | **COMMIT-FINAL** | Na ordem: fecha as últimas subwaves (bugs confirmados pelos agentes de teste entram no FIX-FINAL) → descarta o TASK_PLAN.md → roda o **gate completo** em `$BASE_DIR` (as mesmas etapas gravadas na FASE 1; com `only-e2e`, também a e2e) → **gera o EXPLAINER.html** pelo fluxo `html-explainer-agent-skill` (sub-agente delegado, sem limite de tempo; antes do commit, porque entra nele) → commita **apenas o que esta execução produziu** (a sujeira preexistente do usuário é preservada) → **push** → **`do-wt.sh purge`** (nada desta execução sobrevive; rc 3 = houve filha nunca integrada) + `assert-clean` + `ledger` → **relatório final** (título "Tarefa concluída" ou "PARCIALMENTE", seção "Não integrado" obrigatória) → pergunta de evolução → só então descarta o estado (`clean-ignored-delta` antes do `rm -rf` de `$DO_STATE`) |
 
 ### Regras fundamentais
 
 1. **Nunca escreve código** — delega tudo a sub-agentes
-2. **Nunca pergunta ao usuário — salvo seis exceções, que são obrigatórias** — autonomia total: falta informação → infere com confiança e documenta a premissa. As exceções: (a) a **surf-agent-skill não está instalada** (`SURF_GATE=127`) e existe sub-tarefa com `SEARCH_REQUIRED=sim` — instalar é `npm -g`, vedado por R9, então quem instala é o usuário; (b) a **pesquisa exigida falhou** por configuração do ambiente — portão `SURF_GATE=78` (sem chave Brave válida) ou handoff com `SEARCH_STATUS` `BLOCKED_78`/`FAILED_QUOTA`/`FAILED_OTHER`/ausente. (a) e (b) executam o **protocolo PESQUISA-FALHOU** e são **incondicionais**: vencem "não me pergunte nada", "autônomo", `no-stop` e `plan=off`, e não dependem de `do-question`; (c) abort da FASE 0 (não é repositório, HEAD destacado, repo sem commits, índice sujo, flag inválida); (d) o **portão de aprovação do plano** está ativo (`PLAN_APPROVAL=1`) — aí a interação é a entrega pedida, acontece no navegador (nunca por pergunta em texto) e só na FASE 2.5; (e) a **pergunta de evolução** ao fim de tudo (desligada por `no-evolve`); (f) a flag **`do-question`** está ativa. Toda pergunta segue o mesmo rito (**AGUARDE**): grava o estado em `$DO_STATE`, é a **última coisa** da resposta, em texto, e **encerra o turno** — a retomada lê o disco, no passo 0 da FASE 0
+2. **Nunca pergunta ao usuário — salvo seis exceções, que são obrigatórias** — autonomia total: falta informação → infere com confiança e documenta a premissa. As exceções: (a) a **tavily-agent-skill não está instalada** (`TAVILY_GATE=127`) e existe sub-tarefa com `SEARCH_REQUIRED=sim` — instalar é `npm -g`, vedado por R9, então quem instala é o usuário; (b) a **pesquisa exigida falhou** por configuração do ambiente — portão `TAVILY_GATE=78` (sem chave Tavily válida) ou handoff com `SEARCH_STATUS` `BLOCKED_NOKEY`/`FAILED_QUOTA`/`FAILED_OTHER`/ausente. (a) e (b) executam o **protocolo PESQUISA-FALHOU** e são **incondicionais**: vencem "não me pergunte nada", "autônomo", `no-stop` e `plan=off`, e não dependem de `do-question`; (c) abort da FASE 0 (não é repositório, HEAD destacado, repo sem commits, índice sujo, flag inválida); (d) o **portão de aprovação do plano** está ativo (`PLAN_APPROVAL=1`) — aí a interação é a entrega pedida, acontece no navegador (nunca por pergunta em texto) e só na FASE 2.5; (e) a **pergunta de evolução** ao fim de tudo (desligada por `no-evolve`); (f) a flag **`do-question`** está ativa. Toda pergunta segue o mesmo rito (**AGUARDE**): grava o estado em `$DO_STATE`, é a **última coisa** da resposta, em texto, e **encerra o turno** — a retomada lê o disco, no passo 0 da FASE 0
 3. **Trabalho completo, do início ao commit — e nada some em silêncio** — nunca entrega trabalho parcial disfarçado: toda sub-tarefa termina **integrada** ou **listada na seção "Não integrado" do relatório final com o motivo** e a ref de arquivo do branch (invariante I-MERGE); havendo alguma, o título do relatório vira "Tarefa concluída PARCIALMENTE". A pausa do protocolo PESQUISA-FALHOU **não** é trabalho parcial — seguir calado sem a pesquisa exigida é que violaria esta regra. Saída antecipada legítima: o portão do plano terminar sem aprovação — e aí nada foi construído, então o repositório fica exatamente como estava
 4. **Worktree é a unidade de isolamento** — cada sub-agente trabalha em sua própria worktree Git com nome descritivo (ex.: `onda1-cache-service`)
 5. **Squash-merge um a um, nunca octopus** — integração sequencial em `$BASE_BRANCH` por `do-wt.sh integrate`; conflito é recusado **sem sujar a raiz** (resolve-se dentro da filha) e squash vazio não conta como integrado (rc 4). O gate roda em snapshot de integração `int-<nome>`, fora da seção crítica (decisão D1: builds duplicados são esperados)
 6. **Worktree nasce nomeada e morre no gate verde da própria tarefa — quem limpa é o script** — `gate` verde chama `finish` sozinho; quem não será integrado fecha com `close`; a onda N+1 **não abre** com sobra da onda N (`assert-clean`, e o `new` recusa com rc 6). Duas sobrevidas por construção: sub-tarefa bloqueada, só dentro da própria onda, e `test-*`/`val-*`, que rodam em background por **uma** onda. No fim, o `purge` fecha tudo — sempre por nome registrado, sempre arquivando o branch antes
-7. **Verificar a dependência de pesquisa antes de cada onda** — o portão é `scripts/surf-gate.sh` (**fail-closed**): `SURF_GATE=0` pronto · **78** sem chave Brave válida (configuração; retentar é inútil) · **127** pacote ausente — com `SURF_CODE` e a mensagem do surf verbatim. Em 78/127 com alguma sub-tarefa pendente `SEARCH_REQUIRED=sim`, nenhum pesquisador é disparado e o orquestrador **pergunta ao usuário** (protocolo PESQUISA-FALHOU); com todas as pendentes em `SEARCH_REQUIRED=nao`, a execução prossegue sem busca, com registro. É proibido rebaixar `SEARCH_REQUIRED` depois de um portão vermelho para fugir da pausa
+7. **Verificar a dependência de pesquisa antes de cada onda** — o portão é `scripts/tavily-gate.sh` (**fail-closed**): `TAVILY_GATE=0` pronto · **78** sem chave Tavily válida (configuração; retentar é inútil) · **127** pacote ausente — com `TAVILY_CODE` e a mensagem do o fornecedor removido verbatim. Em 78/127 com alguma sub-tarefa pendente `SEARCH_REQUIRED=sim`, nenhum pesquisador é disparado e o orquestrador **pergunta ao usuário** (protocolo PESQUISA-FALHOU); com todas as pendentes em `SEARCH_REQUIRED=nao`, a execução prossegue sem busca, com registro. É proibido rebaixar `SEARCH_REQUIRED` depois de um portão vermelho para fugir da pausa
 8. **A worktree de invocação é a raiz-de-mundo** — nada é escrito fora dela; o branch dela é o único alvo de integração; a limpeza só toca o que esta execução registrou
 9. **Dependências: dentro da worktree, congeladas, nunca globais** — instale só se necessário, com cwd na filha e `HUSKY=0`; cache global do usuário é permitido
 10. **Só executa plano que o usuário aprovou** — quando o portão está ativo, nenhuma worktree nasce antes do APROVADO; o título do plano é imutável entre revisões; cada anotação regera o plano num Plannotator novo; e o feedback do usuário é correção **do plano**, nunca tarefa de implementação
@@ -247,66 +247,66 @@ O [ECC — Everything Claude Code](https://github.com/affaan-m/ECC) (MIT) é um 
 
 Princípio transversal herdado: **entrada NÃO confiável** — planos, diffs e repos clonados são lidos como texto não confiável; comandos embutidos só rodam após sanitização contra whitelist (test, lint, typecheck, coverage).
 
-### Pesquisa — surf-agent-skill v9+ (dependência dura)
+### Pesquisa — tavily-agent-skill v9+ (dependência dura)
 
 **Esta skill não tem sistema de busca.** Desde a v4.0.0 (decisão D23), toda
 pesquisa web passa pelos binários globais da
-[surf-agent-skill v9+](https://www.npmjs.com/package/surf-agent-skill), e por
+[tavily-agent-skill v9+](https://www.npmjs.com/package/tavily-agent-skill), e por
 mais nada. Não há tabela de tiers porque não há cadeia: há um backend.
 
 ```bash
-npm i -g surf-agent-skill    # dependência dura
-surf                         # adiciona a chave Brave — validá-la é grátis
+npm i -g tavily-agent-skill    # dependência dura
+o fornecedor removido                         # adiciona a chave Tavily — validá-la é grátis
 ```
 
 | Binário | Quando |
 |---|---|
-| `surf-search-normal "<pergunta>" --sub-agents=N` | uma onda; o caminho padrão |
-| `surf-search-unlimit "<pergunta>" --sub-agents=N --max-depth 3` | pergunta aberta que precisa descer em várias ondas |
-| `surf-research-skill search-parallel "q1" "q2" --sub-agents=N --json` | lote de perguntas cruas, sem síntese |
-| `"$DO_SURF_GATE"` (= `$SKILL_HOME/scripts/surf-gate.sh`) | **o portão** — FASE 0, PORTÃO PÓS-PLANO e passo 0 de cada onda |
-| `surf doctor` | só para **registrar** os blocos de diagnóstico na FASE 0; o exit code dele não é interpretado |
+| `tavily.py "<pergunta>" --sub-agents=N` | uma onda; o caminho padrão |
+| `tavily.py search "<pergunta>" --depth advanced` | pergunta aberta que precisa descer em várias ondas |
+| `tavily.py search-parallel "q1" "q2" --sub-agents=N --json` | lote de perguntas cruas, sem síntese |
+| `"$DO_TAVILY_GATE"` (= `$SKILL_HOME/scripts/tavily-gate.sh`) | **o portão** — FASE 0, PORTÃO PÓS-PLANO e passo 0 de cada onda |
+| `tavily.py status` | só para **registrar** os blocos de diagnóstico na FASE 0; o exit code dele não é interpretado |
 
-**Brave é o único backend.** Não existe Tavily, Parallel, Wikipedia,
-DuckDuckGo, provedor de reserva nem tier sem chave — o próprio surf estreitou
-para Brave-only na v8. **Não existe modo degradado automático**: ou há chave
+**o provedor de busca removido é o único backend.** Não existe Tavily, Parallel, Wikipedia,
+DuckDuckGo, provedor de reserva nem tier sem chave — o próprio o fornecedor removido estreitou
+para Tavily-only na v8. **Não existe modo degradado automático**: ou há chave
 válida e a pesquisa funciona, ou o orquestrador **pausa e pergunta** — seguir
 sem a pesquisa exigida é uma escolha que só o **usuário** faz.
 
-**O portão é fail-closed.** `surf-gate.sh` roda `surf-research-skill gate`
+**O portão é fail-closed.** `tavily-gate.sh` roda `tavily.py gate`
 (grátis — não gasta crédito), conta **qualquer** saída != 0 como 78 e imprime
 o veredito em linhas `CHAVE=valor` — o script sempre sai 0; o veredito é a
 linha, não o exit code:
 
 | Linha | Significado |
 |---|---|
-| `SURF_GATE=0` | pronto |
-| `SURF_GATE=78` | não há chave Brave válida — ausente, queimada, em cooldown, inválida, inalcançável ou não provada |
-| `SURF_GATE=127` | a surf-agent-skill não está instalada (`surf-research-skill` ou `surf-search-normal` fora do PATH) |
-| `SURF_CODE=…` | `BraveKeyMissing` · `BraveKeyBurned` · `BraveKeyCooling` · `BraveKeyInvalid` · `BraveKeyUnverified` · `BraveKeyUnproven` · `BraveKeyUnknown` · `NotInstalled` |
-| *(mensagem)* | a mensagem do surf **verbatim**, com o "Fix:" do caso — nunca uma chave (tokens com cara de chave saem mascarados). Fica salva em `$DO_STATE/surf-gate.last` |
+| `TAVILY_GATE=0` | pronto |
+| `TAVILY_GATE=78` | não há chave Tavily válida — ausente, queimada, em cooldown, inválida, inalcançável ou não provada |
+| `TAVILY_GATE=127` | a tavily-agent-skill não está instalada (`tavily.py` ou `tavily.py` fora do PATH) |
+| `TAVILY_CODE=…` | `TavilySkillMissing` · `TavilyKeyMissing` · `TavilyQuotaExhausted` · `TavilyAllBanned` · `TavilyUnknown` |
+| *(mensagem)* | a mensagem do o fornecedor removido **verbatim**, com o "Fix:" do caso — nunca uma chave (tokens com cara de chave saem mascarados). Fica salva em `$DO_STATE/tavily-gate.last` |
 
-O portão antigo (`surf doctor` com a saída em `/dev/null` + `echo $?`) jogava
+O portão antigo (`tavily.py status` com a saída em `/dev/null` + `echo $?`) jogava
 fora a mensagem que o usuário precisa ler e era fail-open no exit 1 — montar o
 portão à mão é proibido.
 
-**Códigos de saída dos binários surf** (o orquestrador e todo sub-agente
+**Códigos de saída dos binários o fornecedor removido** (o orquestrador e todo sub-agente
 ramificam neles — depois de **classificar**):
 
 | Código | Significado | Ação |
 |---|---|---|
-| 0 | funcionou | cite as URLs que o surf devolveu |
+| 0 | funcionou | cite as URLs que o o fornecedor removido devolveu |
 | 1 | terminou com **0 fontes** — duas causas opostas que o exit code não separa | **classifique**: `EMPTY` = a busca funcionou e não achou nada → registre o vazio, marque o fato como NÃO VERIFICADO ("busca vazia") e siga, **sem** trocar de ferramenta; `FAILED_QUOTA` / `FAILED_OTHER` = a pesquisa **não funcionou** (cota, 429, billing, todas as chaves esgotadas) → protocolo PESQUISA-FALHOU |
 | 2 | o comando está errado | corrija o comando — nunca vira pergunta ao usuário |
-| **78** | **sem chave Brave válida** (`EX_CONFIG`) | É configuração, não pesquisa: retentar não conserta e não há de onde mais buscar. Sub-agente: **para de pesquisar**, termina só o que não depende do fato e reporta `SEARCH_STATUS: BLOCKED_78`. Orquestrador: **protocolo PESQUISA-FALHOU** |
-| 143 | o harness matou por timeout | refaça com `surf-search-normal`, que se auto-orça — nunca vira pergunta ao usuário |
+| **78** | **sem chave Tavily válida** (`EX_CONFIG`) | É configuração, não pesquisa: retentar não conserta e não há de onde mais buscar. Sub-agente: **para de pesquisar**, termina só o que não depende do fato e reporta `SEARCH_STATUS: BLOCKED_NOKEY`. Orquestrador: **protocolo PESQUISA-FALHOU** |
+| 143 | o harness matou por timeout | refaça com `tavily.py`, que se auto-orça — nunca vira pergunta ao usuário |
 
-Cota esgotada, 429 e 402 **não** viram 78 no surf: saem **1**, iguais a uma
-busca vazia. Por isso toda chamada surf redireciona stdout e stderr para
+Cota esgotada, 429 e 402 **não** viram 78 no o fornecedor removido: saem **1**, iguais a uma
+busca vazia. Por isso toda chamada o fornecedor removido redireciona stdout e stderr para
 arquivo e é classificada por
-`surf-gate.sh classify <exit> <stdout-file> <stderr-file>`, que imprime **um**
-de `OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78 | KILLED_143 |
-USAGE_2`. Os padrões são **ancorados** na saída do surf — uma pergunta que
+`tavily-gate.sh classify <exit> <stdout-file> <stderr-file>`, que imprime **um**
+de `OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_NOKEY | KILLED_143 |
+USAGE_2`. Os padrões são **ancorados** na saída do o fornecedor removido — uma pergunta que
 contenha "429" ou "quota" não vira `FAILED_QUOTA`.
 
 #### Quando a pesquisa falha — o protocolo PESQUISA-FALHOU
@@ -322,15 +322,15 @@ Como ele sabe que a pesquisa era **exigida**: na FASE 2 cada sub-tarefa recebe
 repo, "mais recente/atual/docs/compare/escolha", dependência nova, migração de
 versão — **na dúvida, sim**), e todo handoff de sub-agente abre com a seção
 `## SEARCH_STATUS` (`NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER |
-BLOCKED_78`).
+BLOCKED_NOKEY`).
 
 | Gatilho | Quando |
 |---|---|
-| **g1** | o portão devolveu `SURF_GATE != 0` **e** existe sub-tarefa pendente com `SEARCH_REQUIRED=sim` (PORTÃO PÓS-PLANO da FASE 2; passo 0 de cada onda) |
-| **g2** | um handoff voltou com `SEARCH_STATUS` `BLOCKED_78`, `FAILED_QUOTA` ou `FAILED_OTHER` — ou **sem** a seção, numa sub-tarefa que exigia pesquisa (TRIAGEM DE PESQUISA, FASE 3 passo 4.5) |
-| **g3** | 2 ou mais handoffs `EMPTY` na mesma onda → `surf-gate.sh resume --probe` (uma busca real barata, **1 crédito** — a sonda grátis não enxerga cota); só pausa se continuar bloqueado |
+| **g1** | o portão devolveu `TAVILY_GATE != 0` **e** existe sub-tarefa pendente com `SEARCH_REQUIRED=sim` (PORTÃO PÓS-PLANO da FASE 2; passo 0 de cada onda) |
+| **g2** | um handoff voltou com `SEARCH_STATUS` `BLOCKED_NOKEY`, `FAILED_QUOTA` ou `FAILED_OTHER` — ou **sem** a seção, numa sub-tarefa que exigia pesquisa (TRIAGEM DE PESQUISA, FASE 3 passo 4.5) |
+| **g3** | 2 ou mais handoffs `EMPTY` na mesma onda → `tavily-gate.sh resume --probe` (uma busca real barata, **1 crédito** — a sonda grátis não enxerga cota); só pausa se continuar bloqueado |
 
-`BraveKeyCooling` (cooldown de 60 s) não vira pergunta de cara: o orquestrador
+`TavilyAllBanned` (cooldown de 60 s) não vira pergunta de cara: o orquestrador
 segue com o trabalho que não pesquisa e reroda o portão até 3 vezes, sem
 `sleep`; persistiu → pergunta.
 
@@ -338,7 +338,7 @@ O que acontece: (A) nenhum pesquisador novo é disparado; as sub-tarefas **não*
 bloqueadas são revisadas, integradas e **limpas** normalmente — nunca se
 atravessa um fim de turno com filha integrada por limpar —, e as bloqueadas
 ficam `ACTIVE`, **sem** merge; (B) o portão roda de novo, visível; (C)
-`surf-gate.sh pause <onda> "<sub-tarefas>" "<motivo>"` grava
+`tavily-gate.sh pause <onda> "<sub-tarefas>" "<motivo>"` grava
 `$DO_STATE/search-pause.md`; (D) a pergunta sai em **texto**, como a última
 coisa da resposta, e o turno **encerra**:
 
@@ -346,15 +346,15 @@ coisa da resposta, e o turno **encerra**:
 ===== PESQUISA-FALHOU — a pesquisa exigida não pôde ser feita; a decisão é SUA =====
 ...
 Responda com o NÚMERO da opção:
-  [1] Adicionei/troquei a chave Brave — tente de novo  (`surf-research-skill keys add --provider brave <CHAVE>` | terminal separado: `surf add`)
-  [2] Ajustei o plano/cota ou esperei o cooldown — tente de novo  (`surf-research-skill keys reset --provider brave` limpa burn/cooldown em cache)
+  [1] Adicionei/troquei a chave Tavily — tente de novo  (`tavily.py keys add "<CHAVE>" --label conta-N` | terminal separado: `tavily.py keys add`)
+  [2] Ajustei o plano/cota ou esperei o cooldown — tente de novo  (`tavily.py keys unban --all` limpa burn/cooldown em cache)
   [3] Seguir SEM pesquisa — premissas ficam marcadas NÃO VERIFICADAS no plano, handoffs e relatório
   [4] Abortar — fecho o que está aberto (purge) e entrego relatório parcial
 ```
 
 Rode os comandos de chave **no seu terminal** e **não cole a chave no chat**
 (iria para o transcript). Na mensagem seguinte, o passo 0 da FASE 0 acha o
-`search-pause.md` e retoma: **[1]/[2]** → `surf-gate.sh resume --probe`;
+`search-pause.md` e retoma: **[1]/[2]** → `tavily-gate.sh resume --probe`;
 `RESUME=OK` re-delega só as bloqueadas, **na mesma worktree**;
 `RESUME=STILL_BLOCKED` repete a pergunta, sem limite de rodadas — quem decide
 sair por [3] ou [4] é você. **[3]** → as bloqueadas são re-delegadas com
@@ -363,36 +363,36 @@ sair por [3] ou [4] é você. **[3]** → as bloqueadas são re-delegadas com
 arquivados) e relatório parcial.
 
 **`--sub-agents` é o único botão de simultaneidade, e ele SOMA com
-`DO_MAX_PARALLEL`.** Seja `N` o teto global (`surf-sub-agents=N` na invocação,
+`DO_MAX_PARALLEL`.** Seja `N` o teto global (`tavily-sub-agents=N` na invocação,
 default 10, faixa 1..20) e `R` a quantidade de sub-agentes da onda que
 pesquisam: cada um recebe `--sub-agents=max(1, floor(N / R))`, de modo que a
 soma da onda nunca passa de `N`. Se multiplicassem, uma onda cheia seria
-`50 × 10 = 500` buscas simultâneas contra um plano Brave que pode servir uma
+`50 × 10 = 500` buscas simultâneas contra um pool Tavily que pode servir uma
 por segundo. `R` é a contagem de sub-tarefas `SEARCH_REQUIRED=sim` da onda; com
 `R = 0` ninguém pesquisa (não há `floor(N/0)`). O `N` é validado e gravado no
-ENV_FILE pelo `do-context.sh` (`DO_SURF_SUB_AGENTS`; fora de 1..20 = exit 2).
+ENV_FILE pelo `do-context.sh` (`DO_TAVILY_SUB_AGENTS`; fora de 1..20 = exit 2).
 
-**É proibido envolver o surf em `sleep`, jitter, backoff ou retry.** Ele
-aprende o requests-per-second real do plano Brave nos headers da resposta e o
+**É proibido envolver a busca em `sleep`, jitter, backoff ou retry.** Ele
+aprende o requests-per-second real do pool Tavily nos headers da resposta e o
 aplica num token bucket **cross-process**, compartilhado por todos os processos
-surf da máquina. Um ritmo por cima briga com o limitador e provoca exatamente
+o fornecedor removido da máquina. Um ritmo por cima briga com o limitador e provoca exatamente
 o 429 que ele evita.
 
 **WebSearch/WebFetch do harness não descobrem fontes.** Fonte que não veio pelo
-surf não pode ser citada em handoff nem em deliverable. Uso legítimo, único:
-abrir com `Read`/`WebFetch` uma URL **que o surf já devolveu** — é a única
-forma de ler o corpo de uma página, já que a Brave devolve título, URL e
-trecho, e os verbos `extract`/`crawl`/`map` foram removidos no surf v8.
+o fornecedor removido não pode ser citada em handoff nem em deliverable. Uso legítimo, único:
+abrir com `Read`/`WebFetch` uma URL **que o o fornecedor removido já devolveu** — é a única
+forma de ler o corpo de uma página, já que a o provedor de busca removido devolve título, URL e
+trecho, e os verbos `extract`/`crawl`/`map` foram removidos na busca v8.
 
-**Histórico:** o surf foi o provedor original (v3.0.0), foi substituído por uma
-busca Brave interna, voltou como Tier 1 na v3.3.0, e na v4.0.0 virou a
-dependência única — os Tiers 2 (Brave direto) e 3 (DDG keyless) desta skill
+**Histórico:** o o fornecedor removido foi o provedor original (v3.0.0), foi substituído por uma
+busca o provedor de busca removido interna, voltou como Tier 1 na v3.3.0, e na v4.0.0 virou a
+dependência única — os Tiers 2 (o provedor de busca removido direto) e 3 (DDG keyless) desta skill
 foram removidos. O gatilho está registrado no D23: `search.sh` tratava todo
-exit code não-zero do surf como falha transitória, então o `exit 78` da v8
+exit code não-zero do o fornecedor removido como falha transitória, então o `exit 78` da v8
 ficava indistinguível de um timeout e o wrapper respondia a mesma pergunta pelo
-DuckDuckGo — reproduzindo, uma camada acima, o defeito que o surf acabara de
-eliminar. Na v4.1.0 o portão deixou de ser o `surf doctor` montado à mão e
-virou `scripts/surf-gate.sh` (fail-closed), e o `exit 78` deixou de ser uma
+DuckDuckGo — reproduzindo, uma camada acima, o defeito que o o fornecedor removido acabara de
+eliminar. Na (histórico v4.x) o portão deixou de ser o `tavily.py status` montado à mão e
+virou `scripts/tavily-gate.sh` (fail-closed), e o `exit 78` deixou de ser uma
 parada muda: virou a pergunta do protocolo PESQUISA-FALHOU.
 
 ### Sub-agentes no Claude Code — nativos, nenhum plugin necessário
@@ -418,7 +418,7 @@ deep-orchestrator-agent-skill/
 ├── CONTRATO.md                  # Fonte única dos contratos de máquina (test-contrato.sh valida byte-a-byte)
 ├── references/                  # Módulos carregados SOB DEMANDA (1 HOP) — lista canónica em CONTRATO.md §6
 │   ├── phase0-context.md        # FASE 0 (sempre) · analyze-plan.md (FASE 1+2) · execute-wave.md (FASE 3) · commit-final.md (FASE 4)
-│   ├── research-protocol.md     # R7 + PESQUISA-FALHOU + casos surf (SEARCH_REQUIRED / SURF_GATE != 0)
+│   ├── research-protocol.md     # R7 + PESQUISA-FALHOU + casos o fornecedor removido (SEARCH_REQUIRED / TAVILY_GATE != 0)
 │   ├── plan-approval.md         # R10 + FASE 2.5 + casos plan-* (SÓ plan=on)
 │   └── final-report.md · degradation.md · examples.md · placeholders.md
 ├── SKILL.md                     # Definição do skill (frontmatter YAML + XML do orquestrador; a versão vive em metadata.version) — symlink para .claude/skills/deep-orchestrator-agent-skill/SKILL.md
@@ -426,7 +426,7 @@ deep-orchestrator-agent-skill/
 │   ├── README.md                # Índice de todos os scripts
 │   ├── do-context.sh            # FASE 0 — valida as flags (--flags='…'), delimita a raiz-de-mundo e grava o estado
 │   ├── do-wt.sh                 # ciclo de vida das worktrees-filhas: integrate/gate/finish/close, portão inter-onda (assert-clean), ledger, purge (guardas de contenção)
-│   ├── surf-gate.sh             # portão FAIL-CLOSED da surf + protocolo PESQUISA-FALHOU (gate/classify/pause/resume) — v4.1.0
+│   ├── tavily-gate.sh             # portão FAIL-CLOSED da o fornecedor removido + protocolo PESQUISA-FALHOU (gate/classify/pause/resume) — (histórico v4.x)
 │   ├── evolve-skill.sh          # evolução do CORPO da skill: search (prefs+prompts)/diff/apply (branch evolve/*, nunca merge sozinho)/status
 │   ├── do-prefs.sh              # motor de prefs: .deep-orchestrator-preferences/ do projeto e da skill (load/add-project/add-global/pending/ensure-gitignore/status)
 │   ├── evolution-survey.sh      # PERGUNTA de evolução em texto no terminal (ask/answer/apply/dismiss — v3.9.0, sem Plannotator)
@@ -436,8 +436,8 @@ deep-orchestrator-agent-skill/
 │   ├── check-plannotator.sh     # FASE 2.5 — resolve/instala o Plannotator (exit 0/1/2)
 │   ├── plan-approval.sh         # FASE 2.5 — uma rodada de aprovação no Plannotator
 │   ├── test-contencao.sh        # MODO CONTIDO + fechamento por tarefa (309 asserções, A1–A56)
-│   ├── test-flags.sh            # flags da FASE 0: --flags, apelidos, anti-stale, DO_ORPHAN_RUNS, wt=, --boundary (307 asserções, FL1–FL16) — v4.1.0
-│   ├── test-surf-gate.sh        # portão da surf, classify, pause/resume, orçamento --sub-agents, choose (228 asserções, G0–G12, mockado)
+│   ├── test-flags.sh            # flags da FASE 0: --flags, apelidos, anti-stale, DO_ORPHAN_RUNS, wt=, --boundary (307 asserções, FL1–FL16) — (histórico v4.x)
+│   ├── test-tavily-gate.sh        # portão da o fornecedor removido, classify, pause/resume, orçamento --sub-agents, choose (228 asserções, G0–G12, mockado)
 │   ├── test-evolve.sh           # motor de prefs/pergunta de evolução (81 asserções, F1–F14 · S1–S10 · E1–E6)
 │   └── test-plan-approval.sh    # portão de aprovação do plano (139 asserções, mockado)
 ├── prompts/
@@ -458,10 +458,10 @@ no macOS (bash 3.2.57, BSD sed/wc, sem `flock`): `for t in scripts/test-*.sh; do
 
 - Claude Code (CLI)
 - Git
-- **Node.js ≥ 18 + npm** — para instalar a surf-agent-skill
-- **surf-agent-skill v9+** — **OBRIGATÓRIA** sempre que a tarefa exigir pesquisa (a v9 é a primeira que traz o verbo `surf-research-skill gate`, em que o portão desta skill se apoia): `npm i -g surf-agent-skill`, depois `surf` para adicionar a chave. Sem ela, o orquestrador **pausa e pergunta** (nunca instala sozinho: `npm -g` é vedado pela regra R9)
-- **Chave Brave Search** — **OBRIGATÓRIA** (https://api-dashboard.search.brave.com). Não há tier sem chave: sem ela todo comando `surf` sai **78**, e o orquestrador pausa e pede a você que troque/ajuste a chave — ou que autorize seguir sem pesquisa (protocolo PESQUISA-FALHOU). Validá-la é **grátis** e o surf faz isso sozinho a cada invocação (veredito em cache por 7 dias). Uma **segunda** chave não é redundância — cada uma carrega o próprio orçamento de requisições por segundo, então duas dobram o paralelismo real
-- **Chave OpenRouter** — *recomendada* (`surf-research-skill ai-setup`): sem ela o surf ainda faz buscas reais, mas devolve evidência crua em vez de síntese
+- **Node.js ≥ 18 + npm** — para instalar a tavily-agent-skill
+- **tavily-agent-skill v9+** — **OBRIGATÓRIA** sempre que a tarefa exigir pesquisa (a v9 é a primeira que traz o verbo `tavily.py gate`, em que o portão desta skill se apoia): `npm i -g tavily-agent-skill`, depois `o fornecedor removido` para adicionar a chave. Sem ela, o orquestrador **pausa e pergunta** (nunca instala sozinho: `npm -g` é vedado pela regra R9)
+- **Chave o provedor de busca removido Search** — **OBRIGATÓRIA** (https://app.tavily.com). Não há tier sem chave: sem ela todo comando `o fornecedor removido` sai **78**, e o orquestrador pausa e pede a você que troque/ajuste a chave — ou que autorize seguir sem pesquisa (protocolo PESQUISA-FALHOU). Validá-la é **grátis** e o o fornecedor removido faz isso sozinho a cada invocação (veredito em cache por 7 dias). Uma **segunda** chave não é redundância — cada uma carrega o próprio orçamento de requisições por segundo, então duas dobram o paralelismo real
+- **Chave OpenRouter** — *recomendada* (`tavily.py ai-setup`): sem ela o o fornecedor removido ainda faz buscas reais, mas devolve evidência crua em vez de síntese
 - `curl` (instalação automática do Plannotator, em `check-plannotator.sh`) e `jq` **ou** `python3` (leitura do envelope JSON em `plan-approval.sh` e `evolution-survey.sh`). Os scripts de busca que os usavam foram removidos na v4.0.0
 - **bash ≥ 3.2** — os scripts rodam no bash de fábrica do macOS (3.2.57), com BSD sed/wc e **sem** `flock(1)` (o lock do ledger cai para `mkdir` atômico)
 - `project-router` skill resolvido a partir da raiz-de-mundo (`<raiz>/.claude/skills/project-router/` ou `<raiz>/.agents/skills/project-router/`). Ausente, o sub-agente registra no handoff e segue — não cai para o repositório principal nem para `~/.claude`
@@ -491,22 +491,22 @@ ln -s ~/Projects/deep-orchestrator-agent-skill ~/.claude/skills/deep-orchestrato
 # repositório-alvo: ela é lida de $SKILL_HOME.
 
 # OBRIGATÓRIO se a tarefa exigir pesquisa — a skill não tem busca própria:
-npm i -g surf-agent-skill
-surf                                  # interativo (exige TTY): chave Brave (validação grátis)
+npm i -g tavily-agent-skill
+o fornecedor removido                                  # interativo (exige TTY): chave Tavily (validação grátis)
 # …ou, não-interativo:
-surf-research-skill keys add --provider brave <CHAVE>   # valida ao vivo, grátis; aceita --stdin
-export BRAVE_API_KEY=<chave>          # https://api-dashboard.search.brave.com
-export OPENROUTER_API_KEY=<chave>     # recomendada: liga a síntese do surf-ai
+tavily.py keys add "<CHAVE>" --label conta-N   # valida ao vivo, grátis; aceita --stdin
+export TAVILY_API_KEY=<chave>          # https://app.tavily.com (ou tavily.py keys add)
+export OPENROUTER_API_KEY=<chave>     # recomendada: liga a síntese do o fornecedor removido-ai
 ```
 
 Chave queimada, em cooldown ou com a cota esgotada no meio de uma execução? O orquestrador pausa e pergunta — ver [Quando a pesquisa falha](#quando-a-pesquisa-falha--o-protocolo-pesquisa-falhou).
 
 ## Uso
-### Flags de limite (todas configuráveis por flag — v5.0.0)
+### Flags de limite (todas configuráveis por flag — v6.0.0)
 
 `max-parallel=N` (teto de sub-agentes in-flight; default 50) ·
 `no-subagent-limit` (SEM teto; contradiz max-parallel) ·
-`surf-sub-agents=N` (teto de buscas simultâneas; default 10, 1..20) ·
+`tavily-sub-agents=N` (teto de buscas simultâneas; default 10, 1..20) ·
 `plan-revisions=N` (revisões do plano; default 5) ·
 `plan-timeout=S` (segundos por rodada do portão; default 3600) ·
 `retries=N` (re-delegação de sub-agente; default 3) ·
@@ -520,7 +520,7 @@ Ex.: `plan=on max-parallel=12 retries=2 fix-retries=1 <tarefa>` ou
 /deep-orchestrator-agent-skill plan=on <descrição da tarefa>            # prefixo OPCIONAL — força o portão de aprovação do plano
 /deep-orchestrator-agent-skill plan=off faça um plano e execute         # prefixo OPCIONAL — força a autonomia total (sem portão)
 /deep-orchestrator-agent-skill max-parallel=N <descrição da tarefa>     # prefixo OPCIONAL — cap de concorrência (default 50)
-/deep-orchestrator-agent-skill surf-sub-agents=N <descrição da tarefa>  # prefixo OPCIONAL — teto global de buscas simultâneas do surf (1..20, default 10)
+/deep-orchestrator-agent-skill tavily-sub-agents=N <descrição da tarefa>  # prefixo OPCIONAL — teto global de buscas simultâneas do o fornecedor removido (1..20, default 10)
 /deep-orchestrator-agent-skill wt=on <descrição da tarefa>              # prefixo OPCIONAL — worktree irmã nomeada como raiz-de-mundo
 /deep-orchestrator-agent-skill wt=feature-x <descrição da tarefa>       # prefixo OPCIONAL — com nome explícito (mesmo nome = reentra)
 /deep-orchestrator-agent-skill no-stop <descrição da tarefa>            # prefixo OPCIONAL — remove o teto de 10 ondas
@@ -531,7 +531,7 @@ Ex.: `plan=on max-parallel=12 retries=2 fix-retries=1 <tarefa>` ou
 /deep-orchestrator-agent-skill max-parallel=8 no-test plan=off <tarefa> # os prefixos combinam, em qualquer ordem, ANTES da tarefa
 ```
 
-**Zona de prefixo (v4.1.0).** Flags são os tokens **iniciais** da invocação que têm cara de flag (`chave=valor`, ou `no-…` / `only-…` / `do-…`), até o primeiro token que não tenha — o resto é o texto da tarefa. O orquestrador **não julga** os tokens: repassa todos, num argumento só, para `do-context.sh --flags='<tokens>'`, e o **script é o único validador**. Consequências práticas:
+**Zona de prefixo ((histórico v4.x)).** Flags são os tokens **iniciais** da invocação que têm cara de flag (`chave=valor`, ou `no-…` / `only-…` / `do-…`), até o primeiro token que não tenha — o resto é o texto da tarefa. O orquestrador **não julga** os tokens: repassa todos, num argumento só, para `do-context.sh --flags='<tokens>'`, e o **script é o único validador**. Consequências práticas:
 
 - typo não vira texto da tarefa: `no-tests`, `e2e-only`, `mp=8`, `ask` saem **exit 2** com a sugestão ("quis dizer `no-test`?") — antes, a flag errada era engolida e o pedido se invertia em silêncio;
 - token igual **no meio** da frase é texto ("adicione uma flag no-test ao CLI" não liga `no-test`), e flag **nunca** é inferida por linguagem natural — a única decisão por linguagem natural é o portão do plano;
@@ -540,19 +540,19 @@ Ex.: `plan=on max-parallel=12 retries=2 fix-retries=1 <tarefa>` ou
 - a flag **vence** a variável de ambiente equivalente (`DO_TEST_MODE`, `DO_QUESTION`, `DO_NO_STOP`, …), que continua valendo como fallback;
 - o resumo da FASE 0 imprime o que ficou valendo (`TEST_MODE = none`, `QUESTION = 1`, `NO_STOP       = ON`, `WT_ROOT = ON (<nome>)`, …) e o orquestrador o confere contra o digitado; retomar uma execução pendente com `TEST_MODE` ou `QUESTION` diferente cria uma execução **nova** (anti-stale) em vez de inverter a flag.
 
-O prefixo `wt=` (WT-ROOT; chegou junto com a v3.5.0 — a regra de fim R8j e a reentrada são da v4.1.0) cria — ou reentra — uma worktree **irmã verdadeira** do projeto em `<pai>/<repo>.worktrees/<nome>` e faz **todo** o trabalho **dentro dela**, preservando o checkout principal intacto. O fluxo:
+O prefixo `wt=` (WT-ROOT; chegou junto com a v3.5.0 — a regra de fim R8j e a reentrada são da (histórico v4.x)) cria — ou reentra — uma worktree **irmã verdadeira** do projeto em `<pai>/<repo>.worktrees/<nome>` e faz **todo** o trabalho **dentro dela**, preservando o checkout principal intacto. O fluxo:
 
 1. A pasta irmã `<pai>/<repo>.worktrees/` é criada se faltar, ou reusada se já existir (nunca recriada).
 2. O nome do diretório da worktree é o `<nome>` passado (`wt=feature-x`), ou um slug derivado do prompt da tarefa se você usar `wt=on` sem valor (é o orquestrador que troca `wt=on` pelo slug — o script recusa `wt=on` cru). **Mesmo nome = mesma worktree**: se `<repo>.worktrees/<nome>` já é a worktree deste repo no branch `do/wt/<nome>`, a FASE 0 **reentra** nela (`DO_WT_ROOT: REENTRANDO …`) e uma execução pendente lá dentro é retomada. O nome só é **deduplicado** (`-2`, `-3`, …) quando o path existe e **não** é isso — um diretório qualquer, ou uma worktree em outro branch.
 3. A `FASE 0` **re-executa com o cwd dentro da worktree**: o resto é o MODO CONTIDO já existente — ondas, sub-agentes, merges via squash, gates, subwaves de teste/validação e o COMMIT-FINAL aterrissam **lá dentro**, e o checkout principal é `$MAIN_ROOT`, zona proibida.
 4. **Fim com wt= (R8j):** o COMMIT-FINAL é **apenas commit + push no branch do próprio wt** (`do/wt/<nome>`). É **proibido** mergear esse branch de volta para o branch de origem (main/master), fazer fast-forward/rebase nele, abrir PR ou pushar qualquer outro branch — a integração do wt no branch principal é decisão **exclusiva do usuário**, feita quando ele quiser.
-5. **Purge final:** em toda execução (com ou sem `wt=`), o fim roda `do-wt.sh purge` — a **rede de segurança**, não mais o mecanismo principal: desde a v4.1.0 cada tarefa já foi limpa no gate verde dela. O purge fecha TODAS as linhas ainda abertas do ledger — inclusive worktrees kind=test/validation, snapshots `int-*` e linhas BLOCKED/ORPHANED —: as integradas por `finish --gate-ok`, o resto por `close --discard "purge"`, sempre salvando restos não commitados e arquivando cada branch em `refs/do-archive/$RUN_ID/` antes de apagá-lo. Só imprime `PURGE OK` se o ledger **e a realidade** (diretórios em `$CHILD_ROOT`, refs em `$BRANCH_NS/`) fecharam. **rc 1** = alguma remoção falhou (conserte e rode de novo); **rc 3** = limpou tudo, **mas** houve filha nunca integrada ou integrada só em parte (`MERGED-PARTIAL`) — o bloco `PURGE: NUNCA INTEGRADAS / PARCIAIS` vai literal para a seção "Não integrado" do relatório, e o título vira "Tarefa concluída PARCIALMENTE" (rodar o purge de novo não "conserta" o rc 3). Zero worktrees/branches de sub-agente sobrevivem; a única exceção é a própria worktree wt-root, persistente por design. Nada se perde: `git branch resgate/<nome> refs/do-archive/<RUN_ID>/<nome>` traz de volta qualquer branch arquivado.
+5. **Purge final:** em toda execução (com ou sem `wt=`), o fim roda `do-wt.sh purge` — a **rede de segurança**, não mais o mecanismo principal: desde a (histórico v4.x) cada tarefa já foi limpa no gate verde dela. O purge fecha TODAS as linhas ainda abertas do ledger — inclusive worktrees kind=test/validation, snapshots `int-*` e linhas BLOCKED/ORPHANED —: as integradas por `finish --gate-ok`, o resto por `close --discard "purge"`, sempre salvando restos não commitados e arquivando cada branch em `refs/do-archive/$RUN_ID/` antes de apagá-lo. Só imprime `PURGE OK` se o ledger **e a realidade** (diretórios em `$CHILD_ROOT`, refs em `$BRANCH_NS/`) fecharam. **rc 1** = alguma remoção falhou (conserte e rode de novo); **rc 3** = limpou tudo, **mas** houve filha nunca integrada ou integrada só em parte (`MERGED-PARTIAL`) — o bloco `PURGE: NUNCA INTEGRADAS / PARCIAIS` vai literal para a seção "Não integrado" do relatório, e o título vira "Tarefa concluída PARCIALMENTE" (rodar o purge de novo não "conserta" o rc 3). Zero worktrees/branches de sub-agente sobrevivem; a única exceção é a própria worktree wt-root, persistente por design. Nada se perde: `git branch resgate/<nome> refs/do-archive/<RUN_ID>/<nome>` traz de volta qualquer branch arquivado.
 
 A worktree irmã é **persistente** (ao contrário das worktrees-filhas, que morrem no gate verde da própria tarefa): o branch `do/wt/<nome>` é reusado entre execuções. Variáveis gravadas no ENV_FILE: `DO_WT_ROOT` (`1` quando a raiz-de-mundo **é** um wt-root — derivado do fato, não da flag) e `DO_WT_NAME` (o nome resolvido); `DO_WT_ROOT_ENTERED` é o sentinel interno de re-entrada. Com `wt=`, o estado da execução vive **dentro** da worktree irmã (`<repo>.worktrees/<nome>/.deep-orchestrator/`).
 
 O prefixo `max-parallel=N` (antigo `mp=N` — o nome antigo sai exit 2 com a sugestão) define o cap de concorrência (F3-02): vira `DO_MAX_PARALLEL=N` no ENV_FILE (validado pelo `do-context.sh` como inteiro positivo; inválido → exit 2 com mensagem clara). Ausente → default **50**. O teto vale para TUDO em voo — features da onda, worktrees de teste/validação das subwaves (incluindo as até 3 worktrees de teste por onda — que não existem com `no-test`), revisores e REVISOR DE PLANO. Ondas com mais features que o cap viram batches sequenciais, cada batch com a sua barreira. Nota: o harness do Claude Code impõe um teto próprio de ~20 sub-agentes concorrentes por sessão (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`), então com `max-parallel=` acima de 20 a concorrência real fica limitada pelo harness (o resto espera em fila) — o `max-parallel=` continua servindo para dimensionar as ondas/batches.
 
-O prefixo `surf-sub-agents=N` define o **teto global de buscas simultâneas do surf** nesta execução (`DO_SURF_SUB_AGENTS`; inteiro de 1 a 20 — o próprio surf rejeita fora disso —, default **10**; inválido → exit 2). Ele **não** é multiplicado por `max-parallel`: é **dividido** entre as sub-tarefas da onda que pesquisam — cada uma recebe `--sub-agents=max(1, floor(N / R))` (ver [Pesquisa](#pesquisa--surf-agent-skill-v8-dependência-dura)). Baixe-o se o seu plano Brave serve poucas requisições por segundo.
+O prefixo `tavily-sub-agents=N` define o **teto global de buscas simultâneas do o fornecedor removido** nesta execução (`DO_TAVILY_SUB_AGENTS`; inteiro de 1 a 20 — o próprio o fornecedor removido rejeita fora disso —, default **10**; inválido → exit 2). Ele **não** é multiplicado por `max-parallel`: é **dividido** entre as sub-tarefas da onda que pesquisam — cada uma recebe `--sub-agents=max(1, floor(N / R))` (ver [Pesquisa](#pesquisa--tavily-agent-skill-v8-dependência-dura)). Baixe-o se o seu pool Tavily serve poucas requisições por segundo.
 
 O prefixo `no-stop` (booleano, sem valor) remove o **teto de 10 ondas por execução**: vira `DO_NO_STOP=1` no ENV_FILE (a variável de ambiente aceita 0/1/on/off/yes/no/true/false; inválido → exit 2 com mensagem clara). Ausente → default `0`, que preserva o comportamento histórico (máximo de 10 ondas). Com `no-stop`, a execução dura **quantas ondas forem necessárias** até o REVISOR DE PLANO declarar convergência — ideal para tarefas que exigem qualidade máxima sem teto arbitrário de rodadas. A válvula anti-loop **permanece ativa** mesmo com `no-stop`: 2 REPLANs consecutivos sem novas sub-tarefas aceitas forçam a convergência (documentada no relatório final), garantindo que a execução nunca itere para sempre sem progresso.
 
@@ -562,13 +562,13 @@ O prefixo `no-test` (booleano; `DO_TEST_MODE=none`) faz a execução **não cria
 
 O prefixo `only-e2e` (booleano; `DO_TEST_MODE=e2e`) faz as Testing Subwaves criarem **apenas testes end-to-end** — os que exercitam o sistema **pela mesma porta do usuário final** (UI no browser, HTTP contra o servidor de pé, binário CLI via processo, API pública importada como consumidor), sem mock interno nem import de módulo interno. Unit, integration e snapshot de componente **novos** são proibidos; cobertura por linha vira N/A e dá lugar à **cobertura de JORNADAS** (por jornada: ≥ 1 caminho feliz + ≥ 1 erro observável). A FASE 1 detecta o runner (Playwright, Cypress, script `test:e2e`, pytest `-m e2e`, supertest/httpx, bats…) e grava o comando com `do-wt.sh gate-set e2e`; sem runner, o plano ganha a sub-tarefa `onda1-e2e-harness`. A FASE 2 monta o **MAPA DE JORNADAS** (J1..Jn → onda em que a jornada **fecha** → path do spec), e só jornada fechada na onda ganha teste (worktrees `test-ondaN-e2e-<jornada>`; nenhuma fechou → "e2e adiado"). Cada contexto roda numa porta própria (`CI=1 E2E_PORT=<p>`), o servidor sobe **só** pelo ciclo de vida do runner (nada de `npm run dev &`), artefatos do runner ficam fora do commit e cada spec roda 2× (flaky → `fixme` + relato, nunca retry em laço). A suíte e2e roda na worktree do agente, no snapshot do **merge de teste** (`do-wt.sh gate <nome> --e2e`), na validação e no gate final — **não** nos snapshots de feature. Relatório: tabela "Testes e2e (only-e2e)" + "Jornadas sem cobertura". Mutuamente exclusivo com `no-test`.
 
-Sem nenhuma das duas (`DO_TEST_MODE=full`, o default) vale o comportamento de sempre — Testing + Validation Subwaves —, com dois consertos da v4.1.0: é **proibido commitar teste falhando** (teste que revela bug vai como `skip`/`xfail`/`fixme` nomeando o bug + relato no handoff — senão o squash envenena os gates seguintes), e os bugs confirmados pelos agentes de teste da **última** onda entram no FIX-FINAL.
+Sem nenhuma das duas (`DO_TEST_MODE=full`, o default) vale o comportamento de sempre — Testing + Validation Subwaves —, com dois consertos da (histórico v4.x): é **proibido commitar teste falhando** (teste que revela bug vai como `skip`/`xfail`/`fixme` nomeando o bug + relato no handoff — senão o squash envenena os gates seguintes), e os bugs confirmados pelos agentes de teste da **última** onda entram no FIX-FINAL.
 
-O prefixo `do-question` (booleano; `DO_QUESTION=1`, default `0`) **autoriza o orquestrador a perguntar** — sem ele, vale a autonomia: infere e documenta a premissa. A flag explícita **vence** gatilho de autonomia no texto da tarefa (mesmo precedente do `plan=on`). São só dois pontos: (i) a **RODADA DE DÚVIDAS** única ao fim da FASE 1, antes do plano — todas as dúvidas reais num bloco numerado, cada uma com opções a/b/c e um **default recomendado**; você responde `1:a 2:c`, ou `segue` para aceitar todos os defaults; (ii) durante a execução, no máximo **uma** rodada por onda, ao **fim** da onda (depois do portão inter-onda — nunca com filha integrada por limpar), só para decisão difícil de reverter ou dúvida que muda o escopo. Dúvida trivial continua sendo inferida: pergunta tem custo. Sub-agentes **nunca** perguntam — devolvem a seção `## Dúvidas para o usuário` no handoff e o orquestrador decide. O mecanismo é o mesmo de toda pergunta (texto, estado em `$DO_STATE/question/pendente.md`, fim de turno, retomada na mensagem seguinte), e o relatório ganha a seção "Perguntas ao usuário". **A pergunta da chave Brave não depende desta flag**: ela é incondicional.
+O prefixo `do-question` (booleano; `DO_QUESTION=1`, default `0`) **autoriza o orquestrador a perguntar** — sem ele, vale a autonomia: infere e documenta a premissa. A flag explícita **vence** gatilho de autonomia no texto da tarefa (mesmo precedente do `plan=on`). São só dois pontos: (i) a **RODADA DE DÚVIDAS** única ao fim da FASE 1, antes do plano — todas as dúvidas reais num bloco numerado, cada uma com opções a/b/c e um **default recomendado**; você responde `1:a 2:c`, ou `segue` para aceitar todos os defaults; (ii) durante a execução, no máximo **uma** rodada por onda, ao **fim** da onda (depois do portão inter-onda — nunca com filha integrada por limpar), só para decisão difícil de reverter ou dúvida que muda o escopo. Dúvida trivial continua sendo inferida: pergunta tem custo. Sub-agentes **nunca** perguntam — devolvem a seção `## Dúvidas para o usuário` no handoff e o orquestrador decide. O mecanismo é o mesmo de toda pergunta (texto, estado em `$DO_STATE/question/pendente.md`, fim de turno, retomada na mensagem seguinte), e o relatório ganha a seção "Perguntas ao usuário". **A pergunta da chave Tavily não depende desta flag**: ela é incondicional.
 
 ### O portão de aprovação do plano
 
-O prefixo `plan=on|off` liga ou desliga a FASE 2.5. Sem ele, a decisão vem dos gatilhos, nesta ordem (FASE 0, passo 2 — é a **única** flag que também se decide por linguagem natural; o resultado vira o token `plan=on|off` repassado ao script). Gatilho de autonomia desliga o **portão do plano** — não desliga a pergunta da chave Brave nem vence um `do-question` explícito:
+O prefixo `plan=on|off` liga ou desliga a FASE 2.5. Sem ele, a decisão vem dos gatilhos, nesta ordem (FASE 0, passo 2 — é a **única** flag que também se decide por linguagem natural; o resultado vira o token `plan=on|off` repassado ao script). Gatilho de autonomia desliga o **portão do plano** — não desliga a pergunta da chave Tavily nem vence um `do-question` explícito:
 
 | Precedência | Sinal | Resultado |
 |---|---|---|
@@ -625,7 +625,7 @@ Tarefas complexas que se beneficiam de decomposição em ondas paralelas — esp
 
 O orquestrador vai:
 
-1. Analisar o repositório e identificar os subsistemas afetados (registrando antes o veredito do portão da surf — sem chave Brave válida **e** com sub-tarefa que exige pesquisa, ele pausa no PORTÃO PÓS-PLANO e pergunta a você, antes de criar qualquer worktree)
+1. Analisar o repositório e identificar os subsistemas afetados (registrando antes o veredito do portão da o fornecedor removido — sem chave Tavily válida **e** com sub-tarefa que exige pesquisa, ele pausa no PORTÃO PÓS-PLANO e pergunta a você, antes de criar qualquer worktree)
 2. Criar um plano inicial com 2 ondas:
    - **Onda 1 (Fundação):** `onda1-cache-service` (CacheService genérico) + `onda1-schema-busca` (mapear schema de busca) — paralelo
    - **Onda 2 (Implementação):** `onda2-endpoint-busca` (endpoint com cache + testes)
@@ -637,7 +637,7 @@ Ao final, o histórico do **branch da raiz-de-mundo** (o branch da worktree em q
 ## Versão
 
 **4.1.0** — **limpeza por tarefa pelo script, "nunca em silêncio" e a pergunta
-da chave Brave** (MINOR; absorve o `fe3a1c2`, que mudara o contrato sem
+da chave Tavily** (MINOR; absorve o `fe3a1c2`, que mudara o contrato sem
 versão). `do-wt.sh` ganha `integrate` / `gate-set` / `gate` / `finish` /
 `close` / `assert-clean` / `ledger` / `checklist`: o gate verde chama `finish`
 sozinho e a worktree morre **no gate verde da própria tarefa**; o fim de onda é
@@ -647,7 +647,7 @@ com sobra da anterior. Ledger `owned.tsv` de **11 colunas** (`parent`,
 "Tarefa concluída" | "Tarefa concluída PARCIALMENTE"; `purge` sai **rc 3** com
 o bloco `PURGE: NUNCA INTEGRADAS`; squash vazio = rc 4; conflito detectado por
 `git merge-tree` **sem sujar a raiz**; `DO_ORPHAN_RUNS` na FASE 0. Novo
-`scripts/surf-gate.sh` (portão **fail-closed** `SURF_GATE`/`SURF_CODE`,
+`scripts/tavily-gate.sh` (portão **fail-closed** `TAVILY_GATE`/`TAVILY_CODE`,
 `classify`, `pause`, `resume --probe`) e o protocolo **PESQUISA-FALHOU**:
 pesquisa exigida que falha (78, 127, cota/429) vira **pergunta em texto,
 incondicional** — vence "não me pergunte nada", `no-stop` e `plan=off` —, com
@@ -655,33 +655,33 @@ incondicional** — vence "não me pergunte nada", `no-stop` e `plan=off` —, c
 PESQUISA (FASE 3, passo 4.5). Flags novas **`no-test`**, **`only-e2e`**
 (`DO_TEST_MODE=full|none|e2e`) e **`do-question`** (`DO_QUESTION`); todas as
 flags viajam por `do-context.sh --flags='…'` (o script é o único validador —
-typo = exit 2 com sugestão); `surf-sub-agents` entra no ENV_FILE; `wt=<nome>`
+typo = exit 2 com sugestão); `tavily-sub-agents` entra no ENV_FILE; `wt=<nome>`
 repetido **reentra**. Portabilidade **macOS / bash 3.2** (lock `mkdir` sem
 `flock`, BSD sed/wc). Estruturais: `description` ≤ 1024 caracteres, FASE 0
 reordenada (passo 0 ESTADOS PENDENTES), "AGUARDE" com definição única. Suítes:
-contenção **309**, flags **307** (nova), surf-gate **228**, plan-approval
+contenção **309**, flags **307** (nova), o fornecedor removido-gate **228**, plan-approval
 **139**, evolve **81** — 1064 asserções, todas verdes. O SKILL.md foi
 condensado (304k → 215k caracteres) após a revisão adversarial da rodada final. Decisões **D24–D31** em
 `docs/decisions/2026-09-20-limpeza-por-tarefa-pergunta-pesquisa-flags.md`.
 
 **4.0.0** — **fim do sistema de busca interno.** `search.sh`,
-`search-parallel.sh`, `check-search-credits.sh`, `brave-search.sh`,
-`check-brave-credits.sh` e `test-search.sh` REMOVIDOS (3.346 linhas). A
-pesquisa é 100% **surf-agent-skill v9+** — dependência obrigatória
-(`npm i -g surf-agent-skill`), Brave como único backend, sem tier sem chave e
-sem provedor de reserva. **`exit 78` = configuração** (sem chave Brave válida):
+`search-parallel.sh`, `check-search-credits.sh`, `o provedor de busca removido-search.sh`,
+`check-o provedor de busca removido-credits.sh` e `test-search.sh` REMOVIDOS (3.346 linhas). A
+pesquisa é 100% **tavily-agent-skill v9+** — dependência obrigatória
+(`npm i -g tavily-agent-skill`), o provedor de busca removido como único backend, sem tier sem chave e
+sem provedor de reserva. **`exit 78` = configuração** (sem chave Tavily válida):
 o orquestrador PARA, informa e aguarda; retentar não conserta. Portão passa a
-ser `surf doctor`, na FASE 0 e no passo 0 de cada onda (na v4.1.0: o portão
-virou `scripts/surf-gate.sh` e o 78 virou a pergunta do PESQUISA-FALHOU). **`--sub-agents` é o
-único teto de simultaneidade do surf e SOMA com `DO_MAX_PARALLEL`**: cada
-sub-agente que pesquisa recebe `max(1, floor(N/R))`, prefixo `surf-sub-agents=N`
-na invocação (default 10, faixa 1..20). É proibido envolver o surf em
-jitter/backoff — ele já ritma pelo plano Brave, cross-process. WebSearch e
-WebFetch deixam de descobrir fontes (só abrem URL que o surf devolveu). Nova
-suíte `test-surf-gate.sh` (46 asserções) substitui `test-search.sh`. Decisão
-**D23** em `docs/decisions/2026-08-29-surf-agent-skill-obrigatorio.md`.
+ser `tavily.py status`, na FASE 0 e no passo 0 de cada onda (na (histórico v4.x): o portão
+virou `scripts/tavily-gate.sh` e o 78 virou a pergunta do PESQUISA-FALHOU). **`--sub-agents` é o
+único teto de simultaneidade do o fornecedor removido e SOMA com `DO_MAX_PARALLEL`**: cada
+sub-agente que pesquisa recebe `max(1, floor(N/R))`, prefixo `tavily-sub-agents=N`
+na invocação (default 10, faixa 1..20). É proibido envolver a busca em
+jitter/backoff — ele já ritma pelo pool Tavily, cross-process. WebSearch e
+WebFetch deixam de descobrir fontes (só abrem URL que o o fornecedor removido devolveu). Nova
+suíte `test-tavily-gate.sh` (46 asserções) substitui `test-search.sh`. Decisão
+**D23** em `docs/decisions/2026-08-29-tavily-agent-skill-obrigatorio.md`.
 
-**3.9.0** — evolução como **PERGUNTA EM TEXTO no terminal** (fim do questionário Plannotator): depois de TUDO (commit, push, relatório) cada proposta vem numerada com opções a/b/c + escopo 1/2 (ex.: "1:b2"); o usuário responde com códigos na próxima mensagem e a opção escolhida vira a ação salva (`evolution-survey.sh` ask/answer/apply/dismiss); flag **`no-evolve`** pula a pergunta e o agente de análise; **push** explícito no COMMIT-FINAL (nunca bloqueia); prefixo `mp=N` → **`max-parallel=N`**; continuação da pergunta pendente na FASE 0 (passo 0.4 — desde a v4.1.0, o passo 0 ESTADOS PENDENTES); testes S1–S10 reescritos (78 PASS). Decisões D18–D22 em `docs/decisions/2026-08-28-pergunta-evolucao-terminal.md`.
+**3.9.0** — evolução como **PERGUNTA EM TEXTO no terminal** (fim do questionário Plannotator): depois de TUDO (commit, push, relatório) cada proposta vem numerada com opções a/b/c + escopo 1/2 (ex.: "1:b2"); o usuário responde com códigos na próxima mensagem e a opção escolhida vira a ação salva (`evolution-survey.sh` ask/answer/apply/dismiss); flag **`no-evolve`** pula a pergunta e o agente de análise; **push** explícito no COMMIT-FINAL (nunca bloqueia); prefixo `mp=N` → **`max-parallel=N`**; continuação da pergunta pendente na FASE 0 (passo 0.4 — desde a (histórico v4.x), o passo 0 ESTADOS PENDENTES); testes S1–S10 reescritos (78 PASS). Decisões D18–D22 em `docs/decisions/2026-08-28-pergunta-evolucao-terminal.md`.
 
 **3.8.0** — questionário de evolução pós-execução (substituído pela v3.9.0): agente de evolução + prefs por projeto em `.deep-orchestrator-preferences/` (gitignored), `evolution-survey.sh` (round no Plannotator), `do-prefs.sh`, `evolve-skill.sh` sem `add`, decisões D12–D17.
 
@@ -701,7 +701,7 @@ suíte `test-surf-gate.sh` (46 asserções) substitui `test-search.sh`. Decisão
 
 **3.1.0** — Testing subwaves assíncronas, enforcement do project-router.
 
-**3.0.0** — Brave Search interno, ondas ilimitadas, ECC prompts, verificação de créditos, HTML explainer.
+**3.0.0** — o provedor de busca removido Search interno, ondas ilimitadas, ECC prompts, verificação de créditos, HTML explainer.
 
 ## Licença
 

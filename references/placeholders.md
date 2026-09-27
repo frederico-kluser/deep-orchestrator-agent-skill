@@ -1,4 +1,4 @@
-<!-- MÓDULO v5.0.0 · tabela ÚNICA dos placeholders {{…}} da skill
+<!-- MÓDULO v6.0.0 · tabela ÚNICA dos placeholders {{…}} da skill
      carga: sob consulta · regenerar quando um placeholder nascer/morrer -->
 
 # Placeholders (tabela única)
@@ -45,8 +45,8 @@
 | `{{SCOPE_FILES}}` | prompts/subagent-prompt.md |
 | `{{SEARCH_ROWS}}` | references/final-report.md |
 | `{{SKILL_HOME}}` | prompts/subagent-prompt.md, prompts/test-agent.md, prompts/validation-agent.md, references/execute-wave.md |
-| `{{SURF_STATUS}}` | prompts/subagent-prompt.md, references/analyze-plan.md, references/execute-wave.md, references/research-protocol.md |
-| `{{SURF_SUB_AGENTS}}` | prompts/subagent-prompt.md, references/analyze-plan.md, references/execute-wave.md |
+| `{{SEARCH_STATUS}}` | prompts/subagent-prompt.md, references/analyze-plan.md, references/execute-wave.md, references/research-protocol.md |
+| `{{TAVILY_SUB_AGENTS}}` | prompts/subagent-prompt.md, references/analyze-plan.md, references/execute-wave.md |
 | `{{TASK_DESCRIPTION}}` | prompts/subagent-prompt.md |
 | `{{TESTING_SUBWAVE_ROWS}}` | references/final-report.md |
 | `{{TEST_MODE}}` | prompts/adversarial-review.md, prompts/test-agent.md, prompts/validation-agent.md, references/execute-wave.md |

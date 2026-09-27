@@ -1,4 +1,4 @@
-<!-- MÓDULO v5.0.0 · origem: SKILL.md <phase 1 ANALYZE> + <phase 2 PLAN> (split progressive disclosure)
+<!-- MÓDULO v6.0.0 · origem: SKILL.md <phase 1 ANALYZE> + <phase 2 PLAN> (split progressive disclosure)
      carga: após a FASE 0 · conteúdo byte-a-byte com a origem (CONTRATO.md §5),
      salvo as correções D-H (modelo único mimo-v2.6-pro, sem tiering) -->
 
@@ -30,13 +30,13 @@
           <strong>$CHILD_ROOT</strong>. Apenas confirme e registre no
           TASK_PLAN.md.</step>
         <step order="7">Registre no TASK_PLAN.md o veredito do portão da FASE 0
-          passo 6 (binário, SURF_GATE/SURF_CODE, estado do surf-ai).
-          <cmd>printenv BRAVE_API_KEY</cmd> NÃO é o teste: a chave vive no
-          keystore do surf (que você NUNCA lê — R7). Ausência de chave NÃO é
+          passo 6 (binário tavily.py, TAVILY_GATE/TAVILY_CODE, estado do pool).
+          A chave vive no registo da tavily-agent-skill (keys.json — que você NUNCA
+          lê, R7). Ausência de chave NÃO é
           "modo degradado" a registrar: seguir sem a pesquisa exigida é a opção
           [3] do protocolo PESQUISA-FALHOU, e só o USUÁRIO a escolhe.</step>
         <step order="8">RECONFIRME o portão antes de fechar a análise — e SÓ
-          REGISTRE o veredito: <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURF_GATE"</cmd>
+          REGISTRE o veredito: <cmd>. '&lt;ENV_FILE&gt;'; "$DO_TAVILY_GATE"</cmd>
           78/127 → NÃO pare aqui: sem sub-tarefas não há como julgar se a
           pesquisa é exigida; quem decide é o PORTÃO PÓS-PLANO (FASE 2 passo
           9), com a coluna SEARCH_REQUIRED na mão.</step>
@@ -160,19 +160,19 @@ Responda "1:a 2:c" — ou "segue" para aceitar TODOS os defaults. Dúvida sem re
               rebaixar para <code>nao</code> depois de um portão != 0 (R7).
               Todo REPLAN preenche a coluna para cada sub-tarefa nova.</substep>
             <substep><strong>ORÇAMENTO DE PESQUISA — os dois orçamentos SOMAM,
-              nunca multiplicam:</strong> N = $DO_SURF_SUB_AGENTS (default 10,
+              nunca multiplicam:</strong> N = $DO_TAVILY_SUB_AGENTS (default 10,
               1..20; leia do ENV_FILE) e R = contagem de sub-tarefas DESTA onda
               com SEARCH_REQUIRED=sim. R=0 → NÃO calcule floor(N/R): ninguém
               pesquisa na onda. Sub-tarefa SEARCH_REQUIRED=nao recebe
-              {{SURF_SUB_AGENTS}} = "0 — não pesquise" e fica FORA de R. Com
+              {{TAVILY_SUB_AGENTS}} = "0 — não pesquise" e fica FORA de R. Com
               R ≥ 1, cada pesquisadora recebe
               <code>--sub-agents=max(1, floor(N / R))</code>, colado LITERAL em
-              {{SURF_SUB_AGENTS}} — a soma da onda fica ≤ N (multiplicar daria
-              DO_MAX_PARALLEL × 10 buscas contra um plano Brave que serve 1
+              {{TAVILY_SUB_AGENTS}} — a soma da onda fica ≤ N (multiplicar daria
+              DO_MAX_PARALLEL × 10 buscas contra um pool Tavily que serve 1
               por segundo). Ao planejar, limite <code>R ≤ N</code>. Registre N,
               R e o valor colado, por onda, no TASK_PLAN.md. O teto REAL é o
-              plano Brave: se o surf avisar "--sub-agents X exceeds what your
-              Brave plan can serve at once", BAIXE N — nunca aumente
+              pool Tavily: se o tavily.py reportar cota/rate limit
+              esgotado, BAIXE N — nunca aumente
               --sub-agents.</substep>
             <substep><strong>ESCALA DE FAN-OUT:</strong> ≤2 sub-tarefas
               independentes e pequenas → SEM fan-out extra (um sub-agente as
@@ -253,7 +253,7 @@ Responda "1:a 2:c" — ou "segue" para aceitar TODOS os defaults. Dúvida sem re
           10) — registre-as no plano. Com $DO_TEST_MODE=none alimentam SÓ a
           revisão: acrescente "algum teste existente foi enfraquecido ou
           removido sem mudança de contrato correspondente?". Preencha também
-          {{TEST_POLICY}} (passo 4.5) e {{SURF_SUB_AGENTS}} (passo 3).</step>
+          {{TEST_POLICY}} (passo 4.5) e {{TAVILY_SUB_AGENTS}} (passo 3).</step>
         <step order="8">Publique o plano em <path>$PLAN_FILE</path> (Bash:
           echo/cat) com a tabela sub-tarefa → worktree → branch → arquivos →
           SEARCH_REQUIRED (sim|nao + motivo), "POLÍTICA DE TESTES" (em e2e,
@@ -266,25 +266,25 @@ Responda "1:a 2:c" — ou "segue" para aceitar TODOS os defaults. Dúvida sem re
           parada por pesquisa antes da FASE 2.5/3</strong> (FASE 0 passo 6 e
           FASE 1 passo 8 só REGISTRARAM): agora as sub-tarefas existem e a
           coluna SEARCH_REQUIRED está publicada. Rerode
-          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_SURF_GATE"</cmd> e decida pela tabela
+          <cmd>. '&lt;ENV_FILE&gt;'; "$DO_TAVILY_GATE"</cmd> e decida pela tabela
           da R7 com &lt;onda&gt; = 0:
           <substeps>
-            <substep>SURF_GATE=0 → registre e siga.</substep>
+            <substep>TAVILY_GATE=0 → registre e siga.</substep>
             <substep>78|127 E TODAS as sub-tarefas de TODAS as ondas têm
               SEARCH_REQUIRED=nao → registre "pesquisa indisponível
-              (SURF_GATE=&lt;n&gt; SURF_CODE=&lt;código&gt;); nenhuma sub-tarefa
+              (TAVILY_GATE=&lt;n&gt; TAVILY_CODE=&lt;código&gt;); nenhuma sub-tarefa
               a exige" e siga sem busca — ÚNICO caso em que a decisão é SUA
               (e é PROIBIDO rebaixar a coluna depois de ver o portão).</substep>
             <substep>78|127 E QUALQUER sub-tarefa SEARCH_REQUIRED=sim → execute
               o protocolo PESQUISA-FALHOU AGORA (g1; nenhuma worktree existe:
               o passo A é no-op e [4] devolve o repositório como estava).
-              INCONDICIONAL. Com SURF_CODE=BraveKeyCooling vale antes a regra
+              INCONDICIONAL. Com TAVILY_CODE=TavilyAllBanned vale antes a regra
               &lt;cooling&gt; (rerode o portão ao fim deste passo, ao fim da
               FASE 2.5 e no passo 0 da onda 1, sem sleep; persistiu na 3ª →
               protocolo).</substep>
             <substep>RETOMADA (passo E do protocolo): [1]/[2] com RESUME=OK →
               FASE 2.5/3; [3] → marque NÃO VERIFICADA cada premissa externa do
-              plano (e do $PLAN_DOC) e {{SURF_STATUS}} = "NÃO PESQUISE — usuário
+              plano (e do $PLAN_DOC) e {{SEARCH_STATUS}} = "NÃO PESQUISE — usuário
               autorizou seguir sem busca" nos prompts; [4] → purge (nada a
               fechar) e relatório do que foi planejado.</substep>
           </substeps>

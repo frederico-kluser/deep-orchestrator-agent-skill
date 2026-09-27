@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Testes de aceitação das FLAGS da FASE 0 (do-context.sh --flags='...') — FL1..FL14
 #
-# SEM REDE, SEM surf, SEM Plannotator: só do-context.sh (e, no FL10e, o purge
+# SEM REDE, SEM rede externa, SEM Plannotator: só do-context.sh (e, no FL10e, o purge
 # real do do-wt.sh) contra repositórios DESCARTÁVEIS num mktemp -d, apagado ao
 # fim. Nada toca o repositório da skill nem cria worktree/branch nele.
 #
@@ -15,7 +15,7 @@
 #        resíduo em disco; glob ('*') não expande
 #   FL6  no-test + only-e2e → exit 2 "mutuamente exclusivos" (nas duas ordens);
 #        token repetido igual é inofensivo; plan=on + plan=off → exit 2
-#   FL7  surf-sub-agents fora de 1..20 → exit 2; os limites 1 e 20 passam
+#   FL7  tavily-sub-agents fora de 1..20 → exit 2; os limites 1 e 20 passam
 #   FL8  anti-stale do TEST_MODE: flag divergente cria execução NOVA; igual
 #        REAPROVEITA; chave ausente em env antigo = full
 #   FL9  anti-stale do QUESTION: idem; chave ausente = 0
@@ -53,7 +53,7 @@ export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER
 # A suíte roda DENTRO de um agente: um ENV_FILE sourceado na sessão exporta DO_*
 # e contaminaria todos os casos de default/fallback.
 unset DO_PLAN_APPROVAL DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_MAX_PARALLEL \
-      DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_WT_ROOT_ENTERED WT_ROOT_BASE \
+      DO_TAVILY_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_WT_ROOT_ENTERED WT_ROOT_BASE \
       DO_NO_STOP DO_EVOLUTION_SURVEY DO_TEST_MODE DO_QUESTION DO_FORCE_NESTED \
       DO_STATE DO_HOME DO_WT GIT_DIR GIT_WORK_TREE 2>/dev/null || true
 
@@ -83,7 +83,7 @@ for form in "com --flags=''" "sem --flags"; do
   chk "FL1 ($form) última linha é o ENV_FILE" "$([ -f "$ENVF" ] && echo sim || echo nao)" "sim"
   chk "FL1 ($form) DO_PLAN_APPROVAL=0"    "$(pval DO_PLAN_APPROVAL "$ENVF")" "0"
   chk "FL1 ($form) DO_MAX_PARALLEL=50"    "$(pval DO_MAX_PARALLEL "$ENVF")" "50"
-  chk "FL1 ($form) DO_SURF_SUB_AGENTS=10" "$(pval DO_SURF_SUB_AGENTS "$ENVF")" "10"
+  chk "FL1 ($form) DO_TAVILY_SUB_AGENTS=10" "$(pval DO_TAVILY_SUB_AGENTS "$ENVF")" "10"
   chk "FL1 ($form) DO_NO_STOP=0"          "$(pval DO_NO_STOP "$ENVF")" "0"
   chk "FL1 ($form) DO_EVOLUTION_SURVEY=1" "$(pval DO_EVOLUTION_SURVEY "$ENVF")" "1"
   chk "FL1 ($form) DO_TEST_MODE=full"     "$(pval DO_TEST_MODE "$ENVF")" "full"
@@ -93,21 +93,21 @@ for form in "com --flags=''" "sem --flags"; do
   has "FL1 ($form) resumo TEST_MODE = full" "$OUT" "TEST_MODE = full"
   has "FL1 ($form) resumo QUESTION = 0"     "$OUT" "QUESTION = 0"
   has "FL1 ($form) resumo WT_ROOT = OFF"    "$OUT" "WT_ROOT = OFF"
-  has "FL1 ($form) resumo SURF_SUB_AGENTS = 10" "$OUT" "SURF_SUB_AGENTS = 10"
+  has "FL1 ($form) resumo TAVILY_SUB_AGENTS = 10" "$OUT" "TAVILY_SUB_AGENTS = 10"
 done
-chk "FL1 DO_SURF_GATE aponta para scripts/surf-gate.sh da skill" \
-  "$(pval DO_SURF_GATE "$ENVF")" "$SKILL/scripts/surf-gate.sh"
+chk "FL1 DO_TAVILY_GATE aponta para scripts/tavily-gate.sh da skill" \
+  "$(pval DO_TAVILY_GATE "$ENVF")" "$SKILL/scripts/tavily-gate.sh"
 # O ENV_FILE é sourceado por TODA chamada Bash: cada chave nova tem que ser uma
 # linha CHAVE='valor' (aspas simples) e o arquivo tem que parsear.
-for k in DO_TEST_MODE DO_QUESTION DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_SURF_GATE; do
+for k in DO_TEST_MODE DO_QUESTION DO_TAVILY_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_TAVILY_GATE; do
   chk "FL1 $k gravada UMA vez, entre aspas simples" "$(grep -c "^$k='[^']*'\$" "$ENVF")" "1"
 done
 bash -n "$ENVF" 2>/dev/null; chk "FL1 ENV_FILE parseia (bash -n)" "$?" "0"
 # ...e EXPORTA: um processo-FILHO do shell que sourceou tem que enxergar (é assim
 # que o do-wt.sh lê DO_TEST_MODE). Ambiente zerado para provar que vem do arquivo.
-ctx --new-run --flags='no-test do-question surf-sub-agents=4'
-child=$(env -i PATH="$PATH" HOME="$HOME" bash -c '. "$1" >/dev/null 2>&1; bash -c "printf %s \"\$DO_TEST_MODE:\$DO_QUESTION:\$DO_SURF_SUB_AGENTS:\$DO_WT_ROOT:\${DO_WT_NAME:-vazio}:\${DO_SURF_GATE##*/}\""' _ "$ENVF")
-chk "FL1 variáveis novas EXPORTADAS para processo-filho" "$child" "none:1:4:0:vazio:surf-gate.sh"
+ctx --new-run --flags='no-test do-question tavily-sub-agents=4'
+child=$(env -i PATH="$PATH" HOME="$HOME" bash -c '. "$1" >/dev/null 2>&1; bash -c "printf %s \"\$DO_TEST_MODE:\$DO_QUESTION:\$DO_TAVILY_SUB_AGENTS:\$DO_WT_ROOT:\${DO_WT_NAME:-vazio}:\${DO_TAVILY_GATE##*/}\""' _ "$ENVF")
+chk "FL1 variáveis novas EXPORTADAS para processo-filho" "$child" "none:1:4:0:vazio:tavily-gate.sh"
 
 echo "=== FL2: cada flag da tabela → ENV_FILE + resumo ==="
 newrepo fl2
@@ -118,7 +118,7 @@ hasre "FL2 plan=off no resumo" "$OUT" 'PLAN_APPROVAL += OFF'
 # (CTX-07) OFF desliga SÓ o portão do plano: o resumo não pode mais afirmar
 # "nenhuma interação" — a pergunta de pesquisa (incondicional) e a de evolução valem.
 has   "FL2 plan=off: o resumo diz o que OFF desliga (só o portão do plano)" "$OUT" "PLAN_APPROVAL = OFF (sem portão de plano;"
-has   "FL2 plan=off: ...e que a pergunta de pesquisa e a de evolução continuam valendo" "$OUT" "a pergunta de pesquisa (chave/cota Brave) e a de evolução continuam valendo)"
+has   "FL2 plan=off: ...e que a pergunta de pesquisa e a de evolução continuam valendo" "$OUT" "a pergunta de pesquisa (chave/cota Tavily) e a de evolução continuam valendo)"
 hasnt "FL2 plan=off: o texto antigo 'nenhuma interação com o usuário' saiu" "$OUT" "nenhuma interação"
 hasnt "FL2 plan=off: ...e 'autonomia total' também" "$OUT" "autonomia total"
 ctx --flags='plan=off do-question'
@@ -126,8 +126,8 @@ hasnt "FL2 plan=off + do-question: o resumo não se contradiz (sem 'nenhuma inte
 has   "FL2 plan=off + do-question: QUESTION = 1 na mesma saída" "$OUT" "QUESTION = 1"
 ctx --flags='max-parallel=7';   chk "FL2 max-parallel=7 → DO_MAX_PARALLEL=7" "$(pval DO_MAX_PARALLEL "$ENVF")" "7"
 has "FL2 max-parallel no resumo" "$OUT" "DO_MAX_PARALLEL = 7"
-ctx --flags='surf-sub-agents=3'; chk "FL2 surf-sub-agents=3 → DO_SURF_SUB_AGENTS=3" "$(pval DO_SURF_SUB_AGENTS "$ENVF")" "3"
-has "FL2 surf-sub-agents no resumo" "$OUT" "SURF_SUB_AGENTS = 3"
+ctx --flags='tavily-sub-agents=3'; chk "FL2 tavily-sub-agents=3 → DO_TAVILY_SUB_AGENTS=3" "$(pval DO_TAVILY_SUB_AGENTS "$ENVF")" "3"
+has "FL2 tavily-sub-agents no resumo" "$OUT" "TAVILY_SUB_AGENTS = 3"
 ctx --flags='no-stop';          chk "FL2 no-stop → DO_NO_STOP=1" "$(pval DO_NO_STOP "$ENVF")" "1"
 hasre "FL2 no-stop no resumo" "$OUT" 'NO_STOP += ON'
 ctx --flags='no-evolve';        chk "FL2 no-evolve → DO_EVOLUTION_SURVEY=0" "$(pval DO_EVOLUTION_SURVEY "$ENVF")" "0"
@@ -139,10 +139,10 @@ has "FL2 only-e2e no resumo" "$OUT" "TEST_MODE = e2e"
 ctx --flags='do-question';      chk "FL2 do-question → DO_QUESTION=1" "$(pval DO_QUESTION "$ENVF")" "1"
 has "FL2 do-question no resumo" "$OUT" "QUESTION = 1"
 # todas juntas, em ordem embaralhada e com espaços sobrando — UM argv só
-ctx --flags='  do-question no-evolve   plan=on max-parallel=12 only-e2e surf-sub-agents=20 no-stop '
+ctx --flags='  do-question no-evolve   plan=on max-parallel=12 only-e2e tavily-sub-agents=20 no-stop '
 chk "FL2 todas juntas: exit 0" "$RC" "0"
 chk "FL2 todas juntas: valores" \
-  "$(pval DO_PLAN_APPROVAL "$ENVF"):$(pval DO_MAX_PARALLEL "$ENVF"):$(pval DO_SURF_SUB_AGENTS "$ENVF"):$(pval DO_NO_STOP "$ENVF"):$(pval DO_EVOLUTION_SURVEY "$ENVF"):$(pval DO_TEST_MODE "$ENVF"):$(pval DO_QUESTION "$ENVF")" \
+  "$(pval DO_PLAN_APPROVAL "$ENVF"):$(pval DO_MAX_PARALLEL "$ENVF"):$(pval DO_TAVILY_SUB_AGENTS "$ENVF"):$(pval DO_NO_STOP "$ENVF"):$(pval DO_EVOLUTION_SURVEY "$ENVF"):$(pval DO_TEST_MODE "$ENVF"):$(pval DO_QUESTION "$ENVF")" \
   "1:12:20:1:0:e2e:1"
 # --flags convive com as opções antigas, em qualquer posição
 ctx --quiet --flags='no-test' --new-run
@@ -159,8 +159,8 @@ OUT=$(DO_PLAN_APPROVAL=1 "$CTX" --flags='plan=off' 2>&1); ENVF=$(printf '%s\n' "
 chk "FL3 plan=off vence DO_PLAN_APPROVAL=1" "$(pval DO_PLAN_APPROVAL "$ENVF")" "0"
 OUT=$(DO_MAX_PARALLEL=9 "$CTX" --flags='max-parallel=4' 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
 chk "FL3 max-parallel=4 vence DO_MAX_PARALLEL=9" "$(pval DO_MAX_PARALLEL "$ENVF")" "4"
-OUT=$(DO_SURF_SUB_AGENTS=5 "$CTX" --flags='surf-sub-agents=2' 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
-chk "FL3 surf-sub-agents=2 vence DO_SURF_SUB_AGENTS=5" "$(pval DO_SURF_SUB_AGENTS "$ENVF")" "2"
+OUT=$(DO_TAVILY_SUB_AGENTS=5 "$CTX" --flags='tavily-sub-agents=2' 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
+chk "FL3 tavily-sub-agents=2 vence DO_TAVILY_SUB_AGENTS=5" "$(pval DO_TAVILY_SUB_AGENTS "$ENVF")" "2"
 OUT=$(DO_QUESTION=0 "$CTX" --flags='do-question' 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
 chk "FL3 do-question vence DO_QUESTION=0" "$(pval DO_QUESTION "$ENVF")" "1"
 OUT=$(DO_NO_STOP=0 "$CTX" --flags='no-stop' 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
@@ -186,17 +186,17 @@ chk "FL4 DO_QUESTION=1" "$(pval DO_QUESTION "$ENVF")" "1"
 OUT=$(DO_QUESTION=on "$CTX" --flags='no-stop' 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
 chk "FL4 DO_QUESTION=on normaliza para 1 (token de OUTRA flag não apaga o env)" \
   "$(pval DO_QUESTION "$ENVF"):$(pval DO_NO_STOP "$ENVF")" "1:1"
-OUT=$(DO_SURF_SUB_AGENTS=7 "$CTX" 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
-chk "FL4 DO_SURF_SUB_AGENTS=7" "$(pval DO_SURF_SUB_AGENTS "$ENVF")" "7"
+OUT=$(DO_TAVILY_SUB_AGENTS=7 "$CTX" 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
+chk "FL4 DO_TAVILY_SUB_AGENTS=7" "$(pval DO_TAVILY_SUB_AGENTS "$ENVF")" "7"
 OUT=$(DO_NO_STOP=1 DO_EVOLUTION_SURVEY=0 DO_PLAN_APPROVAL=on DO_MAX_PARALLEL=3 "$CTX" --flags='' 2>&1); ENVF=$(printf '%s\n' "$OUT" | tail -1)
 chk "FL4 env legado (NO_STOP/EVOLUTION/PLAN/MAX_PARALLEL) com --flags=''" \
   "$(pval DO_NO_STOP "$ENVF"):$(pval DO_EVOLUTION_SURVEY "$ENVF"):$(pval DO_PLAN_APPROVAL "$ENVF"):$(pval DO_MAX_PARALLEL "$ENVF")" "1:0:1:3"
 before=$(nruns "$REPO")
 DO_TEST_MODE=banana "$CTX" >/dev/null 2>&1;      chk "FL4 DO_TEST_MODE inválido → exit 2" "$?" "2"
 DO_QUESTION=talvez "$CTX" >/dev/null 2>&1;       chk "FL4 DO_QUESTION inválido → exit 2" "$?" "2"
-DO_SURF_SUB_AGENTS=0 "$CTX" >/dev/null 2>&1;     chk "FL4 DO_SURF_SUB_AGENTS=0 → exit 2" "$?" "2"
-DO_SURF_SUB_AGENTS=21 "$CTX" >/dev/null 2>&1;    chk "FL4 DO_SURF_SUB_AGENTS=21 → exit 2" "$?" "2"
-DO_SURF_SUB_AGENTS=abc "$CTX" >/dev/null 2>&1;   chk "FL4 DO_SURF_SUB_AGENTS=abc → exit 2" "$?" "2"
+DO_TAVILY_SUB_AGENTS=0 "$CTX" >/dev/null 2>&1;     chk "FL4 DO_TAVILY_SUB_AGENTS=0 → exit 2" "$?" "2"
+DO_TAVILY_SUB_AGENTS=21 "$CTX" >/dev/null 2>&1;    chk "FL4 DO_TAVILY_SUB_AGENTS=21 → exit 2" "$?" "2"
+DO_TAVILY_SUB_AGENTS=abc "$CTX" >/dev/null 2>&1;   chk "FL4 DO_TAVILY_SUB_AGENTS=abc → exit 2" "$?" "2"
 DO_WT_ROOT=banana "$CTX" >/dev/null 2>&1;        chk "FL4 DO_WT_ROOT inválido → exit 2" "$?" "2"
 DO_MAX_PARALLEL=x "$CTX" >/dev/null 2>&1;        chk "FL4 DO_MAX_PARALLEL não-numérico → exit 2" "$?" "2"
 chk "FL4 nenhum run-* criado pelos aborts" "$(nruns "$REPO")" "$before"
@@ -281,16 +281,16 @@ ctx --flags='plan=on plan=off'
 chk "FL6 plan=on + plan=off → exit 2" "$RC" "2"
 has "FL6 ...anunciado como contraditório" "$OUT" "contraditórias"
 
-echo "=== FL7: surf-sub-agents fora de 1..20 → exit 2 ==="
+echo "=== FL7: tavily-sub-agents fora de 1..20 → exit 2 ==="
 newrepo fl7
 for v in 0 21 abc -1 1.5 999999999999999999999 ""; do
-  ctx --flags="surf-sub-agents=$v"
-  chk "FL7 surf-sub-agents='$v' → exit 2" "$RC" "2"
+  ctx --flags="tavily-sub-agents=$v"
+  chk "FL7 tavily-sub-agents='$v' → exit 2" "$RC" "2"
 done
 chk "FL7 nenhum run-* criado" "$(nruns "$REPO")" "0"
-ctx --flags='surf-sub-agents=1';  chk "FL7 limite 1 passa"  "$RC:$(pval DO_SURF_SUB_AGENTS "$ENVF")" "0:1"
-ctx --flags='surf-sub-agents=20'; chk "FL7 limite 20 passa" "$RC:$(pval DO_SURF_SUB_AGENTS "$ENVF")" "0:20"
-ctx --flags='surf-sub-agents=08'; chk "FL7 '08' não é octal → 8" "$RC:$(pval DO_SURF_SUB_AGENTS "$ENVF")" "0:8"
+ctx --flags='tavily-sub-agents=1';  chk "FL7 limite 1 passa"  "$RC:$(pval DO_TAVILY_SUB_AGENTS "$ENVF")" "0:1"
+ctx --flags='tavily-sub-agents=20'; chk "FL7 limite 20 passa" "$RC:$(pval DO_TAVILY_SUB_AGENTS "$ENVF")" "0:20"
+ctx --flags='tavily-sub-agents=08'; chk "FL7 '08' não é octal → 8" "$RC:$(pval DO_TAVILY_SUB_AGENTS "$ENVF")" "0:8"
 
 echo "=== FL8: anti-stale do TEST_MODE ==="
 newrepo fl8
@@ -312,14 +312,14 @@ chk "FL8 inverso (only-e2e sobre run full) → execução NOVA" "$([ "$ENVF" != 
 chk "FL8 ...e a run nova é e2e" "$(pval DO_TEST_MODE "$ENVF")" "e2e"
 # env ANTIGO (anterior à v4.1.0): sem NENHUMA das 6 chaves novas nem a linha de
 # export delas — é o que o do-context.sh do HEAD anterior gravava.
-NEWKEYS='^DO_TEST_MODE=\|^DO_QUESTION=\|^DO_SURF_SUB_AGENTS=\|^DO_WT_ROOT=\|^DO_WT_NAME=\|^DO_SURF_GATE='
+NEWKEYS='^DO_TEST_MODE=\|^DO_QUESTION=\|^DO_TAVILY_SUB_AGENTS=\|^DO_WT_ROOT=\|^DO_WT_NAME=\|^DO_TAVILY_GATE='
 oldify() { grep -v "$NEWKEYS\|^export DO_TEST_MODE " "$1" > "$1.tmp" && mv "$1.tmp" "$1"; }
 newrepo fl8c
 ctx --flags=''; env_old="$ENVF"
 oldify "$env_old"
 chk "FL8 env antigo não tem as chaves" "$(grep -c "$NEWKEYS" "$env_old" | tr -d ' ')" "0"
 chk "FL8 fixture: sem completar, o portão de pesquisa do env antigo é 'command not found' (rc 127)" \
-  "$(env -i PATH="$PATH" HOME="$HOME" /bin/bash -c '. "$1" >/dev/null 2>&1; "$DO_SURF_GATE" >/dev/null 2>&1; echo $?' _ "$env_old")" "127"
+  "$(env -i PATH="$PATH" HOME="$HOME" /bin/bash -c '. "$1" >/dev/null 2>&1; "$DO_TAVILY_GATE" >/dev/null 2>&1; echo $?' _ "$env_old")" "127"
 pend "$env_old" onda1-x ACTIVE
 # primeiro a DIVERGÊNCIA (o env ainda está como a versão antiga o gravou)...
 ctx --flags='no-test'
@@ -327,21 +327,21 @@ chk "FL8 chave ausente + no-test → execução NOVA" "$([ "$ENVF" != "$env_old"
 has "FL8 ...e o DO_STALE mostra o valor implícito 'full'" "$OUT" "TEST_MODE='full'"
 chk "FL8 ...e um env PRETERIDO (DO_STALE) não é tocado — só o reusado é completado" "$(grep -c "$NEWKEYS" "$env_old" | tr -d ' ')" "0"
 # ...depois o REUSO, por quem não passou flag de teste
-ctx --flags='surf-sub-agents=6'
+ctx --flags='tavily-sub-agents=6'
 chk "FL8 chave ausente = full/0 → run antiga REAPROVEITADA por quem não passou flag" "$ENVF" "$env_old"
-# (CTX-01/SG-7) o DO_REUSE COMPLETA o env antigo: sem isto `"$DO_SURF_GATE"` saía
-# "command not found" sem linha SURF_GATE= e a pergunta da chave Brave nunca disparava.
+# (CTX-01/SG-7) o DO_REUSE COMPLETA o env antigo: sem isto `"$DO_TAVILY_GATE"` saía
+# "command not found" sem linha TAVILY_GATE= e a pergunta da chave Tavily nunca disparava.
 has "FL8 DO_REUSE anuncia que completou o env antigo" "$OUT" "completei as chaves que faltavam"
-for k in DO_TEST_MODE DO_QUESTION DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_SURF_GATE; do
+for k in DO_TEST_MODE DO_QUESTION DO_TAVILY_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_TAVILY_GATE; do
   chk "FL8 env reusado ganhou $k (UMA vez, entre aspas simples)" "$(grep -c "^$k='[^']*'\$" "$env_old")" "1"
 done
-chk "FL8 valores completados: full/0, o surf-sub-agents DESTA invocação, fora de wt-root" \
-  "$(pval DO_TEST_MODE "$env_old"):$(pval DO_QUESTION "$env_old"):$(pval DO_SURF_SUB_AGENTS "$env_old"):$(pval DO_WT_ROOT "$env_old"):$(pval DO_WT_NAME "$env_old")" "full:0:6:0:"
-chk "FL8 DO_SURF_GATE completado aponta para o surf-gate.sh DESTA skill" "$(pval DO_SURF_GATE "$env_old")" "$SKILL/scripts/surf-gate.sh"
+chk "FL8 valores completados: full/0, o tavily-sub-agents DESTA invocação, fora de wt-root" \
+  "$(pval DO_TEST_MODE "$env_old"):$(pval DO_QUESTION "$env_old"):$(pval DO_TAVILY_SUB_AGENTS "$env_old"):$(pval DO_WT_ROOT "$env_old"):$(pval DO_WT_NAME "$env_old")" "full:0:6:0:"
+chk "FL8 DO_TAVILY_GATE completado aponta para o tavily-gate.sh DESTA skill" "$(pval DO_TAVILY_GATE "$env_old")" "$SKILL/scripts/tavily-gate.sh"
 bash -n "$env_old" 2>/dev/null; chk "FL8 env completado parseia (bash -n)" "$?" "0"
-chk "FL8 env completado, sourceado sob set -u: DO_SURF_GATE é EXECUTÁVEL e as chaves chegam EXPORTADAS ao processo-filho" \
-  "$(env -i PATH="$PATH" HOME="$HOME" /bin/bash -c 'set -u; . "$1" >/dev/null 2>&1; [ -x "$DO_SURF_GATE" ] || echo nao-executavel; /bin/bash -c "printf %s \"\$DO_TEST_MODE:\$DO_QUESTION:\$DO_SURF_SUB_AGENTS:\$DO_WT_ROOT:\${DO_SURF_GATE##*/}\""' _ "$env_old")" \
-  "full:0:6:0:surf-gate.sh"
+chk "FL8 env completado, sourceado sob set -u: DO_TAVILY_GATE é EXECUTÁVEL e as chaves chegam EXPORTADAS ao processo-filho" \
+  "$(env -i PATH="$PATH" HOME="$HOME" /bin/bash -c 'set -u; . "$1" >/dev/null 2>&1; [ -x "$DO_TAVILY_GATE" ] || echo nao-executavel; /bin/bash -c "printf %s \"\$DO_TEST_MODE:\$DO_QUESTION:\$DO_TAVILY_SUB_AGENTS:\$DO_WT_ROOT:\${DO_TAVILY_GATE##*/}\""' _ "$env_old")" \
+  "full:0:6:0:tavily-gate.sh"
 chk "FL8 o que o env antigo JÁ tinha ficou intacto (anexa, não reescreve)" \
   "$(pval MODE "$env_old"):$(pval BASE_DIR "$env_old"):$(grep -c '^gassert() {' "$env_old" | tr -d ' ')" "normal:$REPO:1"
 ctx --flags=''
@@ -351,12 +351,12 @@ hasnt "FL8 ...nem anunciado de novo" "$OUT" "completei as chaves"
 # env antigo PARCIAL (só 2 chaves faltando): completa SÓ o que falta
 newrepo fl8d
 ctx --flags=''; env_part="$ENVF"
-grep -v "^DO_TEST_MODE=\|^DO_SURF_GATE=" "$env_part" > "$env_part.tmp" && mv "$env_part.tmp" "$env_part"
+grep -v "^DO_TEST_MODE=\|^DO_TAVILY_GATE=" "$env_part" > "$env_part.tmp" && mv "$env_part.tmp" "$env_part"
 pend "$env_part" onda1-x ACTIVE
 ctx --flags=''
-has "FL8 env parcial: o anúncio lista SÓ as chaves que faltavam" "$OUT" "(DO_TEST_MODE DO_SURF_GATE)"
+has "FL8 env parcial: o anúncio lista SÓ as chaves que faltavam" "$OUT" "(DO_TEST_MODE DO_TAVILY_GATE)"
 chk "FL8 env parcial: nenhuma chave duplicada" \
-  "$(for k in DO_TEST_MODE DO_QUESTION DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_SURF_GATE; do grep -c "^$k=" "$env_part"; done | tr -d ' ' | tr '\n' ' ')" "1 1 1 1 1 1 "
+  "$(for k in DO_TEST_MODE DO_QUESTION DO_TAVILY_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_TAVILY_GATE; do grep -c "^$k=" "$env_part"; done | tr -d ' ' | tr '\n' ' ')" "1 1 1 1 1 1 "
 
 echo "=== FL9: anti-stale do QUESTION ==="
 newrepo fl9

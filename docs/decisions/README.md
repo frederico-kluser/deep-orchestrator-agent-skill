@@ -17,7 +17,7 @@ RRF + Tavily/Exa), e nada no repositório referenciava o material. A migração
 | Decisão | Status na v3.2 real | Observação |
 |---|---|---|
 | D1 — Router de modelos 3-tier (Qwen3-Coder → DeepSeek V4-Flash → Claude) | NÃO implementada | Sem `config/router.yaml` nem módulo de roteamento no repo; a seleção de modelo continua externa (harness do usuário). As menções a "router" no repo são o project-router de repositórios-alvo, conceito distinto |
-| D2 — Busca multi-provider (Adapter + RRF k=60 + Tavily/Exa) | SUPERADA pela v3.2 real | A v3.2 implementou a cadeia 3-tier interna (surf-agent-skill → Brave Search API → DuckDuckGo keyless) via `scripts/search.sh` + `scripts/search-parallel.sh` — arquitetura diferente, sem Tavily/Exa nem RRF, e sem provedor novo (decisão D3 do plano de melhorias) — **SUPERADA de novo em 2026-08-29 (D23)**: a cadeia 3-tier foi REMOVIDA; a pesquisa é 100% surf-agent-skill v8 (Brave-only), e sem chave válida a execução para com exit 78. Ver `2026-08-29-surf-agent-skill-obrigatorio.md` |
+| D2 — Busca multi-provider (Adapter + RRF k=60 + Tavily/Exa) | SUPERADA pela v3.2 real | A v3.2 implementou a cadeia 3-tier interna (o fornecedor de pesquisa removido → o provedor de busca removido Search API → DuckDuckGo keyless) via `scripts/search.sh` + `scripts/search-parallel.sh` — arquitetura diferente, sem Tavily/Exa nem RRF, e sem provedor novo (decisão D3 do plano de melhorias) — **SUPERADA de novo em 2026-08-29 (D23)**: a cadeia 3-tier foi REMOVIDA; a pesquisa é 100% o fornecedor de pesquisa removido v8 (o provedor de busca removido-only), e sem chave válida a execução para com exit 78. Ver `2026-08-29-o fornecedor de pesquisa removido-obrigatorio.md` |
 | D3 — Loop de qualidade nativo (testing subwaves assíncronas + adversarial) | IMPLEMENTADA (núcleo) | Subwaves assíncronas TESTING (`test-ondaN-*`) e VALIDATION (`val-ondaN-*`) + revisão adversarial do diff integrado, tudo no fluxo da skill; jury cross-vendor (parte v4 do plano) não |
 | D4 — Handoff híbrido schema v1 (frontmatter + markdown + trace bruto) | PARCIAL | Handoffs estruturados e separação de planos existem no fluxo; o schema v1 com frontmatter YAML parseável + trace bruto anexado não foi adotado integralmente (sem WAVE_LOG.md na skill) |
 | D5 — Plataforma de skills (SKILL.md + AGENTS.md dual) | PARCIAL | O formato SKILL.md foi adotado (este repositório é o exemplo, com frontmatter YAML e restrição de tools); o AGENTS.md dual não existe no repo |
@@ -26,13 +26,13 @@ RRF + Tavily/Exa), e nada no repositório referenciava o material. A migração
 
 ## Pendências do research e destino
 
-- **Pendência da linha 39 do RESEARCH_ANSWER.md (correção da Brave):**
-  **ENCERRADA em 2026-08-29 (D23).** A Brave deixou de ser gerida por esta
+- **Pendência da linha 39 do RESEARCH_ANSWER.md (correção da o provedor de busca removido):**
+  **ENCERRADA em 2026-08-29 (D23).** A o provedor de busca removido deixou de ser gerida por esta
   skill: chave, validação, metering e rate limiting passaram todos para a
-  surf-agent-skill v8. O único sinal que consumimos é o exit 78 ("não há chave
-  Brave válida"). O ponteiro para "README linha 111" já estava quebrado por
+  o fornecedor de pesquisa removido v8. O único sinal que consumimos é o exit 78 ("não há chave
+  o provedor de busca removido válida"). O ponteiro para "README linha 111" já estava quebrado por
   deriva de linha, e a afirmação que ele apontava deixou de ser desta skill.
-  Ver `2026-08-29-surf-agent-skill-obrigatorio.md`.
+  Ver `2026-08-29-o fornecedor de pesquisa removido-obrigatorio.md`.
 - **Artefatos de execução** (EXPLAINER.html) não pertencem a este diretório —
   ver `.gitignore` da raiz (decisão F4-05).
 
@@ -58,12 +58,12 @@ O portão de aprovação do plano (FASE 2.5) continua no Plannotator.
 
 ## Decisões da v4.0.0 (2026-08-29)
 
-`2026-08-29-surf-agent-skill-obrigatorio.md` registra D23: a pesquisa web sai
-desta skill — a surf-agent-skill v8 (Brave-only) vira dependência dura, os
-seis scripts de busca internos foram removidos e sem chave Brave válida a
+`2026-08-29-o fornecedor de pesquisa removido-obrigatorio.md` registra D23: a pesquisa web sai
+desta skill — a o fornecedor de pesquisa removido v8 (o provedor de busca removido-only) vira dependência dura, os
+seis scripts de busca internos foram removidos e sem chave o provedor de busca removido válida a
 execução para (exit 78). Dois pontos desse registro foram revistos na v4.1.0
-(D27): o portão deixou de ser `surf doctor` com "1 = prossiga" (fail-open) e
-virou `scripts/surf-gate.sh` (fail-closed); e a afirmação de que o cache de
+(D27): o portão deixou de ser `o fornecedor removido doctor` com "1 = prossiga" (fail-open) e
+virou `scripts/o fornecedor de pesquisa removido` (fail-closed); e a afirmação de que o cache de
 validação substituía a sonda de crédito foi corrigida, com nota datada, no
 próprio arquivo.
 
@@ -82,11 +82,11 @@ squash vazio, e `purge` que nunca esconde o que não foi integrado (rc 3 +
 seção "Não integrado" obrigatória; título "Tarefa concluída PARCIALMENTE")
 (D26); protocolo PESQUISA-FALHOU — pergunta em TEXTO, INCONDICIONAL (vence
 autonomia, `no-stop` e `plan=off`), `SEARCH_STATUS` no handoff,
-`SEARCH_REQUIRED` no plano, `scripts/surf-gate.sh` fail-closed com
+`SEARCH_REQUIRED` no plano, `scripts/o fornecedor de pesquisa removido` fail-closed com
 `classify`/`pause`/`resume --probe`, porque cota/429/402 saem exit 1 e não 78
 (D27); flag `no-test` — não criar ≠ não rodar (D28); flag `only-e2e` e o eixo
 `DO_TEST_MODE=full|none|e2e`, com cobertura por JORNADA (D29); flag
-`do-question` — o orquestrador PODE perguntar, e a pergunta da chave Brave
+`do-question` — o orquestrador PODE perguntar, e a pergunta da chave o provedor de busca removido
 não depende dela (D30); e os estruturais — `--flags='<TOKENS>'` com ZONA DE
 PREFIXO e o `do-context.sh` como único validador, `description` ≤ 1024, FASE
 0 reordenada, alvo macOS / bash 3.2.57 (D31). Fatiar o `SKILL.md` em arquivos

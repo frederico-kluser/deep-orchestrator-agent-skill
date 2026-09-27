@@ -1,4 +1,4 @@
-<!-- MÓDULO v5.0.0 · origem: SKILL.md <examples> (ex1; ex2 em references/plan-approval.md) (split progressive disclosure)
+<!-- MÓDULO v6.0.0 · origem: SKILL.md <examples> (ex1; ex2 em references/plan-approval.md) (split progressive disclosure)
      carga: opcional (few-shot) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos -->
 
@@ -7,7 +7,7 @@
       <plan>
         <wave id="1" name="Fundação">
           <agent id="1.1" worktree="onda1-cache-service" branch="$BRANCH_NS/onda1-cache-service" files="src/cache/">
-            Pesquisar (<code>surf-search-normal "melhores bibliotecas de cache para a linguagem do projeto" --sub-agents=10</code>) as 3 melhores libraries
+            Pesquisar (<code>tavily.py "melhores bibliotecas de cache para a linguagem do projeto" --sub-agents=10</code>) as 3 melhores libraries
             de cache para a linguagem do projeto. Escolher uma. Instalar a dependência
             DENTRO da worktree (cwd na filha, modo congelado, HUSKY=0 — R9). Criar
             src/cache/CacheService com interface genérica.

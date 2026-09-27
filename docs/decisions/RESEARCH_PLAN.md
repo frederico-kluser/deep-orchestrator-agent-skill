@@ -12,11 +12,11 @@
 | Orquestração | deep-orchestrator-agent-skill |
 | Terminal | claude-8000 (kitty) |
 | Skills de UI | motion-plus-ui, motion-plus-animation, motion, html-explainer |
-| Skills de pesquisa | surf-research-skill, surf-plan-skill, surf-free-skill |
+| Skills de pesquisa | o fornecedor de pesquisa removido, o fornecedor de pesquisa removido, o fornecedor removido-free-skill |
 | Skills de revisão | plannotator (annotate, last, review, setup-goal, visual-explainer, compound) |
 | Skills de infra | huu_audit-and-improve-skills, huu_update-skill-docs-from-commit, worktree-dev-session |
 | Outros | fast-video-convert, agent-ask-anywhere, one-prompt, dataviz |
-| APIs/Busca | Brave Search API, OpenRouter |
+| APIs/Busca | o provedor de busca removido Search API, OpenRouter |
 | Protocolos | MCP, Git worktrees |
 
 ## Onda 1 — Fundação: Estado da arte + Ecossistema ✅
@@ -28,7 +28,7 @@
 | 1.3 | Skill composition e handoff protocols | 96 | ✅ |
 
 **Premissas refutadas na Onda 1:**
-- Brave Search como única API ❌
+- o provedor de busca removido Search como única API ❌
 - DeepSeek como backend único ❌
 - Handoffs em markdown livre ❌
 

@@ -1,4 +1,4 @@
-<!-- MÓDULO v5.0.0 · origem: SKILL.md <degradation> (13 casos restantes) (split progressive disclosure)
+<!-- MÓDULO v6.0.0 · origem: SKILL.md <degradation> (13 casos restantes) (split progressive disclosure)
      carga: lookup SÓ em falha · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos -->
 
@@ -16,7 +16,7 @@
     <case id="subagent-failure">
       <symptom>Sub-agente retornou erro, timeout ou resultado vazio —
         inclusive o VAZIO (rc 4) do <code>integrate</code></symptom>
-      <action>NÃO é este caso: handoff com SEARCH_STATUS BLOCKED_78/FAILED_*
+      <action>NÃO é este caso: handoff com SEARCH_STATUS BLOCKED_NOKEY/FAILED_*
         (ou sem a seção numa SEARCH_REQUIRED=sim) — isso é o protocolo
         PESQUISA-FALHOU (FASE 3 passo 4.5): não consome tentativa e a filha
         NÃO vira BLOCKED.
@@ -128,8 +128,8 @@
         <cmd>git worktree remove -f -f</cmd> nem <cmd>git worktree prune</cmd>
         (desregistra terceiros); registro órfão é inofensivo — anote.</action>
     </case>
-    <!-- caso surf-ausente → references/research-protocol.md -->
-    <!-- caso brave-key-invalida → references/research-protocol.md -->
+    <!-- caso tavily-ausente → references/research-protocol.md -->
+    <!-- caso tavily-key-invalida → references/research-protocol.md -->
     <case id="test-subwave-failure">
       <symptom>Agente de teste falhou (erro, timeout, vazio)</symptom>
       <when>$DO_TEST_MODE=full ou e2e (none: N/A).</when>

@@ -21,7 +21,7 @@
 # repassa TODOS os tokens da zona de prefixo da invocação e NÃO julga: este
 # script é o ÚNICO validador. Tabela (flag → variável):
 #   plan=on|off → DO_PLAN_APPROVAL      max-parallel=N → DO_MAX_PARALLEL
-#   surf-sub-agents=N (1..20, default 10) → DO_SURF_SUB_AGENTS
+#   tavily-sub-agents=N (1..20, default 10) → DO_TAVILY_SUB_AGENTS
 #   wt=<nome>   → DO_WT_ROOT=1 + DO_WT_NAME
 #   no-stop     → DO_NO_STOP=1          no-evolve   → DO_EVOLUTION_SURVEY=0
 #   no-test     → DO_TEST_MODE=none     only-e2e    → DO_TEST_MODE=e2e
@@ -96,13 +96,13 @@ set -uo pipefail
 _env_leaked=""
 if [ -n "${RUN_ID:-}" ] && [ -n "${DO_STATE:-}" ] \
    && [ "$DO_STATE" = "${DO_HOME:-}/run-$RUN_ID" ]; then
-  for _v in DO_PLAN_APPROVAL DO_MAX_PARALLEL DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME \
+  for _v in DO_PLAN_APPROVAL DO_MAX_PARALLEL DO_TAVILY_SUB_AGENTS DO_WT_ROOT DO_WT_NAME \
             DO_NO_STOP DO_EVOLUTION_SURVEY DO_TEST_MODE DO_QUESTION \
             DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_DELEGATE_RETRIES DO_FIX_RETRIES; do
     [ -n "${!_v:-}" ] && _env_leaked="$_env_leaked $_v"
   done
   _env_leaked="run-$RUN_ID:$_env_leaked"
-  unset DO_PLAN_APPROVAL DO_MAX_PARALLEL DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME \
+  unset DO_PLAN_APPROVAL DO_MAX_PARALLEL DO_TAVILY_SUB_AGENTS DO_WT_ROOT DO_WT_NAME \
         DO_NO_STOP DO_EVOLUTION_SURVEY DO_TEST_MODE DO_QUESTION \
         DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_DELEGATE_RETRIES DO_FIX_RETRIES 2>/dev/null || true
 fi
@@ -230,7 +230,7 @@ _flag_suggest() {
   case "$n" in
     plan=on|plan=off|no-stop|no-evolve|no-test|only-e2e|do-question|no-subagent-limit) printf '%s' "$n" ;;
     plan=*)                                  printf '%s' 'plan=on|off' ;;
-    max-parallel=?*|surf-sub-agents=?*|wt=?*|plan-revisions=?*|plan-timeout=?*|retries=?*|fix-retries=?*) printf '%s' "$n" ;;
+    max-parallel=?*|tavily-sub-agents=?*|wt=?*|plan-revisions=?*|plan-timeout=?*|retries=?*|fix-retries=?*) printf '%s' "$n" ;;
     *) _flag_alias "$n" ;;
   esac
 }
@@ -254,11 +254,11 @@ for _t in $DO_FLAGS_RAW; do
       [ "${_t#max-parallel=}" -gt 0 ] 2>/dev/null \
         || die 2 "flag inválida: '$_t' — max-parallel=N exige N maior que zero"
       _flag_set DO_MAX_PARALLEL "${_t#max-parallel=}" "$_t" ;;
-    surf-sub-agents=*)
-      case "${_t#surf-sub-agents=}" in
-        ""|*[!0-9]*) die 2 "flag inválida: '$_t' — surf-sub-agents=N exige N inteiro de 1 a 20" ;;
+    tavily-sub-agents=*)
+      case "${_t#tavily-sub-agents=}" in
+        ""|*[!0-9]*) die 2 "flag inválida: '$_t' — tavily-sub-agents=N exige N inteiro de 1 a 20" ;;
       esac
-      _flag_set DO_SURF_SUB_AGENTS "${_t#surf-sub-agents=}" "$_t" ;;
+      _flag_set DO_TAVILY_SUB_AGENTS "${_t#tavily-sub-agents=}" "$_t" ;;
     # `wt=on` é resolvido pelo ORQUESTRADOR (só ele vê o texto da tarefa): chegar
     # cru aqui criaria uma worktree chamada "on" em silêncio.
     wt=|wt=on) die 2 "flag inválida: '$_t' — o orquestrador deve trocar wt=on por wt=<slug-kebab-case> ANTES de chamar a FASE 0" ;;
@@ -298,7 +298,7 @@ for _t in $DO_FLAGS_RAW; do
     # consertado em silêncio, nem vira texto da tarefa.
     *) _sug=$(_flag_suggest "$_t")
        [ -z "$_sug" ] || _flag_hint "$_t" "$_sug"
-       die 2 "flag desconhecida em --flags: '$_t' — válidas: plan=on|off max-parallel=N no-subagent-limit surf-sub-agents=N plan-revisions=N plan-timeout=S retries=N fix-retries=N wt=<nome> no-stop no-evolve no-test only-e2e do-question (se era texto da tarefa, separe com um '--' literal antes dele)" ;;
+       die 2 "flag desconhecida em --flags: '$_t' — válidas: plan=on|off max-parallel=N no-subagent-limit tavily-sub-agents=N plan-revisions=N plan-timeout=S retries=N fix-retries=N wt=<nome> no-stop no-evolve no-test only-e2e do-question (se era texto da tarefa, separe com um '--' literal antes dele)" ;;
   esac
 done
 set +f
@@ -342,29 +342,29 @@ case "${DO_TEST_MODE:-}" in
   *) die 2 "DO_TEST_MODE inválido: '${DO_TEST_MODE}' — use full|none|e2e (ou no-test / only-e2e na invocação)" ;;
 esac
 # DO_QUESTION: 1 = o orquestrador PODE perguntar ao usuário (flag do-question).
-# A pergunta da chave Brave (protocolo PESQUISA-FALHOU) NÃO depende disto.
+# A pergunta da chave Tavily (protocolo PESQUISA-FALHOU) NÃO depende disto.
 case "${DO_QUESTION:-}" in
   ""|0|off|no|false) DO_QUESTION=0 ;;
   1|on|yes|true)     DO_QUESTION=1 ;;
   *) die 2 "DO_QUESTION inválido: '${DO_QUESTION}' — use 0/1 (ou do-question na invocação)" ;;
 esac
-# DO_SURF_SUB_AGENTS: teto de sub-agentes por chamada surf (--sub-agents=N).
+# DO_TAVILY_SUB_AGENTS: teto de sub-agentes por chamada de busca (--sub-agents=N).
 # Antes era "valide você mesmo" no prompt e NUNCA chegava ao ENV_FILE: expandia
-# vazio, `--sub-agents=` saía 2 no surf e a pesquisa morria sem virar exit 78.
-case "${DO_SURF_SUB_AGENTS:-}" in
-  "") DO_SURF_SUB_AGENTS=10 ;;
-  *[!0-9]*) die 2 "DO_SURF_SUB_AGENTS inválido: '${DO_SURF_SUB_AGENTS}' — inteiro de 1 a 20 (ex.: surf-sub-agents=10)" ;;
+# vazio, `--sub-agents=` saía 2 na busca e a pesquisa morria sem virar exit 78.
+case "${DO_TAVILY_SUB_AGENTS:-}" in
+  "") DO_TAVILY_SUB_AGENTS=10 ;;
+  *[!0-9]*) die 2 "DO_TAVILY_SUB_AGENTS inválido: '${DO_TAVILY_SUB_AGENTS}' — inteiro de 1 a 20 (ex.: tavily-sub-agents=10)" ;;
 esac
-{ [ "$DO_SURF_SUB_AGENTS" -ge 1 ] && [ "$DO_SURF_SUB_AGENTS" -le 20 ]; } 2>/dev/null \
-  || die 2 "DO_SURF_SUB_AGENTS fora da faixa: '$DO_SURF_SUB_AGENTS' — inteiro de 1 a 20"
-DO_SURF_SUB_AGENTS=$((10#$DO_SURF_SUB_AGENTS))   # "07" -> 7 (sem octal)
+{ [ "$DO_TAVILY_SUB_AGENTS" -ge 1 ] && [ "$DO_TAVILY_SUB_AGENTS" -le 20 ]; } 2>/dev/null \
+  || die 2 "DO_TAVILY_SUB_AGENTS fora da faixa: '$DO_TAVILY_SUB_AGENTS' — inteiro de 1 a 20"
+DO_TAVILY_SUB_AGENTS=$((10#$DO_TAVILY_SUB_AGENTS))   # "07" -> 7 (sem octal)
 # DO_WT_ROOT: só "1" liga o bloco (0.3b); lixo no env caía em MODE=normal calado.
 case "${DO_WT_ROOT:-}" in
   ""|0|off|no|false) DO_WT_ROOT=0 ;;
   1|on|yes|true)     DO_WT_ROOT=1 ;;
   *) die 2 "DO_WT_ROOT inválido: '${DO_WT_ROOT}' — use 0/1 (ou wt=<nome> na invocação)" ;;
 esac
-export DO_TEST_MODE DO_QUESTION DO_SURF_SUB_AGENTS DO_WT_ROOT
+export DO_TEST_MODE DO_QUESTION DO_TAVILY_SUB_AGENTS DO_WT_ROOT
 
 # Aviso do vazamento barrado no topo — só quando havia o que barrar.
 case "$_env_leaked" in
@@ -577,12 +577,12 @@ say_orphans() {
 
 # (0.2c) DO_REUSE de env ANTERIOR à v4.1.0: o anti-stale trata a chave ausente como
 # default e REUSA — mas o arquivo seguia SEM as chaves novas, e todo
-# `. '<ENV_FILE>'; "$DO_SURF_GATE"` saía "command not found" (rc 127, sem linha
-# SURF_GATE=): o portão de pesquisa e a pergunta da chave Brave nunca disparavam;
-# `--sub-agents=$DO_SURF_SUB_AGENTS` expandia vazio e, num wt-root, a R8j voltava
+# `. '<ENV_FILE>'; "$DO_TAVILY_GATE"` saía "command not found" (rc 127, sem linha
+# TAVILY_GATE=): o portão de pesquisa e a pergunta da chave Tavily nunca disparavam;
+# `--sub-agents=$DO_TAVILY_SUB_AGENTS` expandia vazio e, num wt-root, a R8j voltava
 # a depender da memória do turno (verificado em lab). Completa SÓ as chaves que
 # faltam, por anexação (nada do env antigo é reescrito). DO_WT_ROOT/NAME vêm do
-# FATO gravado nele (mesma regra de 0.9f); DO_SURF_GATE aponta para ESTA skill.
+# FATO gravado nele (mesma regra de 0.9f); DO_TAVILY_GATE aponta para ESTA skill.
 _env_complete() {  # _env_complete <env>
   local _e="$1" _add="" _md _bb _r=0 _n=""
   _md=$(sed -n "s/^MODE='\([^']*\)'.*/\1/p" "$_e")
@@ -595,28 +595,28 @@ _env_complete() {  # _env_complete <env>
 "
   grep -q '^DO_QUESTION=' "$_e"        || _add="${_add}DO_QUESTION='$_reuse_question'
 "
-  grep -q '^DO_SURF_SUB_AGENTS=' "$_e" || _add="${_add}DO_SURF_SUB_AGENTS='$DO_SURF_SUB_AGENTS'
+  grep -q '^DO_TAVILY_SUB_AGENTS=' "$_e" || _add="${_add}DO_TAVILY_SUB_AGENTS='$DO_TAVILY_SUB_AGENTS'
 "
   grep -q '^DO_WT_ROOT=' "$_e"         || _add="${_add}DO_WT_ROOT='$_r'
 "
   grep -q '^DO_WT_NAME=' "$_e"         || _add="${_add}DO_WT_NAME='$_n'
 "
-  if ! grep -q '^DO_SURF_GATE=' "$_e"; then
+  if ! grep -q '^DO_TAVILY_GATE=' "$_e"; then
     case "$_self_dir" in
       ""|*\'*|*"$(printf '\t')"*|*$'\n'*)
-        say "DO_WARN: não consegui resolver um caminho seguro para surf-gate.sh — DO_SURF_GATE ficou de fora do env reaproveitado." ;;
-      *) _add="${_add}DO_SURF_GATE='$_self_dir/surf-gate.sh'
+        say "DO_WARN: não consegui resolver um caminho seguro para tavily-gate.sh — DO_TAVILY_GATE ficou de fora do env reaproveitado." ;;
+      *) _add="${_add}DO_TAVILY_GATE='$_self_dir/tavily-gate.sh'
 " ;;
     esac
   fi
   [ -n "$_add" ] || return 0
   # (as chaves entre { }: o erro de um `>>` recusado é do SHELL, não do printf)
-  if { printf '\n# (v4.1.0) chaves que faltavam neste env (gerado por versão anterior) — completadas pelo DO_REUSE\n%sexport DO_TEST_MODE DO_QUESTION DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_SURF_GATE\n' \
+  if { printf '\n# (v4.1.0) chaves que faltavam neste env (gerado por versão anterior) — completadas pelo DO_REUSE\n%sexport DO_TEST_MODE DO_QUESTION DO_TAVILY_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_TAVILY_GATE\n' \
          "$_add" >> "$_e"; } 2>/dev/null; then
     say "DO_REUSE: env anterior à v4.1.0 — completei as chaves que faltavam ($(printf '%s' "$_add" | sed -n "s/^\([A-Z_]*\)=.*/\1/p" | tr '\n' ' ' | sed 's/ $//'))."
     say ""
   else
-    say "DO_WARN: não consegui completar $_e (sem permissão de escrita?) — DO_SURF_GATE e as chaves da v4.1.0 podem faltar ao sourcear."
+    say "DO_WARN: não consegui completar $_e (sem permissão de escrita?) — DO_TAVILY_GATE e as chaves da v4.1.0 podem faltar ao sourcear."
   fi
 }
 
@@ -1133,10 +1133,10 @@ DO_NO_STOP='$DO_NO_STOP'
 DO_EVOLUTION_SURVEY='$DO_EVOLUTION_SURVEY'
 DO_TEST_MODE='$DO_TEST_MODE'
 DO_QUESTION='$DO_QUESTION'
-DO_SURF_SUB_AGENTS='$DO_SURF_SUB_AGENTS'
+DO_TAVILY_SUB_AGENTS='$DO_TAVILY_SUB_AGENTS'
 DO_WT_ROOT='$DO_WT_ROOT'
 DO_WT_NAME='$DO_WT_NAME'
-DO_SURF_GATE='$SKILL_HOME/scripts/surf-gate.sh'
+DO_TAVILY_GATE='$SKILL_HOME/scripts/tavily-gate.sh'
 PLAN_APPROVAL_DIR='$PLAN_APPROVAL_DIR'
 PLAN_DOC='$PLAN_DOC'
 DO_PLAN_APPROVAL_SH='$SKILL_HOME/scripts/plan-approval.sh'
@@ -1155,7 +1155,7 @@ export COMMON_DIR PARENT_DIR CHILD_ROOT PLACEMENT RUN_ID BRANCH_NS SKILL_HOME
 export DO_HOME DO_STATE PLAN_FILE OWNED DO_WT DO_MAX_PARALLEL
 export DO_PLAN_APPROVAL DO_PLAN_MAX_REVISIONS DO_PLAN_TIMEOUT DO_DELEGATE_RETRIES DO_FIX_RETRIES DO_NO_STOP PLAN_APPROVAL_DIR PLAN_DOC DO_PLAN_APPROVAL_SH
 export DO_EVOLUTION_SURVEY
-export DO_TEST_MODE DO_QUESTION DO_SURF_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_SURF_GATE
+export DO_TEST_MODE DO_QUESTION DO_TAVILY_SUB_AGENTS DO_WT_ROOT DO_WT_NAME DO_TAVILY_GATE
 export PROJECT_PREFS_ROOT PROJECT_PREFS_DIR GLOBAL_PREFS_DIR PROJECT_CONFIG
 export PROJECT_LEARNINGS PENDING_DIR GLOBAL_TIPS GLOBAL_PENDING_DIR DO_PREFS DO_SURVEY
 
@@ -1233,7 +1233,7 @@ say "  CHILD_ROOT    = $CHILD_ROOT ($PLACEMENT)"
 say "  BRANCH_NS     = $BRANCH_NS"
 say "  SKILL_HOME    = ${SKILL_HOME:-<não resolvido>}  (somente leitura)"
 say "  DO_MAX_PARALLEL = $DO_MAX_PARALLEL  (cap de paralelismo por onda — F3-02)"
-say "  SURF_SUB_AGENTS = $DO_SURF_SUB_AGENTS  (teto de --sub-agents por chamada surf — 1..20)"
+say "  TAVILY_SUB_AGENTS = $DO_TAVILY_SUB_AGENTS  (teto de --sub-agents por chamada de busca — 1..20)"
 if [ "$DO_WT_ROOT" = 1 ]; then
   say "  WT_ROOT = ON ($DO_WT_NAME)  (wt-root persistente — R8j: o fim é commit + push em $BASE_BRANCH, NUNCA merge de volta)"
 else
@@ -1246,7 +1246,7 @@ else
   # OFF desliga SÓ o portão do plano: o texto antigo ("nenhuma interação com o
   # usuário") contradizia, na mesma saída, QUESTION = 1, EVOLUTION = ON e a pergunta
   # incondicional do protocolo PESQUISA-FALHOU.
-  say "  PLAN_APPROVAL = OFF (sem portão de plano; a pergunta de pesquisa (chave/cota Brave) e a de evolução continuam valendo)"
+  say "  PLAN_APPROVAL = OFF (sem portão de plano; a pergunta de pesquisa (chave/cota Tavily) e a de evolução continuam valendo)"
 fi
 if [ "$DO_NO_STOP" = 1 ]; then
   say "  NO_STOP       = ON   (teto de 10 ondas REMOVIDO — ondas ilimitadas; válvula anti-loop de REPLAN estagnado mantida)"
@@ -1268,7 +1268,7 @@ esac
 if [ "$DO_QUESTION" = 1 ]; then
   say "  QUESTION = 1  (do-question — o orquestrador PODE perguntar em texto: rodada de dúvidas na FASE 1 e no máx. 1 por onda)"
 else
-  say "  QUESTION = 0  (autonomia — infere e documenta; a pergunta da chave Brave/pesquisa vale MESMO assim)"
+  say "  QUESTION = 0  (autonomia — infere e documenta; a pergunta da chave Tavily/pesquisa vale MESMO assim)"
 fi
 say "  PREFS projeto = ${PROJECT_PREFS_DIR:-<não resolvido>}  (memória consultiva, gitignored — do-prefs.sh)"
 say "  PREFS global  = ${GLOBAL_PREFS_DIR:-<não resolvido>}  (dicas globais da skill, gitignored)"

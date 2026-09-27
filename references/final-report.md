@@ -1,4 +1,4 @@
-<!-- MÓDULO v5.0.0 · origem: SKILL.md <final-report-template> (split progressive disclosure)
+<!-- MÓDULO v6.0.0 · origem: SKILL.md <final-report-template> (split progressive disclosure)
      carga: FASE 4 passo 7 (relatório final) · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos -->
 
@@ -33,11 +33,11 @@ literal; refs LOCAIS, não vão no push). EMPTY não tem resgate.]
 ## Pesquisa
 [OBRIGATÓRIA. Fonte: tabelas "Triagem de pesquisa — Onda N" e linhas
 PAUSA-PESQUISA do TASK_PLAN.md. Nenhuma SEARCH_REQUIRED=sim e nenhuma chamada
-surf → "Pesquisa: não exigida."]
-- Portão (`"$DO_SURF_GATE"`): [SURF_GATE/SURF_CODE na FASE 0, no PORTÃO PÓS-PLANO e no passo 0 de cada onda]
+busca → "Pesquisa: não exigida."]
+- Portão (`"$DO_TAVILY_GATE"`): [TAVILY_GATE/TAVILY_CODE na FASE 0, no PORTÃO PÓS-PLANO e no passo 0 de cada onda]
 - Pausas do protocolo PESQUISA-FALHOU: [N — por pausa: onda, sub-tarefas, motivo, opção do usuário ([1]|[2]|[3]|[4])] | nenhuma
 - Decisão do usuário de seguir SEM pesquisa (opção [3]): [sim — a partir da onda N | não]
-| Onda | Sub-tarefa | SEARCH_REQUIRED | SEARCH_STATUS | Comandos surf / exit |
+| Onda | Sub-tarefa | SEARCH_REQUIRED | SEARCH_STATUS | Comandos de busca / exit |
 |------|------------|-----------------|---------------|----------------------|
 {{SEARCH_ROWS}}
 - Premissas e fatos NÃO VERIFICADOS (busca vazia | pesquisa falhou | seguiu sem pesquisa): [lista com a sub-tarefa | nenhum]

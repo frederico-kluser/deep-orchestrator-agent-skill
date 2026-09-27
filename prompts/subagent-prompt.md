@@ -70,97 +70,30 @@ Siga estas instruções EXATAMENTE.
 
 2. **PESQUISA NA INTERNET — canal único:** se sua tarefa exigir informação
    externa (APIs, documentação, bibliotecas, comparações), pesquise com a
-   surf-agent-skill v9+ e com MAIS NADA. Os binários são globais (PATH), não
-   vivem em {{SKILL_HOME}} e funcionam de dentro da sua worktree.
+   tavily-agent-skill e com MAIS NADA. O caminho canónico é
+   `python3 {{TAVILY_PY}}` ({{TAVILY_PY}} = <tavily-agent-skill>/scripts/tavily.py).
 
    ANTES DE PESQUISAR, leia o estado que o orquestrador colou:
-   {{SURF_STATUS}}
-   Seu teto de --sub-agents: {{SURF_SUB_AGENTS}}
+   {{SEARCH_STATUS}}
+   Seu teto de buscas simultâneas: {{TAVILY_SUB_AGENTS}}
    NÃO reverifique o portão — o orquestrador já o rodou. Se o estado começa
    com "NÃO PESQUISE —", ou se o teto veio como "0 — não pesquise": NÃO
-   chame NENHUM binário surf (e NÃO use WebSearch no lugar dele). Trabalhe
-   com o que o repositório e o handoff dão, devolva cada premissa externa como
-   fato NÃO VERIFICADO e reporte SEARCH_STATUS: NOT_NEEDED.
+   chame NENHUMA ferramenta de busca (tampouco WebSearch no lugar dele).
+   Trabalhe com o que o repositório e o handoff dão, devolva cada premissa
+   externa como fato NÃO VERIFICADO e reporte SEARCH_STATUS: NOT_NEEDED.
 
    • Uma pergunta que fecha numa rajada:
-     `surf-search-normal "<pergunta>" --task "<o que você está construindo>"
-      --goal "<o que precisa saber>" --insights "<o que você já acredita>"
-      --deliverable "<formato exato da resposta>"
-      --sub-agents={{SURF_SUB_AGENTS}}`
-   • Pergunta que precisa descer em várias ondas:
-     `surf-search-unlimit "<pergunta>" --sub-agents={{SURF_SUB_AGENTS}}
-      --max-depth 3` (só se o timeout do seu Bash permitir; se ele matar a
-      chamada você recebe exit 143 — refaça com surf-search-normal).
-   • Lote de perguntas CRUAS e independentes, sem síntese:
-     `surf-research-skill search-parallel "q1" "q2" ...
-      --sub-agents={{SURF_SUB_AGENTS}} --json` UMA vez. NUNCA em laço.
+     `python3 {{TAVILY_PY}} search "<pergunta>" --depth fast --max-results 8`
+   • Pergunta que precisa descer em várias ondas (pesquisa multi-round):
+     `python3 {{TAVILY_PY}} search "<pergunta>" --depth advanced --max-results 10`
+   • Lote de perguntas CRUAS e independentes, sem síntese: dispare ATÉ
+     {{TAVILY_SUB_AGENTS}} chamadas `tavily.py search ... --json` em PARALELO
+     (uma por pergunta). NUNCA em laço, NUNCA acima do teto.
 
-   COMO RODAR — TODA chamada surf manda stdout e stderr para ARQUIVO dentro da
-   sua worktree e é CLASSIFICADA, tudo na MESMA chamada Bash (o exit code
-   sozinho engana: cota esgotada, 429 e billing saem 1, igual a "não achei"):
-     `S="{{WORKTREE_PATH}}/.deep-orchestrator/surf"; mkdir -p "$S";
-      surf-search-normal "<pergunta>" <flags> >"$S/q1.out" 2>"$S/q1.err"; rc=$?;
-      echo "EXIT=$rc";
-      "{{SKILL_HOME}}/scripts/surf-gate.sh" classify "$rc" "$S/q1.out" "$S/q1.err"`
-   (q2, q3... nas chamadas seguintes). A resposta do surf está em "$S/q1.out" —
-   leia-a com Read. `.deep-orchestrator/` da worktree é rascunho seu: o
-   `git add` do fim o exclui e ele nunca entra no commit.
-
-   NUNCA chame surf em laço: o jeito de pesquisar mais é UMA chamada com brief
-   e --sub-agents, não N chamadas.
-   {{SURF_SUB_AGENTS}} é o seu teto e é NEGOCIADO: é PROIBIDO aumentá-lo, e é
-   PROIBIDO envolver a chamada em sleep, jitter, backoff ou retry — o surf já
-   ritma cada requisição pelo limite real do plano Brave, num token bucket
-   compartilhado entre todos os processos surf da máquina; um retry seu briga
-   com ele.
-
-   BACKEND ÚNICO: Brave Search. Não existe Tavily, Parallel, Wikipedia,
-   DuckDuckGo, provedor de reserva nem tier sem chave. A Brave devolve título,
-   URL e trecho — NUNCA o corpo da página; os verbos extract, crawl, map,
-   research, research-start, research-poll e usage foram REMOVIDOS na v8 e saem
-   com 2. Para LER uma página, abra com Read/WebFetch do seu harness uma URL
-   QUE O SURF DEVOLVEU e diga isso no handoff. É PROIBIDO usar WebSearch (ou
-   qualquer outro buscador) para DESCOBRIR fontes: fonte que não veio pelo surf
-   não pode ser citada.
-
-   CÓDIGOS DE SAÍDA — aja pelo veredito do `classify`, não pelo exit cru:
-   • 0 (OK) — funcionou. Cite as URLs que o surf devolveu.
-   • 1 — a chamada terminou com 0 fontes. São DUAS causas OPOSTAS:
-     – EMPTY: a busca FUNCIONOU e não achou nada. Reformule a pergunta UMA vez
-       (mais ampla); se continuar EMPTY, registre "não encontrado", marque o
-       fato como NÃO VERIFICADO (motivo "busca vazia") e siga sem ele. NUNCA
-       troque de ferramenta.
-     – FAILED_QUOTA (429, cota mensal esgotada, billing) ou FAILED_OTHER
-       (AllKeysExhausted, NoProviderAvailable, LikelyAgentTimeout, "Every
-       search failed"): a pesquisa NÃO funcionou. NÃO é "não encontrado" →
-       PESQUISA FALHOU (abaixo).
-   • 2 (USAGE_2) — você montou o comando errado (flag inexistente, verbo
-     removido, --sub-agents fora de 1..20). Corrija o comando; não desista da
-     pesquisa. Não vira status.
-   • 78 — não há chave Brave válida (BLOCKED_78: ausente, queimada, em
-     cooldown, inválida ou inalcançável). Retentar é inútil e não há de onde
-     mais buscar → PESQUISA FALHOU (abaixo).
-   • 143 (KILLED_143) — o harness matou a chamada por timeout: refaça com
-     surf-search-normal (que se auto-orça). Não é falta de chave. Não vira
-     status.
-
-   PESQUISA FALHOU (BLOCKED_78 | FAILED_QUOTA | FAILED_OTHER): PARE de
-   pesquisar — nenhuma outra chamada surf, nenhum retry — e NÃO tente
-   WebSearch/WebFetch como substituto. Termine SÓ o que NÃO depende do fato
-   pesquisado, commite o wip (seção SUA WORKTREE) e reporte no handoff:
-   SEARCH_STATUS com esse valor, a linha de erro do surf VERBATIM (nunca uma
-   chave) e o que ficou por fazer. NÃO invente o fato para "completar" a
-   tarefa: chave e cota são ambiente do USUÁRIO — quem fala com ele é o
-   orquestrador, e você será re-disparado NESTA MESMA worktree quando a
-   pesquisa voltar.
-
-   Prefira documentação oficial e fontes primárias; desconfie de listicles e
-   SEO farms. NUNCA invente fatos, URLs ou APIs.
-   Para FORMULAR a pergunta (categorias de query, estratégias de evolução,
-   fontes e armadilhas por domínio), consulte
-   {{SKILL_HOME}}/prompts/search-prompts.md (somente leitura). {{SKILL_HOME}}
-   fica FORA da sua worktree: você pode LER de lá, mas não pode escrever nem
-   fazer `cd` para dentro.
+   O tavily.py já gere rotação, bans e retentativas entre chaves internamente.
+   PROIBIDO envolver a chamada em sleep, jitter, backoff ou retry: um ritmo seu
+   por cima briga com o limitador do próprio script e provoca os 429 que ele
+   tenta evitar.
 
 3. **ECC PROMPTS:** Consulte `{{SKILL_HOME}}/prompts/ecc-prompts.md` (somente
    leitura) para templates de prompt avançados. Para tarefas de segurança, use o
@@ -180,7 +113,7 @@ Siga estas instruções EXATAMENTE.
 
 5. **COMPLETUDE:** Sua sub-tarefa deve ser 100% concluída. Se encontrar
    um bloqueio intransponível, documente CLARAMENTE no handoff.
-   PESQUISA FALHOU (regra 2: BLOCKED_78 | FAILED_QUOTA | FAILED_OTHER) é o
+   PESQUISA FALHOU (regra 2: BLOCKED_NOKEY | FAILED_QUOTA | FAILED_OTHER) é o
    ÚNICO caso em que entregar PARCIAL é o correto: faça o que não depende do
    fato, commite e liste em "Bloqueios" o que ficou por fazer.
 
@@ -247,14 +180,14 @@ sem ela é tratado como pesquisa que FALHOU:
 
 ```
 ## SEARCH_STATUS
-SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78
-- Comandos surf rodados, com o exit code e o veredito do classify de cada um
+SEARCH_STATUS: NOT_NEEDED | OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_NOKEY
+- Comandos de busca rodados, com o exit code e o veredito do classify de cada um
   [ou "nenhum"]
-- Linha de erro do surf, VERBATIM — nunca uma chave [só em FAILED_* / BLOCKED_78]
+- Linha de erro da busca, VERBATIM — nunca uma chave [só em FAILED_* / BLOCKED_NOKEY]
 - Fatos NÃO VERIFICADOS [lista, com o motivo: busca vazia | pesquisa falhou |
   NÃO PESQUISE — ou "nenhum"]
 (Não pesquisou = NOT_NEEDED. Várias chamadas = reporte o PIOR resultado:
-BLOCKED_78 > FAILED_QUOTA > FAILED_OTHER > EMPTY > OK. Os exits 2 e 143 você
+BLOCKED_NOKEY > FAILED_QUOTA > FAILED_OTHER > EMPTY > OK. Os exits 2 e 143 você
 mesmo corrige — não são status.)
 
 ## O que fiz

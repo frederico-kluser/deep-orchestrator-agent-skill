@@ -1,4 +1,4 @@
-<!-- MÓDULO v5.0.0 · origem: SKILL.md <rule R10> + <phase 2.5> + casos plan-* + example ex2 (split progressive disclosure)
+<!-- MÓDULO v6.0.0 · origem: SKILL.md <rule R10> + <phase 2.5> + casos plan-* + example ex2 (split progressive disclosure)
      carga: SÓ com plan=on · conteúdo byte-a-byte com a origem (CONTRATO.md §5)
      1 HOP: não referenciar outros módulos -->
 
@@ -160,11 +160,11 @@
               <strong>EXCEÇÃO DECLARADA: o ÚNICO ponto em que o ORQUESTRADOR
               roda busca ele mesmo</strong> (fora a sonda <code>resume --probe</code>);
               aqui R=1, N inteiro:
-              <cmd>. '&lt;ENV_FILE&gt;'; surf-search-normal "&lt;pergunta&gt;" --insights "&lt;a premissa&gt;" --sub-agents="${DO_SURF_SUB_AGENTS:-10}" &gt; "$DO_STATE/verify.out" 2&gt; "$DO_STATE/verify.err"; rc=$?; "$DO_SURF_GATE" classify "$rc" "$DO_STATE/verify.out" "$DO_STATE/verify.err"</cmd>
+              <cmd>. '&lt;ENV_FILE&gt;'; tavily.py "&lt;pergunta&gt;" --insights "&lt;a premissa&gt;" --sub-agents="${DO_TAVILY_SUB_AGENTS:-10}" &gt; "$DO_STATE/verify.out" 2&gt; "$DO_STATE/verify.err"; rc=$?; "$DO_TAVILY_GATE" classify "$rc" "$DO_STATE/verify.out" "$DO_STATE/verify.err"</cmd>
               Aja pela CLASSE (tabela da R7): <code>OK</code> → substitua a
               premissa por FATO com URL (lendo verify.out) ANTES de reescrever;
               <code>EMPTY</code> → premissa NÃO VERIFICADA, motivo "busca
-              vazia", SEM pergunta; <code>BLOCKED_78</code> /
+              vazia", SEM pergunta; <code>BLOCKED_NOKEY</code> /
               <code>FAILED_QUOTA</code> / <code>FAILED_OTHER</code> (inclui
               binário ausente) → o usuário PEDIU a verificação, a pesquisa é
               EXIGIDA: protocolo PESQUISA-FALHOU (&lt;onda&gt; = 0; sub-tarefas
@@ -264,7 +264,7 @@
           antiga ainda é chamada pelo job noturno?".
           Reação: a sub-tarefa do logger é REMOVIDA do plano (e a worktree
           onda2-logger, batizada para ela, deixa de existir no plano); a
-          pergunta vira investigação real (Grep no repositório + <code>surf-search-normal</code> na
+          pergunta vira investigação real (Grep no repositório + <code>tavily.py</code> na
           documentação da API) e a resposta entra como fato, não como premissa.
           O plano é REGERADO com o MESMO título e uma seção
           <code>## O que mudou nesta revisão</code>.

@@ -1,8 +1,8 @@
 # Decisão — Limpeza por tarefa, pergunta quando a pesquisa falha e flags novas (v4.1.0)
 
 **Data:** 2026-09-20 · **Versão alvo:** v4.0.0 → v4.1.0 (metadata.version; MINOR — absorve o `fe3a1c2`, que mudou contrato sem bump) · **Status:** aprovada
-**Artefatos relacionados:** `SKILL.md` (frontmatter, identity, R2, R3, R5–R10, `<protocol id="PESQUISA-FALHOU">`, FASES 0/1/2/2.5/3/4, templates de sub-agente / revisor / teste / validação, final-report-template, degradation, examples, final-note), `scripts/do-wt.sh` (integrate, gate-set, gate, finish, close, assert-clean, ledger, checklist; merge/remove/drop-branch/sweep/purge consertados; lock sem `flock`), `scripts/do-context.sh` (`--flags=`, `DO_TEST_MODE`, `DO_QUESTION`, `DO_ORPHAN_RUNS`, reentrada do `wt=`), `scripts/surf-gate.sh` (NOVO), `scripts/check-install.sh`, `scripts/evolution-survey.sh`, `scripts/do-prefs.sh`, `scripts/test-contencao.sh` (A35–A46), `scripts/test-flags.sh` (NOVO, FL1–FL14), `scripts/test-surf-gate.sh` (G0, G9–G11), `scripts/test-plan-approval.sh`, `scripts/test-evolve.sh` (F14), `prompts/plan-approval-prompts.md`, `prompts/search-prompts.md`, `prompts/ecc-prompts.md`, `prompts/ecc-skills.md`, `README.md`, `scripts/README.md`.
-**Base:** auditoria de 2026-09-20 em 7 lentes (limpeza de worktree, integração/merge, portão surf/Brave, estrutura, scripts e testes, subwaves e flags, docs e convenções), cada achado passado por um cético que tentou refutá-lo e, na maioria, reproduzido em repositório de laboratório descartável — o repositório da skill não foi tocado pelos labs. Os ids entre parênteses (WT-01, M3, SURF-01…) são os dessa auditoria; os `arquivo:linha` citados como evidência são do estado ANTERIOR (v4.0.0, commit `fe3a1c2`), salvo indicação em contrário.
+**Artefatos relacionados:** `SKILL.md` (frontmatter, identity, R2, R3, R5–R10, `<protocol id="PESQUISA-FALHOU">`, FASES 0/1/2/2.5/3/4, templates de sub-agente / revisor / teste / validação, final-report-template, degradation, examples, final-note), `scripts/do-wt.sh` (integrate, gate-set, gate, finish, close, assert-clean, ledger, checklist; merge/remove/drop-branch/sweep/purge consertados; lock sem `flock`), `scripts/do-context.sh` (`--flags=`, `DO_TEST_MODE`, `DO_QUESTION`, `DO_ORPHAN_RUNS`, reentrada do `wt=`), `scripts/o fornecedor de pesquisa removido` (NOVO), `scripts/check-install.sh`, `scripts/evolution-survey.sh`, `scripts/do-prefs.sh`, `scripts/test-contencao.sh` (A35–A46), `scripts/test-flags.sh` (NOVO, FL1–FL14), `scripts/test-o fornecedor de pesquisa removido` (G0, G9–G11), `scripts/test-plan-approval.sh`, `scripts/test-evolve.sh` (F14), `prompts/plan-approval-prompts.md`, `prompts/search-prompts.md`, `prompts/ecc-prompts.md`, `prompts/ecc-skills.md`, `README.md`, `scripts/README.md`.
+**Base:** auditoria de 2026-09-20 em 7 lentes (limpeza de worktree, integração/merge, portão o fornecedor removido/o provedor de busca removido, estrutura, scripts e testes, subwaves e flags, docs e convenções), cada achado passado por um cético que tentou refutá-lo e, na maioria, reproduzido em repositório de laboratório descartável — o repositório da skill não foi tocado pelos labs. Os ids entre parênteses (WT-01, M3, o fornecedor removido-01…) são os dessa auditoria; os `arquivo:linha` citados como evidência são do estado ANTERIOR (v4.0.0, commit `fe3a1c2`), salvo indicação em contrário.
 
 ---
 
@@ -12,13 +12,13 @@ O pedido do dono (2026-09-20), literal:
 
 > essa skill tem problemas, ela nao limpa as worktrees conforme vai
 > trabalhando, as vezes nem mergeia elas, nao chama para o usuario fornecer
-> outra key do brave ou ajustar ele quando nao pesquisa, e acredito que ela
+> outra key do o provedor de busca removido ou ajustar ele quando nao pesquisa, e acredito que ela
 > tenha problemas estruturais, analise e arrume; e quero uma flag para no-test
 > e outra para only-e2e (para criar apenas testes e2e)
 
 E, em seguida:
 
-> quero que tenha uma flag para do-question mas a pergunta da key do brave
+> quero que tenha uma flag para do-question mas a pergunta da key do o provedor de busca removido
 > funciona mesmo sob bloqueio
 
 A auditoria achou uma causa comum às três queixas: o que a skill prometia era
@@ -26,7 +26,7 @@ A auditoria achou uma causa comum às três queixas: o que a skill prometia era
 pós-gate era um ritual manual de 3 comandos na ida e 5 na volta por filha,
 disparado por notificação assíncrona; o `sweep` aceitava sobra com rc=0 e o
 passo 8 ainda mandava ignorar o rc; o `purge` final arquivava trabalho nunca
-integrado e imprimia "PURGE OK"; e a parada por chave Brave era um "informe e
+integrado e imprimia "PURGE OK"; e a parada por chave o provedor de busca removido era um "informe e
 AGUARDE" sem mecanismo, cercada por cinco cópias de uma saída de fuga
 ("sem pesquisa exigida, prossiga") julgada pelo próprio orquestrador.
 
@@ -178,7 +178,7 @@ real. Todo código desta versão foi rodado nesse ambiente; ver D31.
 - **Fonte:** usuário ("as vezes nem mergeia elas"); auditoria (WT-03, WT-05,
   WT-06, WT-07, WT-08, WT-09, M2–M7, E01, E04, F4, F7, SUB-01, DOC-02); labs.
 
-### D27 — PROTOCOLO PESQUISA-FALHOU: PERGUNTA EM TEXTO, INCONDICIONAL; `SEARCH_STATUS`; `surf-gate.sh`; COTA ≠ 78
+### D27 — PROTOCOLO PESQUISA-FALHOU: PERGUNTA EM TEXTO, INCONDICIONAL; `SEARCH_STATUS`; `o fornecedor de pesquisa removido`; COTA ≠ 78
 
 - **Decisão:** bloco único `<protocol id="PESQUISA-FALHOU">` logo após a R7;
   os demais pontos só o REFERENCIAM. É **INCONDICIONAL**: vale com ou sem
@@ -186,59 +186,59 @@ real. Todo código desta versão foi rodado nesse ambiente; ver D31.
   `plan=off` — chave/cota/instalação é configuração do AMBIENTE do usuário,
   não ambiguidade da tarefa, e o orquestrador nunca decide sozinho que a
   pesquisa exigida é dispensável. Peças: (1) o portão é o script
-  `"$DO_SURF_GATE"` (`scripts/surf-gate.sh`), **fail-closed** — imprime
-  `SURF_GATE=<0|78|127>`, `SURF_CODE=<BraveKey…|NotInstalled>` e a mensagem do
+  `"$DO_TAVILY_GATE"` (`scripts/o fornecedor de pesquisa removido`), **fail-closed** — imprime
+  `TAVILY_GATE=<0|78|127>`, `TAVILY_CODE=<Tavily…|NotInstalled>` e a mensagem do
   portão VERBATIM; sai o ramo fail-open "1 ⇒ prossiga". (2) Cota/429/402 saem
-  do surf com exit **1**, igual a "não achei": `surf-gate.sh classify`
-  distingue `OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_78 |
+  do o fornecedor removido com exit **1**, igual a "não achei": `o fornecedor de pesquisa removido classify`
+  distingue `OK | EMPTY | FAILED_QUOTA | FAILED_OTHER | BLOCKED_NOKEY |
   KILLED_143 | USAGE_2` por padrões ANCORADOS (nunca casando com a query
   ecoada). (3) O handoff abre com a seção obrigatória `## SEARCH_STATUS`, e o
   novo passo 4.5 da FASE 3 (TRIAGEM DE PESQUISA) a extrai de cada handoff
   ANTES de integrar. (4) Toda sub-tarefa tem `SEARCH_REQUIRED=sim|não` por
   critério objetivo (na dúvida, sim) e o PORTÃO PÓS-PLANO é o único ponto de
   decisão antes da FASE 2.5/3. (5) AGUARDE é definido UMA vez na R2: gravar
-  estado (`surf-gate.sh pause` → `$DO_STATE/search-pause.md`), pergunta em
+  estado (`o fornecedor de pesquisa removido pause` → `$DO_STATE/search-pause.md`), pergunta em
   TEXTO como última coisa da resposta — [1] adicionei/troquei a chave, [2]
   ajustei plano/cota ou esperei o cooldown, [3] seguir SEM pesquisa (premissas
   NÃO VERIFICADAS), [4] abortar — e ENCERRAR o turno; a retomada é pela FASE
   0 (ESTADOS PENDENTES) com `resume --probe`, UMA busca real de 1 crédito,
-  porque a sonda grátis não enxerga cota. `BraveKeyCooling` não pergunta de
+  porque a sonda grátis não enxerga cota. `TavilyCooling` não pergunta de
   cara: reroda o portão até 3×. (6) FASE 2.5 passo 5 e
   `prompts/plan-approval-prompts.md`: 78/127/cota ⇒ protocolo; EMPTY ⇒
   premissa NÃO VERIFICADA com motivo "busca vazia". O relatório ganha a seção
   "Pesquisa". `AskUserQuestion` segue vetado (R10/D18): a pergunta é texto.
 - **Evidência:** `SKILL.md:278-280` (R7, FATAL): "1 — a operação rodou e não
-  recuperou nada … siga sem aquele fato. NÃO pergunte ao usuário." No surf
+  recuperou nada … siga sem aquele fato. NÃO pergunte ao usuário." No o fornecedor removido
   8.0.1, cota só emite `monthly quota exhausted — skipped, not retried` e 60 s
   de cooldown, sem queimar a chave (`src/lib/dispatch.mjs:363-368`, `:31`);
-  `AllKeysExhausted` ⇒ `process.exit(1)` (`bin/surf-research-skill.mjs:222-227`);
+  `AllKeysExhausted` ⇒ `process.exit(1)` (`bin/o fornecedor de pesquisa removido.mjs:222-227`);
   e a sonda de validação devolve `valid:true, throttled:true`
-  (`src/lib/providers/brave.mjs:775-776`), então `surf doctor` sai 0 com a
-  cota zerada — nesta máquina o doctor mostrava "brave 2 key(s), 1 burned" e
-  "✓ ready", exit 0 (SURF-01). O portão antigo era
-  `surf doctor >/dev/null 2>&1; echo "SURF_GATE=$?"` em `SKILL.md:260`, `:707`
+  (`src/lib/providers/o provedor de busca removido.mjs:775-776`), então `o fornecedor removido doctor` sai 0 com a
+  cota zerada — nesta máquina o doctor mostrava "o provedor de busca removido 2 key(s), 1 burned" e
+  "✓ ready", exit 0 (o fornecedor removido-01). O portão antigo era
+  `o fornecedor removido doctor >/dev/null 2>&1; echo "TAVILY_GATE=$?"` em `SKILL.md:260`, `:707`
   e `:1034`: jogava fora o diagnóstico, tratava exit 1 como "prossiga"
-  (`:263-265`) e mandava a mensagem fixa "rode `surf`", que sem argumentos
-  exige TTY (`bin/surf.mjs:465-469`); o 78 cobre 6 vereditos com "Fix:"
-  DIFERENTES (`preflight.mjs:282-334`) (SURF-06). "PESQUISA IMPOSSÍVEL"
+  (`:263-265`) e mandava a mensagem fixa "rode `o fornecedor removido`", que sem argumentos
+  exige TTY (`bin/o fornecedor removido.mjs:465-469`); o 78 cobre 6 vereditos com "Fix:"
+  DIFERENTES (`preflight.mjs:282-334`) (o fornecedor removido-06). "PESQUISA IMPOSSÍVEL"
   aparecia UMA vez no arquivo (`:1905`) e nenhum passo do orquestrador a
-  consumia (SURF-02). "Informe e AGUARDE" (`:129-130`, `:155`) não gravava
+  consumia (o fornecedor removido-02). "Informe e AGUARDE" (`:129-130`, `:155`) não gravava
   estado nem encerrava o turno — ao contrário da R2(e), que já tinha o
-  mecanismo completo (`:148-150`, `:572-595`) (SURF-03). A saída "Sem pesquisa
+  mecanismo completo (`:148-150`, `:572-595`) (o fornecedor removido-03). A saída "Sem pesquisa
   exigida … prossiga sem busca" aparecia 5 vezes (`:270-271`, `:1037-1038`,
   `:2621-2622`, `:2634-2635`, `:2872-2873`) sem nenhuma definição de "EXIGE
-  pesquisa" nem coluna no plano (SURF-04, DOC-01, E07). Contradição direta:
+  pesquisa" nem coluna no plano (o fornecedor removido-04, DOC-01, E07). Contradição direta:
   `SKILL.md:965` e `prompts/plan-approval-prompts.md:105` / `:142-146`
   mandavam "se sair 78, mantenha a premissa e marque-a NÃO VERIFICADA"
-  (SURF-05). O relatório não tinha seção de pesquisa (SURF-09). Na
-  implementação: `test-surf-gate.sh` 173 asserções (228 após a rodada final; G9 classify com os textos
-  REAIS do surf, G10 pause/resume, tudo mockado — 0 créditos); mutantes
+  (o fornecedor removido-05). O relatório não tinha seção de pesquisa (o fornecedor removido-09). Na
+  implementação: `test-o fornecedor de pesquisa removido` 173 asserções (228 após a rodada final; G9 classify com os textos
+  REAIS do o fornecedor removido, G10 pause/resume, tudo mockado — 0 créditos); mutantes
   fail-open, de padrão frouxo (`429|quota` casava com "no quota was spent") e
   sem scrub da query foram todos pegos.
-- **Fonte:** usuário ("nao chama para o usuario fornecer outra key do brave ou
-  ajustar ele quando nao pesquisa"; "a pergunta da key do brave funciona mesmo
-  sob bloqueio"); auditoria (SURF-01 a SURF-09, DOC-01, E07); código do
-  pacote `surf-agent-skill@8.0.1`; labs.
+- **Fonte:** usuário ("nao chama para o usuario fornecer outra key do o provedor de busca removido ou
+  ajustar ele quando nao pesquisa"; "a pergunta da key do o provedor de busca removido funciona mesmo
+  sob bloqueio"); auditoria (o fornecedor removido-01 a o fornecedor removido-09, DOC-01, E07); código do
+  pacote `o fornecedor de pesquisa removido@8.0.1`; labs.
 
 ### D28 — FLAG `no-test` (`DO_TEST_MODE=none`): NÃO CRIAR ≠ NÃO RODAR
 
@@ -310,7 +310,7 @@ real. Todo código desta versão foi rodado nesse ambiente; ver D31.
 - **Fonte:** usuário ("outra para only-e2e (para criar apenas testes e2e)");
   auditoria (DESIGN-ONLY-E2E, DESIGN-CONFLITO, SUB-02, SUB-03, SUB-04).
 
-### D30 — FLAG `do-question` (`DO_QUESTION=1`; default 0): O ORQUESTRADOR PODE PERGUNTAR — A PERGUNTA DA CHAVE BRAVE NÃO DEPENDE DELA
+### D30 — FLAG `do-question` (`DO_QUESTION=1`; default 0): O ORQUESTRADOR PODE PERGUNTAR — A PERGUNTA DA CHAVE o provedor de busca removido NÃO DEPENDE DELA
 
 - **Decisão:** sem a flag, a R2 segue como era (autonomia: infere e
   documenta). Com a flag, o orquestrador PODE perguntar, pelo MESMO mecanismo
@@ -328,17 +328,17 @@ real. Todo código desta versão foi rodado nesse ambiente; ver D31.
   [incondicional], (c) FASE 0 aborta, (d) portão do plano, (e) pergunta de
   evolução, (f) do-question. Relatório: seção "Perguntas ao usuário".
 - **Evidência:** o pedido literal ("quero que tenha uma flag para do-question
-  mas a pergunta da key do brave funciona mesmo sob bloqueio"); `SKILL.md:118`
+  mas a pergunta da key do o provedor de busca removido funciona mesmo sob bloqueio"); `SKILL.md:118`
   titulava a R2 "NUNCA pergunte ao usuário" (FATAL) com "CINCO exceções, e
   apenas estas" (`:121`), nenhuma delas opt-in. O único mecanismo de pergunta
   que funcionava era o da evolução — pergunta impressa, turno encerrado,
   estado no DISCO, continuação na FASE 0 (`:148-150`, `:572-595`) —, decidido
   na D18/D21 porque o Bash do harness não tem stdin interativo e
   `AskUserQuestion` não existe nos harnesses-alvo (medição de 2026-08-28;
-  R10 `:466-467`) (SURF-03). Na implementação: `test-flags.sh` FL2/FL9
+  R10 `:466-467`) (o fornecedor removido-03). Na implementação: `test-flags.sh` FL2/FL9
   (`QUESTION = 0|1` no resumo; anti-stale; chave ausente = 0).
 - **Fonte:** usuário; D18/D21 (`2026-08-28-pergunta-evolucao-terminal.md`);
-  auditoria (SURF-03, SURF-04).
+  auditoria (o fornecedor removido-03, o fornecedor removido-04).
 
 ### D31 — ESTRUTURAIS: `--flags` / ZONA DE PREFIXO, `description` ≤ 1024, FASE 0 REORDENADA, macOS / bash 3.2
 
@@ -373,8 +373,8 @@ real. Todo código desta versão foi rodado nesse ambiente; ver D31.
   admitia "O shell do harness NÃO persiste entre chamadas" — lab:
   `export DO_NO_STOP=1` numa chamada e `do-context.sh` na seguinte ⇒ ENV_FILE
   com `DO_NO_STOP='0'`; `:491` casava `no-stop` "como token" em QUALQUER lugar
-  do texto; `surf-sub-agents=N` estava enterrado dentro da lista de
-  precedência do `plan=` (`:545-551`) e `DO_SURF_SUB_AGENTS` tinha 0
+  do texto; `o fornecedor removido-sub-agents=N` estava enterrado dentro da lista de
+  precedência do `plan=` (`:545-551`) e `DO_TAVILY_SUB_AGENTS` tinha 0
   ocorrências em `scripts/*.sh`, embora `:965` o usasse em shell (FLAG-01, F5,
   E06, DOC-05). Frontmatter: `description` media 2421 caracteres (Ruby YAML),
   com "Invocação:" no caractere 2155 e "Triggers:" no 2272; a listagem do
@@ -399,7 +399,7 @@ real. Todo código desta versão foi rodado nesse ambiente; ver D31.
   "mismatched tag" em `</final-note>`, por um `do/wt/<nome>` cru); suítes no
   bash 3.2.57 (rodada final, 2026-09-20): `test-contencao.sh` 309/0,
   `test-flags.sh` 307/0, `test-plan-approval.sh` 139/0,
-  `test-surf-gate.sh` 228/0, `test-evolve.sh` 81/0 — 1064 asserções.
+  `test-o fornecedor de pesquisa removido` 228/0, `test-evolve.sh` 81/0 — 1064 asserções.
 - **Fonte:** usuário ("acredito que ela tenha problemas estruturais");
   auditoria (FLAG-01, F5, F8, F9, E03, E05, E06, E08, E09, E12, DOC-04,
   DOC-05, DOC-06, DOC-15); medição direta no ambiente do dono.
@@ -430,8 +430,8 @@ achado alto foi refutado. O que mudou, por decisão:
   e2e sozinho. (B01) `checklist` com a numeração exata dos `<step order>` da
   FASE 3 + `checklist final`. Cobertura: A48–A56.
 - **D27 (pesquisa):** (SG-1) a opção [3] não valia nas ondas seguintes quando
-  a falha era de cota (portão verde) — `surf-gate.sh choose no-search` grava
-  `$DO_STATE/search-mode` e o portão imprime `SURF_MODE=no-search`; (SG-3) o
+  a falha era de cota (portão verde) — `o fornecedor de pesquisa removido choose no-search` grava
+  `$DO_STATE/search-mode` e o portão imprime `SEARCH_MODE=no-search`; (SG-3) o
   cooldown só adia a pergunta no gatilho g1; (BEH-05) handoff sem
   `SEARCH_STATUS` ganha 1 re-disparo antes do probe; (SG-2/4/5/6) suíte
   hermética, classify sem casar o eco da query e sob LC_ALL=C, `resume --probe`
@@ -439,7 +439,7 @@ achado alto foi refutado. O que mudou, por decisão:
 - **D31 (estruturais):** (FT-01) typo de flag fora da regex da zona
   (`e2e-only`, `--no-test`) virava texto da tarefa — o token de fronteira vai
   em `--boundary='<token>'` e o script decide (apelidos num lugar só);
-  (CTX-01) reuso de env anterior à v4.1.0 vinha sem `DO_SURF_GATE` — o script
+  (CTX-01) reuso de env anterior à v4.1.0 vinha sem `DO_TAVILY_GATE` — o script
   completa as chaves; (CTX-02/04/05/06/07/08) órfãs inventariadas antes do
   re-exec do `wt=`, `--flags=` repetido = exit 2, DO_WARN para `wt=<outro>`
   dentro de wt-root, validações antes de criar a worktree irmã, resumo sem
@@ -464,7 +464,7 @@ achado alto foi refutado. O que mudou, por decisão:
   o arquivo CRESCEU nesta versão (2935 → ~4650 linhas), contra o orçamento da
   D4 de 2026-08-23 (`SKILL.md` < 500 linhas). Não foi feito agora porque o
   risco é alto (referências cruzadas por passo, literais verificados por
-  `test-surf-gate.sh` G8) e o pedido era conserto, não reescrita; o
+  `test-o fornecedor de pesquisa removido` G8) e o pedido era conserto, não reescrita; o
   `"$DO_WT" checklist` é a mitigação desta versão.
 - **Regenerar o `EXPLAINER.html`** — é artefato de EXECUÇÃO orquestrada
   (gitignored), não de commit; o que está no disco parou no `16fb0ce`.
